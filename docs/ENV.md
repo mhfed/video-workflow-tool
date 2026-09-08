@@ -1,22 +1,25 @@
 # Environment configuration
 
-For the default real workflow, the only secret you need to supply is:
+For the default real end-to-end workflow, the **only secret you must supply** is:
 
 ```bash
 OPENAI_API_KEY=...
 ```
 
-Start from `.env.example`. Its production defaults use OpenAI for scene illustrations and narration, plus the whiteboard renderer for video.
+Start from `.env.example`. Defaults are already wired for Topic → Script → Voice → Illustration → Whiteboard → Final MP4.
 
-## Recommended review checklist
+## Recommended defaults
 
-Keep these unless you intentionally want different behavior:
+Unless you intentionally want another provider/style, keep:
 
 ```bash
 MOCK_MODE=0
 VIDEO_RENDERER=whiteboard
+TEXT_PROVIDER=openai
 IMAGE_PROVIDER=openai
 VOICE_PROVIDER=openai
+SCRIPT_TARGET_MINUTES=6
+OPENAI_TEXT_MODEL=gpt-5.6-luna
 OPENAI_IMAGE_MODEL=gpt-image-2
 OPENAI_IMAGE_SIZE=2048x1152
 OPENAI_IMAGE_QUALITY=medium
@@ -25,20 +28,35 @@ OPENAI_TTS_VOICE=marin
 WHITEBOARD_AUTO_INSTALL=1
 ```
 
-Then set:
+Then set only:
 
 ```bash
 OPENAI_API_KEY=<your-key>
 ```
 
+## What you may want to personalize
+
+```bash
+SCRIPT_TARGET_MINUTES=6
+OPENAI_TTS_VOICE=marin
+OPENAI_TTS_INSTRUCTIONS=Speak clearly, naturally, and conversationally for a YouTube explainer.
+SCENE_TARGET_SEC=12
+SCENE_MIN_SEC=6
+SCENE_MAX_SEC=18
+```
+
+- `SCRIPT_TARGET_MINUTES`: default length when creating from a topic.
+- `OPENAI_TTS_VOICE`: narration voice.
+- `OPENAI_TTS_INSTRUCTIONS`: delivery/style of narration.
+- scene timing values: how frequently visuals change.
+
 ## Useful switches
 
-- `MOCK_MODE=1`: makes no paid AI calls; uses silent mock narration and the smoke-test path.
+- `MOCK_MODE=1`: no paid AI calls; useful for CI/smoke tests.
 - `VIDEO_RENDERER=simple|whiteboard`: `simple` is FFmpeg-only; `whiteboard` wraps `geeklee/srt-whiteboard-animation`.
-- `WHITEBOARD_AUTO_INSTALL=1`: clones the upstream whiteboard engine and prepares its isolated Python environment on setup.
-- `SCENE_TARGET_SEC`, `SCENE_MIN_SEC`, `SCENE_MAX_SEC`: control scene splitting for scripts/SRT.
-- `VIDEO_WIDTH`, `VIDEO_HEIGHT`, `VIDEO_FPS`: final clip normalization settings.
-- `OPENAI_TTS_INSTRUCTIONS`: narration delivery instructions.
+- `TEXT_PROVIDER`, `IMAGE_PROVIDER`, `VOICE_PROVIDER`: `openai` or `mock` in v0.1.
+- `WHITEBOARD_AUTO_INSTALL=1`: clones the upstream whiteboard engine and prepares its Python environment on setup.
+- `VIDEO_WIDTH`, `VIDEO_HEIGHT`, `VIDEO_FPS`: final clip normalization.
 
 ## Non-secret prerequisites
 
@@ -47,17 +65,17 @@ OPENAI_API_KEY=<your-key>
 - Git
 - Python 3 for whiteboard mode
 
-## Setup behavior
+## Setup
 
 ```bash
+cp .env.example .env
+# edit OPENAI_API_KEY
 npm run setup
-```
-
-If `.env` does not exist, setup creates it from `.env.example` first and then validates that configuration. A real OpenAI run fails early with a clear message when `OPENAI_API_KEY` is empty. Whiteboard mode also validates Git/Python and prepares the upstream engine automatically.
-
-For a zero-cost end-to-end check before adding a key:
-
-```bash
 npm test
 npm run smoke
+npm run web
 ```
+
+`npm run setup` validates required executables, validates whether a real provider needs `OPENAI_API_KEY`, and installs/prepares the whiteboard engine when enabled.
+
+After the web server starts, open `http://127.0.0.1:4173`, choose **Topic → auto script**, enter a topic, review scenes, then run the pipeline.
