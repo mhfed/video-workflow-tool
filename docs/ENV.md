@@ -26,6 +26,7 @@ OPENAI_IMAGE_QUALITY=medium
 OPENAI_TTS_MODEL=gpt-4o-mini-tts
 OPENAI_TTS_VOICE=marin
 WHITEBOARD_AUTO_INSTALL=1
+WHITEBOARD_PYTHON=
 ```
 
 Then set only:
@@ -49,13 +50,14 @@ SCENE_MAX_SEC=18
 - `OPENAI_TTS_VOICE`: narration voice.
 - `OPENAI_TTS_INSTRUCTIONS`: delivery/style of narration.
 - scene timing values: how frequently visuals change.
+- `WHITEBOARD_PYTHON`: normally leave blank. Setup reads the exact `ENV_PY` reported by upstream `prepare_env.py`; use this only if you deliberately maintain the environment yourself.
 
 ## Useful switches
 
 - `MOCK_MODE=1`: no paid AI calls; useful for CI/smoke tests.
 - `VIDEO_RENDERER=simple|whiteboard`: `simple` is FFmpeg-only; `whiteboard` wraps `geeklee/srt-whiteboard-animation`.
 - `TEXT_PROVIDER`, `IMAGE_PROVIDER`, `VOICE_PROVIDER`: `openai` or `mock` in v0.1.
-- `WHITEBOARD_AUTO_INSTALL=1`: clones the upstream whiteboard engine and prepares its Python environment on setup.
+- `WHITEBOARD_AUTO_INSTALL=1`: clones the upstream whiteboard engine when absent and prepares its isolated Python environment when needed.
 - `VIDEO_WIDTH`, `VIDEO_HEIGHT`, `VIDEO_FPS`: final clip normalization.
 
 ## Non-secret prerequisites

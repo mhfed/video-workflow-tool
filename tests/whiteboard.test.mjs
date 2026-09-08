@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { run } from '../packages/core/src/process.mjs';
-import { renderWhiteboardScene } from '../packages/renderers/src/whiteboard.mjs';
+import { ensureWhiteboardEngine, renderWhiteboardScene } from '../packages/renderers/src/whiteboard.mjs';
 
 test('whiteboard adapter writes annotation and uses valid pause enum', async () => {
   const root=fs.mkdtempSync(path.join(os.tmpdir(),'vwt-wb-'));
@@ -17,7 +17,7 @@ test('whiteboard adapter writes annotation and uses valid pause enum', async () 
   const out=path.join(root,'scene-001','video.mp4');
   fs.mkdirSync(path.dirname(image),{recursive:true});
   await run('ffmpeg',['-loglevel','error','-y','-f','lavfi','-i','color=c=white:s=320x180','-frames:v','1',image],{capture:true});
-  const cfg={whiteboardEngineDir:engine,whiteboardAutoInstall:false,pythonBin:'python3',ffprobeBin:'ffprobe'};
+  const cfg={whiteboardEngineDir:engine,whiteboardAutoInstall:false,whiteboardPython:process.execPath,pythonBin:'python3',ffprobeBin:'ffprobe'};
   const scene={id:'scene-001',text:'A simple test scene.'};
   await renderWhiteboardScene({scene,imageFile:image,outputFile:out,durationSec:2,cfg});
   assert.ok(fs.existsSync(out));
@@ -25,4 +25,9 @@ test('whiteboard adapter writes annotation and uses valid pause enum', async () 
   assert.equal(ann.sceneDurationMs,2000);
   assert.equal(ann.elements[0].region.width,320);
   assert.equal(ann.elements[0].region.height,180);
+});
+
+test('whiteboard engine honors explicit interpreter override', async()=>{
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'vwt-wb-py-')); const engine=path.join(root,'engine'); fs.mkdirSync(path.join(engine,'scripts'),{recursive:true}); fs.writeFileSync(path.join(engine,'scripts','render_stream_whiteboard.py'),'# fake');
+  const py=await ensureWhiteboardEngine({whiteboardEngineDir:engine,whiteboardAutoInstall:false,whiteboardPython:process.execPath,pythonBin:'python3'}); assert.equal(py,process.execPath);
 });
