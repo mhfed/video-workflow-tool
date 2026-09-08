@@ -1,36 +1,29 @@
 # AGENTS.md
 
-## Product intent
+## Goal
+Keep this repository a reliable local-first video workflow tool for one owner.
 
-This repository is a personal/local-first video production workflow tool. Optimize for fast iteration, debuggability, resumability, and per-scene regeneration.
+## Invariants
 
-## Engineering rules
+- `project.json` is the canonical workflow state.
+- Never require a full rerun when only one scene changes.
+- Keep providers and renderers replaceable.
+- Do not commit generated media, `.env`, API keys, or the cloned whiteboard engine.
+- The `simple` renderer + mock providers must remain an offline smoke-test path.
+- Before committing a meaningful phase, run `npm test` and `npm run smoke` when FFmpeg is available.
 
-1. Keep the core independent from specific AI or renderer providers.
-2. Never require rebuilding the entire video when one scene changes.
-3. Persist intermediate artifacts and input hashes.
-4. Preserve previous successful outputs when a re-render fails.
-5. Prefer simple local infrastructure in v0.1.
-6. Renderer-specific metadata must not become the canonical project model.
-7. Keep external engines behind adapters.
+## Architecture
 
-## Preferred stack
+- `packages/core`: project state, parsing, timing, process/media helpers.
+- `packages/providers`: image and voice providers.
+- `packages/renderers`: simple and whiteboard rendering adapters.
+- `apps/worker`: orchestration and CLI.
+- `apps/web`: local review/control UI.
 
-- TypeScript
-- TanStack Start
-- Zod
-- SQLite
-- FFmpeg
-- Python subprocess adapters where needed
+## Provider rule
 
-## Before implementing a feature
+Use provider adapters rather than leaking API-specific fields into project state. OpenAI HTTP defaults belong in `.env.example`; secrets belong only in `.env`.
 
-Check whether it belongs to:
+## Whiteboard rule
 
-- core project model;
-- pipeline orchestration;
-- provider adapter;
-- renderer adapter;
-- UI only.
-
-Avoid mixing these responsibilities.
+Treat `geeklee/srt-whiteboard-animation` as an external engine. Keep integration behind `packages/renderers/src/whiteboard.mjs`; do not copy upstream implementation into core.
