@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { config } from '../../../packages/core/src/env.mjs';
 import { createProject, listProjects, loadProject, saveProject, projectDir } from '../../../packages/core/src/project.mjs';
+import { invalidateScene } from '../../../packages/core/src/invalidation.mjs';
 import { generateScriptOpenAI } from '../../../packages/providers/src/openai.mjs';
 import { generateScriptMock } from '../../../packages/providers/src/mock.mjs';
 import { runPipeline } from '../../worker/src/pipeline.mjs';
@@ -33,9 +34,13 @@ const server=http.createServer(async (req,res)=>{
       if(req.method==='PATCH'&&parts[3]==='scenes'&&parts[4]) {
         const b=await readBody(req); const p=loadProject(id,cfg); const s=p.scenes.find(x=>x.id===parts[4]);
         if(!s) return json(res,404,{error:'scene not found'});
-        if(typeof b.text==='string') s.text=b.text;
-        if(typeof b.visualPrompt==='string') s.visualPrompt=b.visualPrompt;
-        s.cache={}; s.status='planned'; saveProject(p,cfg); return json(res,200,p);
+        const nextText=typeof b.text==='string'?b.text:s.text;
+        const nextPrompt=typeof b.visualPrompt==='string'?b.visualPrompt:s.visualPrompt;
+        const textChanged=nextText!==s.text;
+        const promptChanged=nextPrompt!==s.visualPrompt;
+        s.text=nextText; s.visualPrompt=nextPrompt;
+        invalidateScene(p,s,{textChanged,promptChanged});
+        saveProject(p,cfg); return json(res,200,p);
       }
       if(req.method==='POST'&&parts[3]==='run') { const b=await readBody(req); const result=await runPipeline(id,{force:!!b.force,sceneId:b.sceneId||null}); return json(res,200,{project:result.project,final:result.final}); }
     }
