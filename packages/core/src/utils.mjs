@@ -1,0 +1,11 @@
+import crypto from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
+export const nowIso = () => new Date().toISOString();
+export const slugify = (s) => String(s).toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 64) || 'project';
+export const sha256 = (value) => crypto.createHash('sha256').update(typeof value === 'string' ? value : JSON.stringify(value)).digest('hex');
+export const ensureDir = (p) => (fs.mkdirSync(p, { recursive: true }), p);
+export const fileExists = (p) => { try { return fs.statSync(p).isFile(); } catch { return false; } };
+export const writeJson = (p, data) => { ensureDir(path.dirname(p)); fs.writeFileSync(p, JSON.stringify(data, null, 2) + '\n'); };
+export const readJson = (p) => JSON.parse(fs.readFileSync(p, 'utf8'));
+export const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
