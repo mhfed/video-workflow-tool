@@ -20,7 +20,7 @@ test('rejects unsupported image sizes and invalid scene timing',()=>{
   const result=validateConfig({...base,openaiImageSize:'2048x1152',sceneMinSec:20,sceneTargetSec:12,sceneMaxSec:8});
   assert.equal(result.ok,false);
   assert.match(result.errors.join('\n'),/OPENAI_IMAGE_SIZE/);
-  assert.match(result.errors.join('\n'),/SCENE_MIN_SEC/);
+  assert.match(result.errors.join('\n'),/Scene timing/);
 });
 
 test('mock mode permits missing OpenAI key',()=>{
