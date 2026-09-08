@@ -4,6 +4,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { config } from '../../../packages/core/src/env.mjs';
 import { createProject, listProjects, loadProject, saveProject, projectDir } from '../../../packages/core/src/project.mjs';
+import { generateScriptOpenAI } from '../../../packages/providers/src/openai.mjs';
+import { generateScriptMock } from '../../../packages/providers/src/mock.mjs';
 import { runPipeline } from '../../worker/src/pipeline.mjs';
 
 const cfg=config();
@@ -24,7 +26,7 @@ const server=http.createServer(async (req,res)=>{
       return serve(res,file,'video/mp4');
     }
     if(req.method==='GET' && url.pathname==='/api/projects') return json(res,200,listProjects(cfg));
-    if(req.method==='POST' && url.pathname==='/api/projects') { const b=await readBody(req); return json(res,201,createProject({title:b.title,sourceText:b.sourceText,sourceType:b.sourceType||'script'},cfg)); }
+    if(req.method==='POST' && url.pathname==='/api/projects') { const b=await readBody(req); let sourceText=b.sourceText||'',sourceType=b.sourceType||'script',topic=''; if(sourceType==='topic'){topic=String(b.topic||b.sourceText||'').trim();if(!topic)throw new Error('topic is required');sourceText=cfg.mockMode||cfg.textProvider==='mock'?generateScriptMock(topic):await generateScriptOpenAI(topic,cfg,{minutes:Number(b.minutes||cfg.scriptMinutes)});} return json(res,201,createProject({title:b.title||topic,sourceText,sourceType,topic},cfg)); }
     if(parts[0]==='api'&&parts[1]==='projects'&&parts[2]) {
       const id=decodeURIComponent(parts[2]);
       if(req.method==='GET'&&parts.length===3) return json(res,200,loadProject(id,cfg));

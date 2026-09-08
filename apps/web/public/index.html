@@ -16,8 +16,9 @@
   <form method="dialog" id="newForm">
     <h2>New project</h2>
     <input name="title" placeholder="Project title" required>
-    <select name="sourceType"><option value="script">Script</option><option value="srt">SRT</option></select>
-    <textarea name="sourceText" rows="14" placeholder="Paste script or SRT" required></textarea>
+    <select name="sourceType" id="sourceType"><option value="topic">Topic → auto script</option><option value="script">Script</option><option value="srt">SRT</option></select>
+    <textarea name="sourceText" rows="14" placeholder="Enter a topic, or paste script/SRT" required></textarea>
+    <input name="minutes" type="number" min="1" max="60" value="6" placeholder="Target minutes">
     <menu><button value="cancel">Cancel</button><button value="default">Create</button></menu>
   </form>
 </dialog>

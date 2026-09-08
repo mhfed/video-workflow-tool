@@ -1,0 +1,2 @@
+import test from 'node:test'; import assert from 'node:assert/strict'; import { generateScriptMock } from '../packages/providers/src/mock.mjs'; import { planScriptScenes } from '../packages/core/src/scene-plan.mjs';
+test('topic mock produces plannable narration',()=>{const script=generateScriptMock('procrastination');assert.match(script,/procrastination/i);const scenes=planScriptScenes(script,{sceneMinSec:2,sceneMaxSec:18,sceneTargetSec:8,wordsPerMinute:150});assert.ok(scenes.length>=1);assert.ok(scenes.every(s=>s.visualPrompt));});
