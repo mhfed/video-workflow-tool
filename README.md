@@ -1,77 +1,93 @@
 # Video Workflow Tool
 
-Local-first internal tool for turning a topic/script into an editable video project and final MP4.
+A local-first personal video production workflow. Paste a script or SRT, review scenes, and render a synchronized MP4 without redoing unchanged work.
 
-The first renderer target is whiteboard animation, using `geeklee/srt-whiteboard-animation` as an external renderer dependency rather than coupling its implementation into the core workflow.
-
-## Product goal
-
-Build a personal "video IDE" where each production step is visible, editable, cached, and re-runnable independently.
+## End-to-end workflow
 
 ```text
-Topic / Script
-  -> Script
-  -> Voice
-  -> SRT
-  -> Scene Plan
-  -> Visuals
-  -> Animation Renderer
-  -> Final Render
+Script / SRT
+  -> scene plan
+  -> per-scene voice
+  -> per-scene illustration
+  -> simple or whiteboard renderer
+  -> synchronized scene clips
+  -> final.mp4
 ```
 
-The system must avoid the "one giant generate button" trap. A bad scene should be regeneratable without rebuilding the whole video.
+Every scene caches its voice, image, render, and mux steps. Editing one scene invalidates only that scene.
 
-## MVP screens
+## Quick start
 
-1. Projects
-2. Script
-3. Scene Editor
-4. Render Queue
-5. Final Preview / Export
+```bash
+git clone git@github.com:mhfed/video-workflow-tool.git
+cd video-workflow-tool
+cp .env.example .env
+# add OPENAI_API_KEY to .env
+npm run setup
+npm run web
+```
 
-## Proposed stack
+Open `http://127.0.0.1:4173`, create a project, paste a script, review the generated scenes and prompts, then click **Run full pipeline**.
 
-- Web app: TanStack Start + React + TypeScript
-- Runtime/API: Node.js
-- Local database: SQLite
-- Media pipeline: FFmpeg
-- Renderer workers: Python subprocesses
-- First renderer: `srt-whiteboard-animation`
-- Storage: local project workspace on disk
+The default real configuration uses:
 
-## Repository layout
+- OpenAI Image API with `gpt-image-2` for illustrations.
+- OpenAI Speech API with `gpt-4o-mini-tts` for narration.
+- `geeklee/srt-whiteboard-animation` for whiteboard rendering. The engine is cloned automatically when `WHITEBOARD_AUTO_INSTALL=1`.
+- FFmpeg for per-scene muxing and final concatenation.
+
+See [`docs/ENV.md`](docs/ENV.md) for all environment variables.
+
+## Zero-cost smoke test
+
+No API key is required to test orchestration:
+
+```bash
+npm test
+npm run smoke
+```
+
+`npm run smoke` forces mock providers + the simple renderer and must produce a playable `final.mp4` in a temporary workspace.
+
+## CLI
+
+```bash
+npm run cli -- create --title "Why we procrastinate" --script ./script.md
+npm run cli -- status
+npm run cli -- run --project <project-id>
+npm run cli -- run --project <project-id> --scene scene-003
+npm run cli -- run --project <project-id> --force
+```
+
+For SRT input:
+
+```bash
+npm run cli -- create --title "Existing narration" --srt ./subtitles.srt
+```
+
+## Workspace layout
 
 ```text
-apps/
-  web/                 # TanStack Start UI + API routes
-  worker/              # background/local render worker
-packages/
-  core/                # project schema, pipeline state, cache keys
-  renderers/           # renderer interfaces + adapters
-vendor/                 # optional git submodules / vendored engines
-docs/
-  architecture.md
-  mvp-v0.1.md
-  data-model.md
-  renderer-contract.md
-  roadmap.md
-  github-bootstrap.md
-  decisions/
+workspace/<project-id>/
+├── project.json
+├── script.md | source.srt
+├── scenes/
+│   └── scene-001/
+│       ├── voice.mp3
+│       ├── visual.png
+│       ├── scene-001.annotation.json
+│       ├── video.mp4
+│       └── clip.mp4
+└── output/
+    ├── concat.txt
+    └── final.mp4
 ```
 
-## Core rule
+## Requirements
 
-The LLM does **not** directly produce a video. It produces or edits a structured `VideoProject` representation. Renderers consume that representation and generate deterministic artifacts where possible.
+- Node.js 20+
+- FFmpeg + ffprobe
+- Git
+- Python 3 (whiteboard mode)
 
-## First milestone
-
-Given an existing `script.md` or `.srt` file:
-
-1. create a project;
-2. split it into scenes;
-3. inspect/edit scene timing and prompts;
-4. render whiteboard scenes;
-5. re-render one scene independently;
-6. merge scenes and voice into `final.mp4`.
-
-See [`docs/mvp-v0.1.md`](docs/mvp-v0.1.md).
+There are intentionally no npm runtime dependencies in v0.1. The web control panel uses Node's built-in HTTP server so the core workflow remains easy to run and debug locally.
