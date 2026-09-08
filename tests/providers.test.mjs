@@ -3,20 +3,38 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { generateImageOpenAI, synthesizeSpeechOpenAI } from '../packages/providers/src/openai.mjs';
+import { generateScriptOpenAI, generateImageOpenAI, synthesizeSpeechOpenAI } from '../packages/providers/src/openai.mjs';
 
 const cfg = {
   openaiApiKey: 'test-key',
   openaiBaseUrl: 'https://api.openai.com/v1',
+  openaiTextModel: 'gpt-5.6-luna',
+  scriptMinutes: 6,
   openaiImageModel: 'gpt-image-2',
-  openaiImageSize: '2048x1152',
+  openaiImageSize: '1536x1024',
   openaiImageQuality: 'medium',
   openaiTtsModel: 'gpt-4o-mini-tts',
   openaiTtsVoice: 'marin',
   openaiTtsInstructions: 'Narrate naturally.'
 };
 
-test('OpenAI image provider sends configured image request and decodes base64', async () => {
+test('OpenAI script provider uses Responses API and returns narration text', async () => {
+  const oldFetch = globalThis.fetch;
+  let request;
+  globalThis.fetch = async (url, init) => {
+    request = { url, init, body: JSON.parse(init.body) };
+    return new Response(JSON.stringify({ output_text: 'A complete narration.' }), { status: 200, headers: { 'content-type': 'application/json' } });
+  };
+  try {
+    const text = await generateScriptOpenAI('Why habits work', cfg, { minutes: 4 });
+    assert.equal(text, 'A complete narration.');
+    assert.equal(request.url, 'https://api.openai.com/v1/responses');
+    assert.equal(request.body.model, 'gpt-5.6-luna');
+    assert.match(request.body.input, /4 minutes/);
+  } finally { globalThis.fetch = oldFetch; }
+});
+
+test('OpenAI image provider sends supported landscape request and decodes base64', async () => {
   const oldFetch = globalThis.fetch;
   let request;
   globalThis.fetch = async (url, init) => {
@@ -29,7 +47,7 @@ test('OpenAI image provider sends configured image request and decodes base64', 
     await generateImageOpenAI('draw a brain', out, cfg);
     assert.equal(request.url, 'https://api.openai.com/v1/images/generations');
     assert.equal(request.body.model, 'gpt-image-2');
-    assert.equal(request.body.size, '2048x1152');
+    assert.equal(request.body.size, '1536x1024');
     assert.equal(request.body.output_format, 'png');
     assert.equal(fs.readFileSync(out, 'utf8'), 'png-bytes');
   } finally { globalThis.fetch = oldFetch; }
