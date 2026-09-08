@@ -30,7 +30,7 @@ export function config() {
     openaiBaseUrl: (env.OPENAI_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, ''),
     openaiTextModel: env.OPENAI_TEXT_MODEL || 'gpt-5.6-luna',
     openaiImageModel: env.OPENAI_IMAGE_MODEL || 'gpt-image-2',
-    openaiImageSize: env.OPENAI_IMAGE_SIZE || '2048x1152',
+    openaiImageSize: env.OPENAI_IMAGE_SIZE || '1536x1024',
     openaiImageQuality: env.OPENAI_IMAGE_QUALITY || 'medium',
     openaiTtsModel: env.OPENAI_TTS_MODEL || 'gpt-4o-mini-tts',
     openaiTtsVoice: env.OPENAI_TTS_VOICE || 'marin',
