@@ -15,7 +15,7 @@ Topic / Script / SRT
   -> final.mp4
 ```
 
-Every scene caches its voice, image, render, and mux steps. Editing one scene invalidates only that scene.
+Every scene caches its voice, image, render, and mux steps. Editing narration or a visual prompt invalidates only the dependent artifacts, and a stale final video is never kept marked current.
 
 ## Quick start
 
@@ -25,20 +25,25 @@ cd video-workflow-tool
 cp .env.example .env
 # set OPENAI_API_KEY in .env
 npm run setup
+npm run doctor
 npm run web
 ```
 
-Open `http://127.0.0.1:4173`. The default **Topic → auto script** mode lets you enter an idea, choose target minutes, review the generated scenes/prompts, then click **Run full pipeline**.
+Open `http://127.0.0.1:4173`. The default **Topic → auto script** mode lets you enter an idea, choose target minutes, review the generated scenes/prompts, render/review scenes individually, then click **Run full pipeline**.
 
 The default real configuration uses:
 
 - OpenAI Responses API with `gpt-5.6-luna` for topic → narration.
-- OpenAI Image API with `gpt-image-2` for illustrations.
+- OpenAI Image API with `gpt-image-2` at supported landscape size `1536x1024` for illustrations.
 - OpenAI Speech API with `gpt-4o-mini-tts` for narration audio.
-- `geeklee/srt-whiteboard-animation` for whiteboard rendering. The engine is cloned automatically when `WHITEBOARD_AUTO_INSTALL=1`.
-- FFmpeg for per-scene muxing and final concatenation.
+- `geeklee/srt-whiteboard-animation` for whiteboard rendering. The engine is cloned/prepared automatically when `WHITEBOARD_AUTO_INSTALL=1`.
+- FFmpeg for per-scene muxing, 16:9 normalization, and final concatenation.
 
-See [`docs/ENV.md`](docs/ENV.md) for the small set of values you need to review.
+For handoff, review [`docs/REVIEW_CHECKLIST.md`](docs/REVIEW_CHECKLIST.md). The default real workflow requires one secret: `OPENAI_API_KEY`. See [`docs/ENV.md`](docs/ENV.md) for all optional settings.
+
+## Review control panel
+
+For each scene the UI can show the generated visual, narration audio, and rendered clip. Media endpoints support HTTP Range requests, so video/audio seek normally in the browser. A project-level lock prevents duplicate render runs, and failed runs persist their last error for review.
 
 ## Zero-cost smoke test
 
