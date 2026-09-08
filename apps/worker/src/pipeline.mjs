@@ -11,16 +11,18 @@ import { renderSimpleScene } from '../../../packages/renderers/src/simple.mjs';
 import { renderWhiteboardScene } from '../../../packages/renderers/src/whiteboard.mjs';
 
 function log(event, detail={}) { console.log(JSON.stringify({time:new Date().toISOString(),event,...detail})); }
+const effectiveProvider = (configured, cfg) => cfg.mockMode ? 'mock' : configured;
 
 async function ensureVoice(scene, project, cfg, force=false) {
   const dir=ensureDir(sceneDir(cfg,project.id,scene.id));
   const file=path.join(dir,'voice.mp3');
-  const key=sha256({text:scene.text,provider:cfg.voiceProvider,model:cfg.openaiTtsModel,voice:cfg.openaiTtsVoice,instructions:cfg.openaiTtsInstructions});
+  const provider=effectiveProvider(cfg.voiceProvider,cfg);
+  const key=sha256({text:scene.text,provider,model:provider==='openai'?cfg.openaiTtsModel:null,voice:provider==='openai'?cfg.openaiTtsVoice:null,instructions:provider==='openai'?cfg.openaiTtsInstructions:null});
   if (!force && scene.cache.voice===key && fileExists(file)) return file;
-  log('voice:start',{scene:scene.id,provider:cfg.voiceProvider});
-  if (cfg.mockMode || cfg.voiceProvider==='mock') await synthesizeSpeechMock(scene.text,file,cfg,scene.durationMs/1000);
-  else if (cfg.voiceProvider==='openai') await synthesizeSpeechOpenAI(scene.text,file,cfg);
-  else throw new Error(`Unsupported VOICE_PROVIDER=${cfg.voiceProvider}`);
+  log('voice:start',{scene:scene.id,provider});
+  if (provider==='mock') await synthesizeSpeechMock(scene.text,file,cfg,scene.durationMs/1000);
+  else if (provider==='openai') await synthesizeSpeechOpenAI(scene.text,file,cfg);
+  else throw new Error(`Unsupported VOICE_PROVIDER=${provider}`);
   scene.durationMs=Math.round((await probeDuration(file,cfg))*1000);
   scene.cache.voice=key; scene.artifacts.voice=path.relative(projectDir(cfg,project.id),file); scene.status='voice-ready';
   saveProject(updateTimeline(project),cfg); log('voice:done',{scene:scene.id,durationMs:scene.durationMs}); return file;
@@ -29,11 +31,12 @@ async function ensureVoice(scene, project, cfg, force=false) {
 async function ensureImage(scene, project, cfg, force=false) {
   const dir=ensureDir(sceneDir(cfg,project.id,scene.id));
   const file=path.join(dir,'visual.png');
-  const key=sha256({prompt:scene.visualPrompt,provider:cfg.imageProvider,model:cfg.openaiImageModel,size:cfg.openaiImageSize,quality:cfg.openaiImageQuality});
-  if (!force && scene.cache.image===key && fileExists(file)) return file;
-  if (cfg.mockMode || cfg.imageProvider==='mock') { scene.cache.image=key; scene.artifacts.visual=null; saveProject(project,cfg); return null; }
-  if (cfg.imageProvider!=='openai') throw new Error(`Unsupported IMAGE_PROVIDER=${cfg.imageProvider}`);
-  log('image:start',{scene:scene.id,provider:cfg.imageProvider}); await generateImageOpenAI(scene.visualPrompt,file,cfg);
+  const provider=effectiveProvider(cfg.imageProvider,cfg);
+  const key=sha256({prompt:scene.visualPrompt,provider,model:provider==='openai'?cfg.openaiImageModel:null,size:provider==='openai'?cfg.openaiImageSize:null,quality:provider==='openai'?cfg.openaiImageQuality:null});
+  if (!force && scene.cache.image===key && (provider==='mock' || fileExists(file))) return provider==='mock' ? null : file;
+  if (provider==='mock') { scene.cache.image=key; scene.artifacts.visual=null; saveProject(project,cfg); return null; }
+  if (provider!=='openai') throw new Error(`Unsupported IMAGE_PROVIDER=${provider}`);
+  log('image:start',{scene:scene.id,provider}); await generateImageOpenAI(scene.visualPrompt,file,cfg);
   scene.cache.image=key; scene.artifacts.visual=path.relative(projectDir(cfg,project.id),file); scene.status='visual-ready'; saveProject(project,cfg); log('image:done',{scene:scene.id}); return file;
 }
 
@@ -54,7 +57,7 @@ async function ensureClip(scene, project, cfg, videoFile, voiceFile, force=false
   const file=path.join(dir,'clip.mp4');
   const key=sha256({video:scene.cache.video,voice:scene.cache.voice,width:cfg.width,height:cfg.height,fps:cfg.fps});
   if (!force && scene.cache.clip===key && fileExists(file)) return file;
-  const vf=`scale=${cfg.width}:${cfg.height}:force_original_aspect_ratio=decrease,pad=${cfg.width}:${cfg.height}:(ow-iw)/2:(oh-ih)/2,format=yuv420p`;
+  const vf=`scale=${cfg.width}:${cfg.height}:force_original_aspect_ratio=increase,crop=${cfg.width}:${cfg.height},format=yuv420p`;
   await run(cfg.ffmpegBin,['-y','-i',videoFile,'-i',voiceFile,'-map','0:v:0','-map','1:a:0','-vf',vf,'-r',String(cfg.fps),'-c:v','libx264','-preset','medium','-crf','18','-c:a','aac','-b:a','192k','-shortest','-movflags','+faststart',file],{capture:true});
   scene.cache.clip=key; scene.artifacts.clip=path.relative(projectDir(cfg,project.id),file); scene.status='ready'; saveProject(project,cfg); return file;
 }
