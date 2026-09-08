@@ -1,112 +1,78 @@
 # Data Model
 
+`workspace/<project-id>/project.json` is the canonical state in v0.1. The schema is intentionally plain JSON so it can later be indexed by SQLite without changing the workflow model.
+
 ## VideoProject
 
-Canonical project state should be serializable to JSON even if SQLite is used operationally.
+Representative shape:
 
-```ts
-type VideoProject = {
-  version: 1
-  id: string
-  name: string
-  createdAt: string
-  updatedAt: string
-  workspacePath: string
-  source: SourceSpec
-  audio: AudioSpec
-  scenes: Scene[]
-  output: OutputSpec
-  preset?: string
+```json
+{
+  "version": 1,
+  "id": "why-habits-work-a1b2c3",
+  "title": "Why habits work",
+  "createdAt": "2026-09-09T00:00:00.000Z",
+  "updatedAt": "2026-09-09T00:02:00.000Z",
+  "source": {
+    "type": "script",
+    "text": "..."
+  },
+  "settings": {
+    "renderer": "whiteboard",
+    "width": 1920,
+    "height": 1080,
+    "fps": 30
+  },
+  "scenes": [],
+  "artifacts": {
+    "final": "output/final.mp4"
+  },
+  "status": "complete"
 }
 ```
+
+`source.type` is currently `script` or `srt`.
 
 ## Scene
 
-```ts
-type Scene = {
-  id: string
-  index: number
-  text: string
-  startMs?: number
-  endMs?: number
-  durationMs?: number
-
-  visual: {
-    prompt?: string
-    provider?: string
-    assetPath?: string
-    inputHash?: string
+```json
+{
+  "id": "scene-001",
+  "index": 0,
+  "text": "Narration text for this scene.",
+  "startMs": 0,
+  "endMs": 7421,
+  "durationMs": 7421,
+  "sourceStartMs": null,
+  "sourceEndMs": null,
+  "visualPrompt": "Create one clean 16:9 whiteboard-style illustration...",
+  "status": "ready",
+  "cache": {
+    "voice": "sha256...",
+    "image": "sha256...",
+    "video": "sha256...",
+    "clip": "sha256..."
+  },
+  "artifacts": {
+    "voice": "scenes/scene-001/voice.mp3",
+    "visual": "scenes/scene-001/visual.png",
+    "video": "scenes/scene-001/video.mp4",
+    "clip": "scenes/scene-001/clip.mp4"
   }
-
-  renderer: {
-    type: 'whiteboard' | 'slideshow' | 'motion'
-    config: Record<string, unknown>
-    metadataPath?: string
-    previewPath?: string
-    outputPath?: string
-    inputHash?: string
-    status: TaskStatus
-  }
 }
 ```
 
-## Artifact
+For SRT imports, `sourceStartMs` and `sourceEndMs` retain the source cue timing. For generated speech, `durationMs` is updated from the measured audio duration and the project timeline is recalculated.
 
-```ts
-type Artifact = {
-  id: string
-  projectId: string
-  sceneId?: string
-  kind:
-    | 'script'
-    | 'srt'
-    | 'voice'
-    | 'visual'
-    | 'annotation'
-    | 'scene-preview'
-    | 'scene-render'
-    | 'final-video'
-  path: string
-  hash: string
-  createdAt: string
-  metadata?: Record<string, unknown>
-}
-```
+## Cache semantics
 
-## TaskRun
+- `voice` hash: narration + speech provider/model/voice/instructions.
+- `image` hash: visual prompt + image provider/model/size/quality.
+- `video` hash: renderer + scene duration + visual hash + video settings.
+- `clip` hash: rendered video + voice + normalized output dimensions/FPS.
 
-```ts
-type TaskStatus =
-  | 'pending'
-  | 'running'
-  | 'succeeded'
-  | 'failed'
-  | 'stale'
-  | 'cancelled'
+If a matching hash exists and its file exists, that step is reused.
 
-type TaskRun = {
-  id: string
-  projectId: string
-  sceneId?: string
-  taskType: string
-  status: TaskStatus
-  inputHash: string
-  startedAt?: string
-  finishedAt?: string
-  exitCode?: number
-  logPath?: string
-  error?: string
-}
-```
+## Artifact files
 
-## SQLite tables
-
-Recommended minimal tables:
-
-- `projects`
-- `scenes`
-- `artifacts`
-- `task_runs`
-- `presets`
-
-Large JSON configs may remain JSON columns in v0.1. Avoid over-normalizing renderer-specific settings.
+v0.1 does not create a separate database artifact table. Artifact metadata lives next to each scene/project in `project.json`; media bytes remain in the filesystem. This is sufficient for the single-user local workflow and can be indexed later without migrating the media layout.
