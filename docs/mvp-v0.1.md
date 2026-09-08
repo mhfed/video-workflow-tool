@@ -2,118 +2,110 @@
 
 ## Objective
 
-Prove that a personal scene-based workflow is materially faster than manually wiring scripts together.
+Provide a usable personal/local workflow that turns an existing script or SRT into an editable, synchronized final MP4 while avoiding unnecessary rerenders.
 
-## User flow
+## Implemented user flow
 
 ### A. Create project
 
-Input:
+From the browser UI, paste:
 
-- project name
-- script text or SRT upload
-- optional existing voice file
+- project title;
+- script text or SRT text.
 
-Output:
+From CLI, use `--script <file>` or `--srt <file>`.
 
-- workspace directory
-- initial `VideoProject`
+The tool creates a workspace and canonical `project.json`.
 
 ### B. Scene planning
 
-If SRT exists, derive scene boundaries from timestamps.
+- Script input is split automatically using sentence boundaries plus configured target/min/max scene duration.
+- SRT input preserves source cue timing and groups cues into scenes.
+- Every scene gets editable narration and an editable whiteboard-style visual prompt.
 
-If only script exists, allow manual scene splitting first. Automatic script-to-scene planning can be added after the core workflow works.
+### C. Per-scene generation
 
-Each scene exposes:
+For each stale scene:
 
-- text
-- start/end time
-- duration
-- visual prompt
-- visual asset
-- renderer
-- renderer config
-- render status
+1. create narration with the configured speech provider;
+2. measure the actual narration duration;
+3. update the scene timeline;
+4. create the scene illustration;
+5. render with `simple` or `whiteboard`;
+6. normalize video size/FPS and mux narration;
+7. cache hashes and artifact paths.
 
-### C. Whiteboard rendering
-
-For selected scenes:
-
-1. ensure visual exists;
-2. prepare whiteboard annotation;
-3. render preview;
-4. render final scene MP4;
-5. save artifact metadata.
+A single scene can be rerun independently.
 
 ### D. Final render
 
-- Concatenate scene MP4s in order.
-- Add/replace voice track.
-- Optional simple background music control.
-- Export `output/final.mp4`.
+All normalized scene clips are concatenated in scene order into:
 
-## UI scope
+```text
+workspace/<project-id>/output/final.mp4
+```
+
+The browser UI streams this file into a final preview player.
+
+## Implemented UI scope
 
 ### Projects
 
-- New project
-- Recent projects
-- Open project
-- Duplicate project (nice-to-have)
+- Create project.
+- List/reopen local projects.
+- Show project status and scene count.
 
-### Script
+### Scene editor
 
-- Plain text editor
-- Import `.md`, `.txt`, `.srt`
-- Scene split markers
-- Save
+For each scene:
 
-### Scene Editor
+- narration text;
+- measured/planned duration;
+- visual prompt;
+- current status;
+- save edits;
+- render only that scene.
 
-Three-column layout is preferred:
+### Project action
 
-```text
-Scene list | Preview / timeline | Scene properties
+- Run the complete pipeline while reusing valid cached scene artifacts.
+
+### Final preview
+
+- Play final MP4 in browser.
+- Show final artifact path.
+
+## CLI scope
+
+```bash
+npm run cli -- create --title "..." --script ./script.md
+npm run cli -- create --title "..." --srt ./subtitles.srt
+npm run cli -- status
+npm run cli -- run --project <id>
+npm run cli -- run --project <id> --scene scene-003
+npm run cli -- run --project <id> --force
 ```
 
-Properties:
+## Acceptance status
 
-- scene text
-- start/end
-- prompt
-- renderer selector
-- visual actions
-- render actions
+- [x] Script project can be created and automatically split into scenes.
+- [x] SRT project can be imported and cue timing parsed.
+- [x] One scene can be rendered independently.
+- [x] Scene inputs are hashed so unchanged artifacts are reused.
+- [x] Project state survives process restart because it is persisted to disk.
+- [x] Narration duration drives scene timing.
+- [x] Renderer output is normalized before concat.
+- [x] Final MP4 contains scenes in order with narration audio.
+- [x] Final MP4 is reviewable in the local browser UI.
+- [x] Whiteboard adapter contract has a regression test.
+- [x] OpenAI image/speech request contracts have offline tests.
+- [x] GitHub CI runs prerequisite check, tests and a full mock smoke render.
 
-Primary actions:
+## Deferred from v0.1
 
-- Regenerate visual
-- Rebuild annotation
-- Render preview
-- Render scene
-- Render all stale
-
-### Render Queue
-
-- running task
-- queued tasks
-- progress
-- logs
-- retry failed task
-
-### Final Preview
-
-- video player
-- export path
-- re-render stale scenes
-- build final
-
-## Acceptance tests
-
-1. A 5-scene SRT project can be imported.
-2. Scene 3 can be rendered while scenes 1, 2, 4, 5 remain untouched.
-3. Editing scene 3 prompt marks only its downstream artifacts stale.
-4. Restarting the app restores all project state.
-5. Final MP4 contains all scenes in the correct order.
-6. A failed scene render surfaces logs and can be retried.
+- Existing voice-file import.
+- Background music/SFX mixing.
+- Dedicated render queue/progress log UI.
+- Drag/drop file upload (paste text and CLI file input are sufficient for v0.1).
+- Automatic topic research/script writing.
+- Multi-region semantic whiteboard annotation.
