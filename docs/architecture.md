@@ -1,154 +1,108 @@
 # Architecture
 
+This document describes the implemented v0.1 architecture. For the reasoning behind the final choices, also see [`architecture-v0.1.md`](architecture-v0.1.md).
+
 ## 1. Overview
 
-The architecture is split into four layers:
-
 ```text
-UI / Project Editor
-       |
-Pipeline Orchestrator
-       |
-Artifact + State Store
-       |
-Renderer / Provider Adapters
+Local browser UI / CLI
+        |
+Node.js pipeline orchestrator
+        |
+project.json + filesystem artifacts
+        |
+Provider adapters + renderer adapters
+        |
+OpenAI / FFmpeg / Python whiteboard engine
 ```
 
-### UI / Project Editor
-
-TanStack Start app for project navigation, script editing, scene editing, render status, previews, and export.
-
-### Pipeline Orchestrator
-
-Owns task dependencies, stale-state detection, cache keys, execution, retries, and progress reporting.
-
-### Artifact + State Store
-
-- SQLite stores metadata/state.
-- Filesystem stores large artifacts: audio, images, SRT, JSON, MP4.
-- Database paths are relative to the project workspace where possible.
-
-### Provider / Renderer Adapters
-
-Stable interfaces around replaceable engines:
-
-- TTS provider
-- transcription/SRT provider
-- image provider
-- whiteboard renderer
-- future slideshow / motion / stock renderers
+The original scaffold proposed TanStack Start + SQLite. v0.1 deliberately uses Node's built-in HTTP server and `project.json` instead, eliminating npm runtime dependencies while preserving replaceable provider/renderer boundaries.
 
 ## 2. Local-first process model
 
 ```text
-TanStack Start
-  |- SQLite
-  |- Project files
-  |- FFmpeg
-  |- Node worker
-  `- Python renderer subprocess
+Node.js
+  |- local HTTP review UI
+  |- CLI
+  |- project.json state
+  |- workspace files
+  |- OpenAI HTTP adapters
+  |- FFmpeg subprocesses
+  `- Python whiteboard subprocess
 ```
 
-For v0.1, all processes may run on the same machine. Do not introduce Redis, queues, containers, or distributed workers until needed.
+There is no auth, database server, queue, container requirement, or cloud worker in v0.1.
 
 ## 3. Project workspace
 
 ```text
 workspace/<project-id>/
-  project.json
-  source/
-    script.md
-    input.srt
-  audio/
-    voice.mp3
-  scenes/
-    001/
-      scene.json
-      visual.png
-      annotation.json
-      render.mp4
-      preview.mp4
-    002/
-      ...
-  output/
-    concat.mp4
-    final.mp4
-  logs/
+├── project.json
+├── script.md | source.srt
+├── scenes/
+│   └── scene-001/
+│       ├── voice.mp3
+│       ├── visual.png
+│       ├── scene-001.annotation.json
+│       ├── video.mp4
+│       └── clip.mp4
+└── output/
+    ├── concat.txt
+    └── final.mp4
 ```
+
+`project.json` is the canonical state. Large media stays on disk and is referenced by relative paths.
 
 ## 4. Pipeline dependency graph
 
 ```text
-script/srt
+script / SRT
    -> scene plan
-      -> scene visual
-         -> renderer metadata/annotation
-            -> scene render
-
-voice -------------------------------> final mux
-scene renders -> concat --------------> final mux
+      -> per-scene voice -----------+
+      -> per-scene image            |
+            -> scene renderer       |
+                  -> normalized mux-+
+                         -> concat -> final.mp4
 ```
 
-Each node records an input hash and output artifact. If inputs have not changed and the artifact exists, the node is skipped.
+Narration is generated per scene. The measured voice duration updates that scene's timeline before video rendering, which keeps audio and visuals synchronized.
 
-## 5. Stale state
+## 5. Cache / stale behavior
 
-Example: change only `scene[4].visual.prompt`.
+Every scene stores independent SHA-256 keys for voice, image, video, and clip outputs. Each key includes only the inputs relevant to that step.
 
-Invalidate:
+Changing one scene narration or visual prompt invalidates that scene's downstream artifacts without forcing other scenes to rerender. A full run reuses valid files and creates only stale outputs.
 
-```text
-scene 4 visual
-scene 4 annotation (if derived from visual)
-scene 4 render
-concat
-final mux
-```
+## 6. Provider boundary
 
-Do not invalidate voice, other scenes, or the source script.
+`packages/providers` owns external AI request shapes. The current providers are:
 
-## 6. Renderer boundary
+- OpenAI image generation;
+- OpenAI text-to-speech;
+- mock speech/image behavior for zero-cost tests.
 
-The core must never know implementation details such as OpenCV masks, hand paths, or contour wipes.
+Provider-specific fields come from ENV/config and do not become the canonical project model.
 
-Core calls:
+## 7. Renderer boundary
 
-```ts
-renderer.prepare(scene, context)
-renderer.render(scene, context)
-renderer.validate(scene, context)
-```
+`packages/renderers` owns media engines:
 
-The whiteboard adapter translates the generic scene into the external renderer's SRT/image/annotation files and invokes Python scripts.
+- `simple`: FFmpeg-only scene renderer used for smoke tests and fallback;
+- `whiteboard`: adapter around `geeklee/srt-whiteboard-animation`.
 
-## 7. Whiteboard renderer integration
+The whiteboard adapter:
 
-Recommended initial integration:
+1. installs/prepares the upstream engine when configured;
+2. builds a valid annotation from the generic scene;
+3. invokes the upstream Python renderer;
+4. returns a scene video to the common pipeline.
 
-```text
-vendor/srt-whiteboard-animation
-```
+v0.1 uses one semantic full-canvas region per scene so the process is fully automatic. Multi-region semantic drawing can be added later without changing the project model.
 
-Use it as a git submodule or separately cloned dependency. Do not modify upstream code until a real limitation appears.
+## 8. Output normalization
 
-Adapter responsibilities:
+Renderer outputs may differ in dimensions or FPS. Before concatenation, every scene is encoded to the configured output size/FPS with H.264 video and AAC audio. This guarantees compatible clips for final FFmpeg concat.
 
-1. Build the scene-specific input files.
-2. Run its environment preparation/check.
-3. Generate/validate annotation.
-4. Invoke its stream renderer.
-5. Capture stdout/stderr and exit code.
-6. Copy/link outputs into the project scene directory.
+## 9. Failure model
 
-## 8. Error model
-
-Every pipeline task has:
-
-- `pending`
-- `running`
-- `succeeded`
-- `failed`
-- `stale`
-- `cancelled`
-
-Failures must keep previous successful outputs when safe. A failed re-render should not delete the last playable scene render.
+Pipeline operations fail with actionable process/API errors and keep previously successful artifacts on disk. The UI/CLI can rerun a single scene or force a regeneration when needed.
