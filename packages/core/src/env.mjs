@@ -39,6 +39,7 @@ export function config() {
     ffmpegBin: env.FFMPEG_BIN || 'ffmpeg',
     ffprobeBin: env.FFPROBE_BIN || 'ffprobe',
     pythonBin: env.PYTHON_BIN || 'python3',
+    whiteboardPython: env.WHITEBOARD_PYTHON || '',
     whiteboardEngineDir: path.resolve(env.WHITEBOARD_ENGINE_DIR || './vendor/srt-whiteboard-animation'),
     whiteboardAutoInstall: !/^(0|false|no)$/i.test(env.WHITEBOARD_AUTO_INSTALL || '1'),
     sceneTargetSec: Number(env.SCENE_TARGET_SEC || 12),
