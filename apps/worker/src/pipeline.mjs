@@ -1,8 +1,84 @@
-import fs from 'node:fs'; import path from 'node:path'; import { config } from '../../../packages/core/src/env.mjs'; import { loadProject, saveProject, sceneDir, projectDir, updateTimeline } from '../../../packages/core/src/project.mjs'; import { sha256, fileExists, ensureDir } from '../../../packages/core/src/utils.mjs'; import { probeDuration } from '../../../packages/core/src/media.mjs'; import { run } from '../../../packages/core/src/process.mjs'; import { generateImageOpenAI, synthesizeSpeechOpenAI } from '../../../packages/providers/src/openai.mjs'; import { synthesizeSpeechMock } from '../../../packages/providers/src/mock.mjs'; import { renderSimpleScene } from '../../../packages/renderers/src/simple.mjs'; import { renderWhiteboardScene } from '../../../packages/renderers/src/whiteboard.mjs';
-const log=(event,detail={})=>console.log(JSON.stringify({time:new Date().toISOString(),event,...detail}));
-async function ensureVoice(scene,project,cfg,force=false){const dir=ensureDir(sceneDir(cfg,project.id,scene.id)),file=path.join(dir,'voice.mp3'),key=sha256({text:scene.text,provider:cfg.voiceProvider,model:cfg.openaiTtsModel,voice:cfg.openaiTtsVoice,instructions:cfg.openaiTtsInstructions});if(!force&&scene.cache.voice===key&&fileExists(file))return file;log('voice:start',{scene:scene.id,provider:cfg.voiceProvider});if(cfg.mockMode||cfg.voiceProvider==='mock')await synthesizeSpeechMock(scene.text,file,cfg,scene.durationMs/1000);else if(cfg.voiceProvider==='openai')await synthesizeSpeechOpenAI(scene.text,file,cfg);else throw new Error(`Unsupported VOICE_PROVIDER=${cfg.voiceProvider}`);scene.durationMs=Math.round((await probeDuration(file,cfg))*1000);scene.cache.voice=key;scene.artifacts.voice=path.relative(projectDir(cfg,project.id),file);scene.status='voice-ready';saveProject(updateTimeline(project),cfg);log('voice:done',{scene:scene.id,durationMs:scene.durationMs});return file;}
-async function ensureImage(scene,project,cfg,force=false){const dir=ensureDir(sceneDir(cfg,project.id,scene.id)),file=path.join(dir,'visual.png'),key=sha256({prompt:scene.visualPrompt,provider:cfg.imageProvider,model:cfg.openaiImageModel,size:cfg.openaiImageSize,quality:cfg.openaiImageQuality});if(!force&&scene.cache.image===key&&fileExists(file))return file;if(cfg.mockMode||cfg.imageProvider==='mock'){scene.cache.image=key;scene.artifacts.visual=null;saveProject(project,cfg);return null;}if(cfg.imageProvider!=='openai')throw new Error(`Unsupported IMAGE_PROVIDER=${cfg.imageProvider}`);log('image:start',{scene:scene.id,provider:cfg.imageProvider});await generateImageOpenAI(scene.visualPrompt,file,cfg);scene.cache.image=key;scene.artifacts.visual=path.relative(projectDir(cfg,project.id),file);scene.status='visual-ready';saveProject(project,cfg);log('image:done',{scene:scene.id});return file;}
-async function ensureVideo(scene,project,cfg,imageFile,force=false){const dir=ensureDir(sceneDir(cfg,project.id,scene.id)),file=path.join(dir,'video.mp4'),renderer=project.settings.renderer||cfg.renderer,key=sha256({renderer,durationMs:scene.durationMs,image:scene.cache.image,text:scene.text,width:cfg.width,height:cfg.height,fps:cfg.fps});if(!force&&scene.cache.video===key&&fileExists(file))return file;log('render:start',{scene:scene.id,renderer});const args={scene,imageFile,outputFile:file,durationSec:scene.durationMs/1000,cfg};if(renderer==='whiteboard')await renderWhiteboardScene(args);else if(renderer==='simple')await renderSimpleScene(args);else throw new Error(`Unsupported VIDEO_RENDERER=${renderer}`);scene.cache.video=key;scene.artifacts.video=path.relative(projectDir(cfg,project.id),file);scene.status='rendered';saveProject(project,cfg);log('render:done',{scene:scene.id});return file;}
-async function ensureClip(scene,project,cfg,videoFile,voiceFile,force=false){const dir=ensureDir(sceneDir(cfg,project.id,scene.id)),file=path.join(dir,'clip.mp4'),key=sha256({video:scene.cache.video,voice:scene.cache.voice});if(!force&&scene.cache.clip===key&&fileExists(file))return file;await run(cfg.ffmpegBin,['-y','-i',videoFile,'-i',voiceFile,'-map','0:v:0','-map','1:a:0','-c:v','copy','-c:a','aac','-b:a','192k','-shortest','-movflags','+faststart',file],{capture:true});scene.cache.clip=key;scene.artifacts.clip=path.relative(projectDir(cfg,project.id),file);scene.status='ready';saveProject(project,cfg);return file;}
-async function concatClips(project,cfg,clips){const outDir=ensureDir(path.join(projectDir(cfg,project.id),'output')),list=path.join(outDir,'concat.txt'),final=path.join(outDir,'final.mp4');fs.writeFileSync(list,clips.map((f)=>`file '${f.replaceAll("'","'\\''")}'`).join('\n')+'\n');await run(cfg.ffmpegBin,['-y','-f','concat','-safe','0','-i',list,'-c','copy','-movflags','+faststart',final],{capture:true});project.artifacts.final=path.relative(projectDir(cfg,project.id),final);project.status='complete';saveProject(project,cfg);return final;}
-export async function runPipeline(projectId,{force=false,sceneId=null}={}){const cfg=config(),project=loadProject(projectId,cfg);for(const scene of project.scenes){if(sceneId&&scene.id!==sceneId)continue;const voice=await ensureVoice(scene,project,cfg,force),image=await ensureImage(scene,project,cfg,force),video=await ensureVideo(scene,project,cfg,image,force);await ensureClip(scene,project,cfg,video,voice,force);}if(sceneId)return{project:loadProject(projectId,cfg),final:null};const allClips=project.scenes.map((s)=>s.artifacts.clip?path.join(projectDir(cfg,project.id),s.artifacts.clip):null);if(allClips.some((x)=>!x||!fileExists(x)))throw new Error('Not all scenes have final clips');const final=await concatClips(project,cfg,allClips);log('pipeline:complete',{project:project.id,final});return{project:loadProject(project.id,cfg),final};}
+import fs from 'node:fs';
+import path from 'node:path';
+import { config } from '../../../packages/core/src/env.mjs';
+import { loadProject, saveProject, sceneDir, projectDir, updateTimeline } from '../../../packages/core/src/project.mjs';
+import { sha256, fileExists, ensureDir } from '../../../packages/core/src/utils.mjs';
+import { probeDuration } from '../../../packages/core/src/media.mjs';
+import { run } from '../../../packages/core/src/process.mjs';
+import { generateImageOpenAI, synthesizeSpeechOpenAI } from '../../../packages/providers/src/openai.mjs';
+import { synthesizeSpeechMock } from '../../../packages/providers/src/mock.mjs';
+import { renderSimpleScene } from '../../../packages/renderers/src/simple.mjs';
+import { renderWhiteboardScene } from '../../../packages/renderers/src/whiteboard.mjs';
+
+function log(event, detail={}) { console.log(JSON.stringify({time:new Date().toISOString(),event,...detail})); }
+
+async function ensureVoice(scene, project, cfg, force=false) {
+  const dir=ensureDir(sceneDir(cfg,project.id,scene.id));
+  const file=path.join(dir,'voice.mp3');
+  const key=sha256({text:scene.text,provider:cfg.voiceProvider,model:cfg.openaiTtsModel,voice:cfg.openaiTtsVoice,instructions:cfg.openaiTtsInstructions});
+  if (!force && scene.cache.voice===key && fileExists(file)) return file;
+  log('voice:start',{scene:scene.id,provider:cfg.voiceProvider});
+  if (cfg.mockMode || cfg.voiceProvider==='mock') await synthesizeSpeechMock(scene.text,file,cfg,scene.durationMs/1000);
+  else if (cfg.voiceProvider==='openai') await synthesizeSpeechOpenAI(scene.text,file,cfg);
+  else throw new Error(`Unsupported VOICE_PROVIDER=${cfg.voiceProvider}`);
+  scene.durationMs=Math.round((await probeDuration(file,cfg))*1000);
+  scene.cache.voice=key; scene.artifacts.voice=path.relative(projectDir(cfg,project.id),file); scene.status='voice-ready';
+  saveProject(updateTimeline(project),cfg); log('voice:done',{scene:scene.id,durationMs:scene.durationMs}); return file;
+}
+
+async function ensureImage(scene, project, cfg, force=false) {
+  const dir=ensureDir(sceneDir(cfg,project.id,scene.id));
+  const file=path.join(dir,'visual.png');
+  const key=sha256({prompt:scene.visualPrompt,provider:cfg.imageProvider,model:cfg.openaiImageModel,size:cfg.openaiImageSize,quality:cfg.openaiImageQuality});
+  if (!force && scene.cache.image===key && fileExists(file)) return file;
+  if (cfg.mockMode || cfg.imageProvider==='mock') { scene.cache.image=key; scene.artifacts.visual=null; saveProject(project,cfg); return null; }
+  if (cfg.imageProvider!=='openai') throw new Error(`Unsupported IMAGE_PROVIDER=${cfg.imageProvider}`);
+  log('image:start',{scene:scene.id,provider:cfg.imageProvider}); await generateImageOpenAI(scene.visualPrompt,file,cfg);
+  scene.cache.image=key; scene.artifacts.visual=path.relative(projectDir(cfg,project.id),file); scene.status='visual-ready'; saveProject(project,cfg); log('image:done',{scene:scene.id}); return file;
+}
+
+async function ensureVideo(scene, project, cfg, imageFile, force=false) {
+  const dir=ensureDir(sceneDir(cfg,project.id,scene.id));
+  const file=path.join(dir,'video.mp4');
+  const renderer = project.settings.renderer || cfg.renderer;
+  const key=sha256({renderer,durationMs:scene.durationMs,image:scene.cache.image,text:scene.text,width:cfg.width,height:cfg.height,fps:cfg.fps});
+  if (!force && scene.cache.video===key && fileExists(file)) return file;
+  log('render:start',{scene:scene.id,renderer});
+  const args={scene,imageFile,outputFile:file,durationSec:scene.durationMs/1000,cfg};
+  if (renderer==='whiteboard') await renderWhiteboardScene(args); else if (renderer==='simple') await renderSimpleScene(args); else throw new Error(`Unsupported VIDEO_RENDERER=${renderer}`);
+  scene.cache.video=key; scene.artifacts.video=path.relative(projectDir(cfg,project.id),file); scene.status='rendered'; saveProject(project,cfg); log('render:done',{scene:scene.id}); return file;
+}
+
+async function ensureClip(scene, project, cfg, videoFile, voiceFile, force=false) {
+  const dir=ensureDir(sceneDir(cfg,project.id,scene.id));
+  const file=path.join(dir,'clip.mp4');
+  const key=sha256({video:scene.cache.video,voice:scene.cache.voice,width:cfg.width,height:cfg.height,fps:cfg.fps});
+  if (!force && scene.cache.clip===key && fileExists(file)) return file;
+  const vf=`scale=${cfg.width}:${cfg.height}:force_original_aspect_ratio=decrease,pad=${cfg.width}:${cfg.height}:(ow-iw)/2:(oh-ih)/2,format=yuv420p`;
+  await run(cfg.ffmpegBin,['-y','-i',videoFile,'-i',voiceFile,'-map','0:v:0','-map','1:a:0','-vf',vf,'-r',String(cfg.fps),'-c:v','libx264','-preset','medium','-crf','18','-c:a','aac','-b:a','192k','-shortest','-movflags','+faststart',file],{capture:true});
+  scene.cache.clip=key; scene.artifacts.clip=path.relative(projectDir(cfg,project.id),file); scene.status='ready'; saveProject(project,cfg); return file;
+}
+
+async function concatClips(project,cfg,clips) {
+  const outDir=ensureDir(path.join(projectDir(cfg,project.id),'output'));
+  const list=path.join(outDir,'concat.txt');
+  const final=path.join(outDir,'final.mp4');
+  fs.writeFileSync(list,clips.map((f)=>`file '${f.replaceAll("'","'\\''")}'`).join('\n')+'\n');
+  await run(cfg.ffmpegBin,['-y','-f','concat','-safe','0','-i',list,'-c','copy','-movflags','+faststart',final],{capture:true});
+  project.artifacts.final=path.relative(projectDir(cfg,project.id),final); project.status='complete'; saveProject(project,cfg); return final;
+}
+
+export async function runPipeline(projectId,{force=false,sceneId=null}={}) {
+  const cfg=config(); const project=loadProject(projectId,cfg); const clips=[];
+  for (const scene of project.scenes) {
+    if (sceneId && scene.id!==sceneId) { if (scene.artifacts.clip) clips.push(path.join(projectDir(cfg,project.id),scene.artifacts.clip)); continue; }
+    const voice=await ensureVoice(scene,project,cfg,force);
+    const image=await ensureImage(scene,project,cfg,force);
+    const video=await ensureVideo(scene,project,cfg,image,force);
+    const clip=await ensureClip(scene,project,cfg,video,voice,force); clips.push(clip);
+  }
+  if (sceneId) return {project:loadProject(projectId,cfg),final:null};
+  const allClips=project.scenes.map((s)=>s.artifacts.clip ? path.join(projectDir(cfg,project.id),s.artifacts.clip) : null);
+  if (allClips.some((x)=>!x || !fileExists(x))) throw new Error('Not all scenes have final clips');
+  const final=await concatClips(project,cfg,allClips); log('pipeline:complete',{project:project.id,final}); return {project:loadProject(project.id,cfg),final};
+}
