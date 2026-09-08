@@ -6,7 +6,7 @@ For the default real end-to-end workflow, the **only secret you must supply** is
 OPENAI_API_KEY=...
 ```
 
-Start from `.env.example`. Defaults are already wired for Topic → Script → Voice → Illustration → Whiteboard → Final MP4.
+Start from `.env.example`. Defaults are wired for Topic → Script → Voice → Illustration → Whiteboard → Final MP4.
 
 ## Recommended defaults
 
@@ -21,12 +21,14 @@ VOICE_PROVIDER=openai
 SCRIPT_TARGET_MINUTES=6
 OPENAI_TEXT_MODEL=gpt-5.6-luna
 OPENAI_IMAGE_MODEL=gpt-image-2
-OPENAI_IMAGE_SIZE=2048x1152
+OPENAI_IMAGE_SIZE=1536x1024
 OPENAI_IMAGE_QUALITY=medium
 OPENAI_TTS_MODEL=gpt-4o-mini-tts
 OPENAI_TTS_VOICE=marin
 WHITEBOARD_AUTO_INSTALL=1
 ```
+
+`1536x1024` is the supported landscape GPT Image API size. The final media step crops renderer output to the configured 16:9 video frame, and generated visual prompts keep important subjects inside a centered 16:9 safe area.
 
 Then set only:
 
@@ -52,7 +54,7 @@ SCENE_MAX_SEC=18
 
 ## Useful switches
 
-- `MOCK_MODE=1`: no paid AI calls; useful for CI/smoke tests.
+- `MOCK_MODE=1`: no paid AI calls; useful for CI/smoke tests. Mock artifacts have distinct cache keys, so they cannot be silently reused in a later real run.
 - `VIDEO_RENDERER=simple|whiteboard`: `simple` is FFmpeg-only; `whiteboard` wraps `geeklee/srt-whiteboard-animation`.
 - `TEXT_PROVIDER`, `IMAGE_PROVIDER`, `VOICE_PROVIDER`: `openai` or `mock` in v0.1.
 - `WHITEBOARD_AUTO_INSTALL=1`: clones the upstream whiteboard engine and prepares its Python environment on setup.
