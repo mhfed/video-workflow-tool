@@ -1,0 +1,26 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Video Workflow Tool</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<header><h1>Video Workflow Tool</h1><span id="health">local-first</span></header>
+<main>
+  <aside><button id="newBtn">+ New project</button><div id="projects"></div></aside>
+  <section id="panel"><div class="empty">Create or select a project.</div></section>
+</main>
+<dialog id="newDialog">
+  <form method="dialog" id="newForm">
+    <h2>New project</h2>
+    <input name="title" placeholder="Project title" required>
+    <select name="sourceType"><option value="script">Script</option><option value="srt">SRT</option></select>
+    <textarea name="sourceText" rows="14" placeholder="Paste script or SRT" required></textarea>
+    <menu><button value="cancel">Cancel</button><button value="default">Create</button></menu>
+  </form>
+</dialog>
+<script type="module" src="/app.js"></script>
+</body>
+</html>
