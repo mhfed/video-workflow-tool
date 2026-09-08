@@ -1,58 +1,51 @@
 # Roadmap
 
-## Phase 0 — repo + foundations
+## v0.1 — complete
 
-- [ ] Initialize TanStack Start app.
-- [ ] Add SQLite.
-- [ ] Define Zod schema for `VideoProject`.
-- [ ] Create workspace service.
-- [ ] Create artifact hashing utilities.
-- [ ] Add FFmpeg environment check.
-- [ ] Add Python environment check.
+The first usable workflow intentionally favors a zero-npm-dependency Node.js control plane over the original TanStack/SQLite proposal. `project.json` is the local source of truth; FFmpeg and Python remain external media workers. This reduced setup surface while preserving the planned renderer/provider boundaries.
 
-## Phase 1 — SRT -> scenes
+### Foundations
 
-- [ ] Create project.
-- [ ] Import SRT.
-- [ ] Parse timestamps.
-- [ ] Persist scenes.
-- [ ] Scene list UI.
-- [ ] Scene property editor.
+- [x] Local workspace service and persistent `project.json` state.
+- [x] SHA-256 artifact/cache keys per scene step.
+- [x] Script and SRT parsing / scene planning.
+- [x] FFmpeg / ffprobe prerequisite checks.
+- [x] Python + Git validation for whiteboard mode.
+- [x] First-run `.env` bootstrap.
+- [x] CI with unit, contract, whiteboard-adapter and smoke-render tests.
 
-## Phase 2 — whiteboard renderer
+### Production pipeline
 
-- [ ] Add upstream renderer as submodule/dependency.
-- [ ] Implement adapter.
-- [ ] Render one scene.
-- [ ] Show preview.
-- [ ] Capture logs/errors.
-- [ ] Re-render one scene only.
+- [x] OpenAI image provider.
+- [x] OpenAI speech provider.
+- [x] Mock providers for zero-cost testing.
+- [x] FFmpeg simple renderer.
+- [x] `srt-whiteboard-animation` adapter with automatic engine setup.
+- [x] Generate whiteboard annotation automatically.
+- [x] Use measured narration duration as scene timing source of truth.
+- [x] Normalize scene clips to a common resolution/FPS/audio format.
+- [x] Render only stale/changed scene artifacts.
+- [x] Re-render one scene independently.
+- [x] Concatenate synchronized scene clips into `final.mp4`.
 
-## Phase 3 — final video
+### Review UI / CLI
 
-- [ ] Concatenate scenes.
-- [ ] Add voice.
-- [ ] Add optional background music.
-- [ ] Export MP4.
-- [ ] Final preview page.
+- [x] Create project from script or SRT.
+- [x] List projects and scene status.
+- [x] Edit narration and visual prompt per scene.
+- [x] Render one scene or the complete project.
+- [x] Preview final MP4 in the browser.
+- [x] CLI create / run / status commands.
 
-## Phase 4 — creator speed
+## Deliberately deferred
 
-- [ ] Presets.
-- [ ] Render all stale.
-- [ ] Batch actions.
-- [ ] Keyboard shortcuts.
-- [ ] Duplicate scene/project.
+These are not required for the v0.1 script/SRT-to-video workflow:
 
-## Later experiments
-
-Only after the base workflow is useful:
-
-- TTS adapters.
-- Whisper/SRT generation.
-- Image generation adapters.
-- LLM scene planning.
-- Multiple output ratios.
-- Shorts renderer.
-- YouTube metadata generation.
-- Publishing integration.
+- Topic research and autonomous long-form script generation.
+- Background music / SFX mixing.
+- Whisper transcription.
+- Vision-based multi-region whiteboard annotations (v0.1 uses a full-canvas semantic region per scene).
+- Multiple aspect-ratio exports and Shorts-specific layouts.
+- Presets, bulk editing and keyboard shortcuts.
+- YouTube metadata, upload and analytics.
+- TanStack/React rewrite or SQLite indexing; add these only when the local workflow needs more UI/state complexity.
