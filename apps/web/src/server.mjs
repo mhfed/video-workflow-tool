@@ -8,23 +8,33 @@ import { invalidateScene } from '../../../packages/core/src/invalidation.mjs';
 import { generateScriptOpenAI } from '../../../packages/providers/src/openai.mjs';
 import { generateScriptMock } from '../../../packages/providers/src/mock.mjs';
 import { runPipeline } from '../../worker/src/pipeline.mjs';
+import { mediaTypeFor, serveMedia } from './media.mjs';
 
 const cfg=config();
 const here=path.dirname(fileURLToPath(import.meta.url));
 const pub=path.resolve(here,'../public');
+const running=new Set();
 const json=(res,status,data)=>{res.writeHead(status,{'content-type':'application/json; charset=utf-8'});res.end(JSON.stringify(data,null,2));};
 const readBody=(req)=>new Promise((resolve,reject)=>{let b='';req.on('data',d=>b+=d);req.on('end',()=>{try{resolve(b?JSON.parse(b):{});}catch(e){reject(e);}});req.on('error',reject);});
 const serve=(res,file,type)=>{const stream=fs.createReadStream(file);stream.on('error',()=>{if(!res.headersSent)res.writeHead(404);res.end();});res.writeHead(200,{'content-type':type});stream.pipe(res);};
+const safeConfig=()=>({mockMode:cfg.mockMode,renderer:cfg.renderer,textProvider:cfg.textProvider,imageProvider:cfg.imageProvider,voiceProvider:cfg.voiceProvider,textModel:cfg.openaiTextModel,imageModel:cfg.openaiImageModel,imageSize:cfg.openaiImageSize,ttsModel:cfg.openaiTtsModel,ttsVoice:cfg.openaiTtsVoice,whiteboardAutoInstall:cfg.whiteboardAutoInstall,hasOpenAIKey:!!cfg.openaiApiKey});
 
 const server=http.createServer(async (req,res)=>{
   try {
     const url=new URL(req.url,`http://${req.headers.host}`); const parts=url.pathname.split('/').filter(Boolean);
-    if(req.method==='GET' && parts[0]==='media' && parts[1] && parts[2]==='final') {
+    if(req.method==='GET'&&url.pathname==='/api/health') return json(res,200,{ok:true,running:[...running],config:safeConfig()});
+    if(req.method==='GET'&&parts[0]==='media'&&parts[1]) {
       const p=loadProject(decodeURIComponent(parts[1]),cfg);
-      if(!p.artifacts?.final){res.writeHead(404).end('No final video');return;}
-      const file=path.join(projectDir(cfg,p.id),p.artifacts.final);
-      if(!fs.existsSync(file)){res.writeHead(404).end('Missing final video');return;}
-      return serve(res,file,'video/mp4');
+      if(parts[2]==='final') {
+        if(!p.artifacts?.final){res.writeHead(404).end('No final video');return;}
+        return serveMedia(req,res,path.join(projectDir(cfg,p.id),p.artifacts.final),mediaTypeFor('final'));
+      }
+      if(parts[2]==='scenes'&&parts[3]&&parts[4]) {
+        const s=p.scenes.find(x=>x.id===decodeURIComponent(parts[3])); if(!s){res.writeHead(404).end('Scene not found');return;}
+        const kind=parts[4]; const artifactKey=kind==='visual'?'visual':kind;
+        const rel=s.artifacts?.[artifactKey]; if(!rel){res.writeHead(404).end(`No ${kind} artifact`);return;}
+        return serveMedia(req,res,path.join(projectDir(cfg,p.id),rel),mediaTypeFor(kind));
+      }
     }
     if(req.method==='GET' && url.pathname==='/api/projects') return json(res,200,listProjects(cfg));
     if(req.method==='POST' && url.pathname==='/api/projects') { const b=await readBody(req); let sourceText=b.sourceText||'',sourceType=b.sourceType||'script',topic=''; if(sourceType==='topic'){topic=String(b.topic||b.sourceText||'').trim();if(!topic)throw new Error('topic is required');sourceText=cfg.mockMode||cfg.textProvider==='mock'?generateScriptMock(topic):await generateScriptOpenAI(topic,cfg,{minutes:Number(b.minutes||cfg.scriptMinutes)});} return json(res,201,createProject({title:b.title||topic,sourceText,sourceType,topic},cfg)); }
@@ -34,15 +44,17 @@ const server=http.createServer(async (req,res)=>{
       if(req.method==='PATCH'&&parts[3]==='scenes'&&parts[4]) {
         const b=await readBody(req); const p=loadProject(id,cfg); const s=p.scenes.find(x=>x.id===parts[4]);
         if(!s) return json(res,404,{error:'scene not found'});
-        const nextText=typeof b.text==='string'?b.text:s.text;
-        const nextPrompt=typeof b.visualPrompt==='string'?b.visualPrompt:s.visualPrompt;
-        const textChanged=nextText!==s.text;
-        const promptChanged=nextPrompt!==s.visualPrompt;
-        s.text=nextText; s.visualPrompt=nextPrompt;
-        invalidateScene(p,s,{textChanged,promptChanged});
-        saveProject(p,cfg); return json(res,200,p);
+        const nextText=typeof b.text==='string'?b.text:s.text; const nextPrompt=typeof b.visualPrompt==='string'?b.visualPrompt:s.visualPrompt;
+        const textChanged=nextText!==s.text,promptChanged=nextPrompt!==s.visualPrompt; s.text=nextText;s.visualPrompt=nextPrompt;
+        invalidateScene(p,s,{textChanged,promptChanged}); saveProject(p,cfg); return json(res,200,p);
       }
-      if(req.method==='POST'&&parts[3]==='run') { const b=await readBody(req); const result=await runPipeline(id,{force:!!b.force,sceneId:b.sceneId||null}); return json(res,200,{project:result.project,final:result.final}); }
+      if(req.method==='POST'&&parts[3]==='run') {
+        if(running.has(id)) return json(res,409,{error:'This project is already running'});
+        const b=await readBody(req); running.add(id);
+        try { const result=await runPipeline(id,{force:!!b.force,sceneId:b.sceneId||null}); return json(res,200,{project:result.project,final:result.final}); }
+        catch(e){ try{const p=loadProject(id,cfg);p.status='error';p.error={message:e.message,at:new Date().toISOString()};saveProject(p,cfg);}catch{} throw e; }
+        finally { running.delete(id); }
+      }
     }
     if(req.method==='GET' && url.pathname==='/app.js') return serve(res,path.join(pub,'app.js'),'text/javascript; charset=utf-8');
     if(req.method==='GET' && url.pathname==='/styles.css') return serve(res,path.join(pub,'styles.css'),'text/css; charset=utf-8');
