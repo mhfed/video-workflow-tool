@@ -2,59 +2,75 @@
 
 ## Goal
 
-Make renderers replaceable without changing project orchestration.
+Keep renderer-specific logic outside the project model and pipeline orchestration.
+
+In v0.1 the contract is intentionally small: the pipeline passes the scene, optional generated image, requested duration, output path, and runtime config to a renderer adapter.
+
+Conceptually:
 
 ```ts
-export interface VideoRenderer {
-  type: string
-
-  validate(input: RenderInput): Promise<ValidationResult>
-  prepare(input: RenderInput): Promise<PreparedRender>
-  render(input: PreparedRender, ctx: RenderContext): Promise<RenderResult>
-}
-```
-
-## Generic input
-
-```ts
-type RenderInput = {
-  projectId: string
+type RenderSceneInput = {
   scene: Scene
-  workspace: string
-  visualPath?: string
-  subtitlePath?: string
+  imageFile: string | null
+  outputFile: string
+  durationSec: number
+  cfg: RuntimeConfig
 }
+
+type RenderScene = (input: RenderSceneInput) => Promise<string>
 ```
 
-## Whiteboard adapter
+The returned string is the rendered scene video path.
 
-Adapter name: `whiteboard-srt`.
+## `simple` renderer
+
+Implementation: `packages/renderers/src/simple.mjs`.
+
+- Uses FFmpeg only.
+- With an image: scales/crops the visual and adds a subtle zoom.
+- Without an image: creates a beige placeholder scene.
+- Exists as a reliable fallback and zero-cost smoke-test renderer.
+
+## `whiteboard` renderer
+
+Implementation: `packages/renderers/src/whiteboard.mjs`.
 
 Responsibilities:
 
-- translate generic scene fields into renderer-specific files;
-- use the upstream annotation format as an implementation detail;
-- run Python through a configured interpreter;
-- surface progress and logs;
-- return preview/final artifact paths.
+1. ensure `geeklee/srt-whiteboard-animation` exists when auto-install is enabled;
+2. prepare its isolated Python environment;
+3. inspect the generated image dimensions;
+4. create an upstream-compatible annotation JSON;
+5. invoke `render_stream_whiteboard.py` with supported CLI flags;
+6. return the rendered MP4 path.
 
-Suggested configuration:
+Current upstream invocation uses:
 
-```json
-{
-  "type": "whiteboard-srt",
-  "paperColor": "#F5EBD7",
-  "inkPath": "grid",
-  "colorFill": "contour-wipe",
-  "holdEndMs": 500
-}
+```text
+--ink-path grid
+--color-fill contour-wipe
+--pause off
+--total-ms <measured narration duration>
 ```
 
-## Future renderers
+The upstream annotation format, masks, hand-path behavior, and OpenCV implementation remain private to this adapter.
 
-- `image-ken-burns`
-- `stock-broll`
-- `caption-first-short`
-- `motion-graphics`
+## v0.1 annotation policy
 
-A renderer may have its own editor panel, but it must still obey the common task/artifact lifecycle.
+Each scene is represented as one semantic full-canvas region. This is fully automatic and robust enough to validate the end-to-end workflow.
+
+A future semantic-annotation provider may break a scene into multiple narrative regions and sequences, but it must produce inputs for this adapter without changing `VideoProject` or the common pipeline.
+
+## Pipeline normalization
+
+A renderer is not required to emit the final target resolution/FPS. After rendering, the pipeline normalizes every scene during audio mux to the configured H.264/AAC clip format. Therefore new renderers can focus on visual generation while the pipeline guarantees concat compatibility.
+
+## Adding another renderer
+
+A new adapter should:
+
+- accept the same generic scene inputs;
+- write only inside the project/scene workspace or its own managed dependency directory;
+- throw actionable errors when prerequisites are missing;
+- never store renderer-specific structures in canonical project state;
+- let the common pipeline own voice mux, output normalization, caching, and final concat.
