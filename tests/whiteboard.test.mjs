@@ -17,7 +17,7 @@ test('whiteboard adapter writes annotation and uses valid pause enum', async () 
   const out=path.join(root,'scene-001','video.mp4');
   fs.mkdirSync(path.dirname(image),{recursive:true});
   await run('ffmpeg',['-loglevel','error','-y','-f','lavfi','-i','color=c=white:s=320x180','-frames:v','1',image],{capture:true});
-  const cfg={whiteboardEngineDir:engine,whiteboardAutoInstall:false,whiteboardPython:process.execPath,pythonBin:'python3',ffprobeBin:'ffprobe'};
+  const cfg={whiteboardEngineDir:engine,whiteboardAutoInstall:false,whiteboardPython:'',pythonBin:'python3',ffprobeBin:'ffprobe'};
   const scene={id:'scene-001',text:'A simple test scene.'};
   await renderWhiteboardScene({scene,imageFile:image,outputFile:out,durationSec:2,cfg});
   assert.ok(fs.existsSync(out));

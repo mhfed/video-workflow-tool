@@ -1,3 +1,3 @@
 import { spawn } from 'node:child_process';
 export function run(bin, args, opts = {}) { return new Promise((resolve, reject) => { const child = spawn(bin, args, { cwd: opts.cwd, env: { ...process.env, ...(opts.env || {}) }, stdio: opts.capture ? ['ignore','pipe','pipe'] : 'inherit' }); let stdout = '', stderr = ''; if (opts.capture) { child.stdout.on('data', (d) => stdout += d); child.stderr.on('data', (d) => stderr += d); } child.on('error', reject); child.on('close', (code) => code === 0 ? resolve({ code, stdout, stderr }) : reject(new Error(`${bin} exited ${code}${stderr ? `: ${stderr.slice(-1200)}` : ''}`))); }); }
-export async function commandExists(bin) { try { await run(bin, ['-version'], { capture: true }); return true; } catch { return false; } }
+export async function commandExists(bin) { for (const args of [['--version'],['-version']]) { try { await run(bin, args, { capture: true }); return true; } catch {} } return false; }
