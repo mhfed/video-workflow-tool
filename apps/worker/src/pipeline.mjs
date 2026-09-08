@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { config } from '../../../packages/core/src/env.mjs';
 import { loadProject, saveProject, sceneDir, projectDir, updateTimeline } from '../../../packages/core/src/project.mjs';
+import { invalidateFinal } from '../../../packages/core/src/invalidation.mjs';
 import { sha256, fileExists, ensureDir } from '../../../packages/core/src/utils.mjs';
 import { probeDuration } from '../../../packages/core/src/media.mjs';
 import { run } from '../../../packages/core/src/process.mjs';
@@ -73,6 +74,7 @@ async function concatClips(project,cfg,clips) {
 
 export async function runPipeline(projectId,{force=false,sceneId=null}={}) {
   const cfg=config(); const project=loadProject(projectId,cfg); const clips=[];
+  if (sceneId) { invalidateFinal(project); saveProject(project,cfg); }
   for (const scene of project.scenes) {
     if (sceneId && scene.id!==sceneId) { if (scene.artifacts.clip) clips.push(path.join(projectDir(cfg,project.id),scene.artifacts.clip)); continue; }
     const voice=await ensureVoice(scene,project,cfg,force);
