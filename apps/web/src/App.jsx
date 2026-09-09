@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   Activity,
   AlertTriangle,
+  AudioLines,
   ArrowLeft,
   ArrowRight,
   BrainCircuit,
@@ -13,12 +14,14 @@ import {
   Eye,
   EyeOff,
   Film,
+  FileText,
   Grid2X2,
   Image as ImageIcon,
   KeyRound,
   Layers3,
   ListChecks,
   LoaderCircle,
+  Maximize2,
   Mic2,
   MoreHorizontal,
   Play,
@@ -93,36 +96,42 @@ function StagePreview({project,scene,stage,c}){
 const stageArtifactReady=(scene,stage)=>stage==='script'||stage==='voice'&&!!scene.cache?.voice||stage==='visual'&&!!scene.cache?.image||stage==='clip'&&!!scene.artifacts?.clip;
 const WORKBENCH_STAGES=['script','voice','visual','clip'];
 const stageLabel=(stage,c)=>({script:c.scriptStage,voice:c.voiceStage,visual:c.visualStage,clip:c.clipStage}[stage]);
+const StageIcon=({stage})=>stage==='script'?<FileText/>:stage==='voice'?<AudioLines/>:stage==='visual'?<ImageIcon/>:<Clapperboard/>;
 const canGenerateStage=(scene,stage)=>stage==='voice'||stage==='visual'?scene.review?.script==='approved':stage==='clip'?scene.review?.voice==='approved'&&scene.review?.visual==='approved':false;
 const reviewRank=(decision)=>({'changes-requested':0,stale:1,pending:2,approved:9}[decision]??3);
 
 function ProjectOverview({project,running,onOpenScene,onBulkRun,onBulkReview,c}){
+  const [filter,setFilter]=useState('all');
+  const [bulkOpen,setBulkOpen]=useState(false);
+  const [finalOpen,setFinalOpen]=useState(false);
   const stats=WORKBENCH_STAGES.map((stage)=>({stage,approved:project.scenes.filter((scene)=>scene.review?.[stage]==='approved').length}));
-  const attention=[];
-  for(const scene of project.scenes)for(const stage of WORKBENCH_STAGES){const decision=scene.review?.[stage]||'pending';if(decision==='changes-requested'||decision==='stale')attention.push({scene,stage,decision});}
+  const counts={pending:0,stale:0,'changes-requested':0};
+  for(const scene of project.scenes)for(const stage of WORKBENCH_STAGES){const decision=scene.review?.[stage]||'pending';if(counts[decision]!==undefined)counts[decision]++;}
+  const visibleScenes=filter==='all'?project.scenes:project.scenes.filter((scene)=>WORKBENCH_STAGES.some((stage)=>(scene.review?.[stage]||'pending')===filter));
+  const attention=project.scenes.flatMap((scene)=>WORKBENCH_STAGES.map((stage)=>({scene,stage,decision:scene.review?.[stage]||'pending'}))).filter((item)=>item.decision==='changes-requested'||item.decision==='stale');
   const next=[...attention].sort((a,b)=>reviewRank(a.decision)-reviewRank(b.decision))[0]||project.scenes.flatMap((scene)=>WORKBENCH_STAGES.map((stage)=>({scene,stage,decision:scene.review?.[stage]||'pending'}))).find((item)=>item.decision!=='approved');
   const version=encodeURIComponent(project.updatedAt||'current');
   return <section className="project-overview">
-    <div className="overview-progress">{stats.map(({stage,approved},index)=><button key={stage} onClick={()=>onOpenScene(project.scenes.find((scene)=>scene.review?.[stage]!=='approved')?.id||project.scenes[0].id,stage)}><span>0{index+1}</span><div><strong>{stageLabel(stage,c)}</strong><small>{approved}/{project.scenes.length} {c.approvedLower}</small></div><i><b style={{width:`${approved/project.scenes.length*100}%`}}/></i></button>)}</div>
+    <div className="overview-progress">{stats.map(({stage,approved})=><Tooltip key={stage}><TooltipTrigger asChild><button aria-label={`${stageLabel(stage,c)}: ${approved}/${project.scenes.length}`} onClick={()=>onOpenScene(project.scenes.find((scene)=>scene.review?.[stage]!=='approved')?.id||project.scenes[0].id,stage)}><span className="stage-glyph"><StageIcon stage={stage}/></span><div><strong>{approved}<em>/{project.scenes.length}</em></strong><small>{stageLabel(stage,c)}</small></div><i><b style={{width:`${approved/project.scenes.length*100}%`}}/></i></button></TooltipTrigger><TooltipContent>{stageLabel(stage,c)} · {approved}/{project.scenes.length} {c.approvedLower}</TooltipContent></Tooltip>)}</div>
     <div className="overview-board">
-      <div className="overview-section-head"><div><span>{c.productionMap}</span><strong>{c.allScenesAtGlance}</strong></div>{next&&<button className="continue-work" onClick={()=>onOpenScene(next.scene.id,next.stage)}><Sparkles/>{c.continueWork}<ArrowRight/></button>}</div>
+      <div className="overview-toolbar"><strong>{c.scenes}</strong><div className="filter-chips"><button className={filter==='all'?'active':''} onClick={()=>setFilter('all')}>{project.scenes.length}</button><button className={filter==='changes-requested'?'active changes-requested':''} onClick={()=>setFilter('changes-requested')}><CircleDot/>{counts['changes-requested']}</button><button className={filter==='stale'?'active stale':''} onClick={()=>setFilter('stale')}><AlertTriangle/>{counts.stale}</button><button className={filter==='pending'?'active pending':''} onClick={()=>setFilter('pending')}><span/>{counts.pending}</button></div><div className="overview-tools">
+        <div className="bulk-menu"><Tooltip><TooltipTrigger asChild><button className={bulkOpen?'active':''} onClick={()=>setBulkOpen((value)=>!value)} aria-label={c.bulkActions}><Layers3/></button></TooltipTrigger><TooltipContent>{c.bulkActions}</TooltipContent></Tooltip>{bulkOpen&&<div className="bulk-popover"><div><Layers3/><strong>{c.bulkActions}</strong><button onClick={()=>setBulkOpen(false)}><X/></button></div>{WORKBENCH_STAGES.map((stage)=>{const generateIds=project.scenes.filter((scene)=>stage!=='script'&&canGenerateStage(scene,stage)&&scene.review?.[stage]!=='approved').map((scene)=>scene.id);const approveIds=project.scenes.filter((scene)=>stageArtifactReady(scene,stage)&&scene.review?.[stage]!=='approved').map((scene)=>scene.id);return <section key={stage}><span><StageIcon stage={stage}/>{stageLabel(stage,c)}</span>{stage!=='script'&&<button disabled={running||!generateIds.length} onClick={()=>{setBulkOpen(false);onBulkRun(stage,generateIds);}}><RefreshCw/><b>{generateIds.length}</b></button>}<button disabled={running||!approveIds.length} onClick={()=>{setBulkOpen(false);onBulkReview(stage,approveIds,'approved');}}><Check/><b>{approveIds.length}</b></button></section>;})}</div>}</div>
+        <Tooltip><TooltipTrigger asChild><button disabled={!project.artifacts?.final} onClick={()=>setFinalOpen(true)} aria-label={c.previewFinal}><Maximize2/></button></TooltipTrigger><TooltipContent>{c.previewFinal}</TooltipContent></Tooltip>
+        {next&&<button className="continue-work" onClick={()=>onOpenScene(next.scene.id,next.stage)}><Sparkles/><span>{c.continueWork}</span><ArrowRight/></button>}
+      </div></div>
       <div className="scene-matrix">
-        <div className="matrix-head"><span>{c.sceneNavigator}</span>{WORKBENCH_STAGES.map((stage)=><strong key={stage}>{stageLabel(stage,c)}</strong>)}</div>
-        <div className="matrix-body">{project.scenes.map((scene,index)=><div className="matrix-row" key={scene.id}>
-          <button className="matrix-scene" onClick={()=>onOpenScene(scene.id,'script')}><b>{String(index+1).padStart(2,'0')}</b><span>{scene.text.split(/[.!?]/)[0]}</span><small>{(scene.durationMs/1000).toFixed(1)}s</small></button>
+        <div className="matrix-head"><span>{c.sceneNavigator}</span>{WORKBENCH_STAGES.map((stage)=><Tooltip key={stage}><TooltipTrigger asChild><strong aria-label={stageLabel(stage,c)}><StageIcon stage={stage}/></strong></TooltipTrigger><TooltipContent>{stageLabel(stage,c)}</TooltipContent></Tooltip>)}</div>
+        <div className="matrix-body">{visibleScenes.map((scene)=><div className="matrix-row" key={scene.id}>
+          {(()=>{const index=project.scenes.findIndex((item)=>item.id===scene.id);return <button className="matrix-scene" onClick={()=>onOpenScene(scene.id,'script')}><b>{String(index+1).padStart(2,'0')}</b><span>{scene.text.split(/[.!?]/)[0]}</span><small>{(scene.durationMs/1000).toFixed(1)}s</small></button>;})()}
           {WORKBENCH_STAGES.map((stage)=>{const decision=scene.review?.[stage]||'pending';return <button key={stage} className={`matrix-cell ${decision}`} onClick={()=>onOpenScene(scene.id,stage)} title={`${scene.id} · ${stageLabel(stage,c)} · ${c.review[decision]}`}>{decision==='approved'?<Check/>:decision==='changes-requested'?<X/>:decision==='stale'?<AlertTriangle/>:<span/>}</button>;})}
         </div>)}</div>
       </div>
     </div>
-    <aside className="overview-side">
-      <div className="attention-panel"><div className="overview-section-head"><div><span>{c.attention}</span><strong>{attention.length} {c.items}</strong></div></div><div className="attention-list">{attention.length?attention.slice(0,6).map((item)=><button key={`${item.scene.id}-${item.stage}`} onClick={()=>onOpenScene(item.scene.id,item.stage)}><i className={item.decision}/><span><strong>{item.scene.id} · {stageLabel(item.stage,c)}</strong><small>{c.review[item.decision]}</small></span><ArrowRight/></button>):<div className="all-clear"><CheckCircle2/><strong>{c.noIssues}</strong><small>{c.noIssuesBody}</small></div>}</div></div>
-      <div className="overview-bulk"><div className="overview-section-head"><div><span>{c.bulkActions}</span><strong>{c.productionActions}</strong></div></div>{WORKBENCH_STAGES.map((stage)=>{const generateIds=project.scenes.filter((scene)=>stage!=='script'&&canGenerateStage(scene,stage)&&scene.review?.[stage]!=='approved').map((scene)=>scene.id);const approveIds=project.scenes.filter((scene)=>stageArtifactReady(scene,stage)&&scene.review?.[stage]!=='approved').map((scene)=>scene.id);return <div className="overview-bulk-row" key={stage}><strong>{stageLabel(stage,c)}</strong>{stage!=='script'&&<button disabled={running||!generateIds.length} onClick={()=>onBulkRun(stage,generateIds)}><RefreshCw/>{c.generate} <b>{generateIds.length}</b></button>}<button disabled={running||!approveIds.length} onClick={()=>onBulkReview(stage,approveIds,'approved')}><Check/>{c.approve} <b>{approveIds.length}</b></button></div>;})}</div>
-      <div className="final-overview">{project.artifacts?.final?<><div><Badge>{c.masterCut}</Badge><strong>{c.finalFilm}</strong></div><video controls preload="metadata" src={`/media/${encodeURIComponent(project.id)}/final?v=${version}`}/></>:<div className="final-empty"><Film/><span><strong>{c.masterPending}</strong><small>{c.masterPendingBody}</small></span></div>}</div>
-    </aside>
+    <Dialog open={finalOpen} onOpenChange={setFinalOpen}><DialogContent className="final-preview-dialog"><DialogHeader><DialogTitle>{c.finalFilm}</DialogTitle><DialogDescription>{project.title}</DialogDescription></DialogHeader>{project.artifacts?.final&&<video controls autoPlay preload="metadata" src={`/media/${encodeURIComponent(project.id)}/final?v=${version}`}/>}</DialogContent></Dialog>
   </section>;
 }
 
-function Workbench({project,initialSceneId,initialStage,running,onSave,onRunStage,onReview,onBulkRun,onBulkReview,c}){
+function Workbench({project,initialSceneId,initialStage,running,onSave,onRunStage,onReview,c}){
   const [selectedId,setSelectedId]=useState(initialSceneId||project.scenes[0]?.id);
   const [stage,setStage]=useState(initialStage||'script');
   const [viewMode,setViewMode]=useState('scene');
@@ -137,8 +146,6 @@ function Workbench({project,initialSceneId,initialStage,running,onSave,onRunStag
   const ready=stageArtifactReady(scene,stage);
   const upstreamApproved=stage==='script'||canGenerateStage(scene,stage);
   const go=(offset)=>setSelectedId(project.scenes[Math.min(project.scenes.length-1,Math.max(0,sceneIndex+offset))].id);
-  const bulkGenerateIds=project.scenes.filter((item)=>stage!=='script'&&canGenerateStage(item,stage)&&item.review?.[stage]!=='approved').map((item)=>item.id);
-  const bulkApproveIds=project.scenes.filter((item)=>stageArtifactReady(item,stage)&&item.review?.[stage]!=='approved').map((item)=>item.id);
   const smartNext=(approvedCurrent=false)=>{
     const candidates=[];
     for(const [itemIndex,item] of project.scenes.entries())for(const [stageIndex,itemStage] of WORKBENCH_STAGES.entries()){
@@ -191,7 +198,7 @@ function Workbench({project,initialSceneId,initialStage,running,onSave,onRunStag
     </aside>
 
     <footer className="stage-dock">
-      <div className="stage-tabs">{WORKBENCH_STAGES.map((itemStage,index)=>{const itemDecision=scene.review?.[itemStage]||'pending';return <button key={itemStage} className={`${stage===itemStage?'active':''} ${itemDecision}`} onClick={()=>setStage(itemStage)}><span>0{index+1}</span><strong>{stageLabel(itemStage,c)}</strong><small>{c.review[itemDecision]}</small></button>;})}</div>
+      <div className="stage-tabs">{WORKBENCH_STAGES.map((itemStage)=>{const itemDecision=scene.review?.[itemStage]||'pending';return <Tooltip key={itemStage}><TooltipTrigger asChild><button aria-label={stageLabel(itemStage,c)} className={`${stage===itemStage?'active':''} ${itemDecision}`} onClick={()=>setStage(itemStage)}><span className="stage-tab-icon"><StageIcon stage={itemStage}/></span><strong>{stageLabel(itemStage,c)}</strong><i/></button></TooltipTrigger><TooltipContent>{c.review[itemDecision]}</TooltipContent></Tooltip>;})}</div>
       <div className="stage-primary">
         {project.settings?.workflowMode==='auto'?<Button disabled={running} onClick={async()=>{if(dirty)await onSave(scene.id,{text,visualPrompt:prompt});await onRunStage(scene.id,'all');}}>{running?<LoaderCircle className="spin"/>:<WandSparkles/>}{c.renderScene}</Button>:<>
           {stage!=='script'&&<Button variant="outline" disabled={running||!upstreamApproved} onClick={()=>onRunStage(scene.id,stage)}><RefreshCw/>{ready?c.regenerate:c.generate}</Button>}
@@ -199,7 +206,6 @@ function Workbench({project,initialSceneId,initialStage,running,onSave,onRunStag
           <Button disabled={running||dirty||!ready||decision==='approved'} onClick={approveAndNext}><Check/>{sceneIndex<project.scenes.length-1?c.approveNext:c.approve}</Button>
         </>}
       </div>
-      {project.settings?.workflowMode==='studio'&&<div className="bulk-actions"><span>{c.bulkActions}</span>{stage!=='script'&&<button disabled={running||!bulkGenerateIds.length} onClick={()=>onBulkRun(stage,bulkGenerateIds)}><RefreshCw/>{c.generateEligible} <b>{bulkGenerateIds.length}</b></button>}<button disabled={running||!bulkApproveIds.length} onClick={()=>onBulkReview(stage,bulkApproveIds,'approved')}><Check/>{c.approveReady} <b>{bulkApproveIds.length}</b></button></div>}
     </footer>
   </section>;
 }
@@ -440,7 +446,7 @@ export default function App(){
             </div>
           </section>
           {current.error&&<div className="project-error"><strong>{c.lastRunStopped}</strong><span>{current.error.message}</span></div>}
-          {projectView==='overview'?<ProjectOverview project={current} running={busy||running} onOpenScene={openWorkbench} onBulkRun={runBulk} onBulkReview={reviewBulk} c={c}/>:<Workbench key={`${current.id}:${workbenchFocus.sceneId}:${workbenchFocus.stage}`} project={current} initialSceneId={workbenchFocus.sceneId} initialStage={workbenchFocus.stage} running={busy||running} onSave={saveScene} onRunStage={runStage} onReview={reviewStage} onBulkRun={runBulk} onBulkReview={reviewBulk} c={c}/>}
+          {projectView==='overview'?<ProjectOverview project={current} running={busy||running} onOpenScene={openWorkbench} onBulkRun={runBulk} onBulkReview={reviewBulk} c={c}/>:<Workbench key={`${current.id}:${workbenchFocus.sceneId}:${workbenchFocus.stage}`} project={current} initialSceneId={workbenchFocus.sceneId} initialStage={workbenchFocus.stage} running={busy||running} onSave={saveScene} onRunStage={runStage} onReview={reviewStage} c={c}/>}
         </>}
       </main>
     </div>
