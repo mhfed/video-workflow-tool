@@ -6,8 +6,8 @@ import { invalidateFinal } from '../../../packages/core/src/invalidation.mjs';
 import { sha256, fileExists, ensureDir } from '../../../packages/core/src/utils.mjs';
 import { probeDuration } from '../../../packages/core/src/media.mjs';
 import { run } from '../../../packages/core/src/process.mjs';
-import { generateImageOpenAI, synthesizeSpeechOpenAI } from '../../../packages/providers/src/openai.mjs';
-import { synthesizeSpeechMock } from '../../../packages/providers/src/mock.mjs';
+import { generateImageOpenAI } from '../../../packages/providers/src/openai.mjs';
+import { synthesizeVoice, voiceCacheConfig } from '../../../packages/providers/src/voice.mjs';
 import { renderSimpleScene } from '../../../packages/renderers/src/simple.mjs';
 import { renderWhiteboardScene } from '../../../packages/renderers/src/whiteboard.mjs';
 
@@ -18,12 +18,10 @@ async function ensureVoice(scene, project, cfg, force=false) {
   const dir=ensureDir(sceneDir(cfg,project.id,scene.id));
   const file=path.join(dir,'voice.mp3');
   const provider=effectiveProvider(cfg.voiceProvider,cfg);
-  const key=sha256({text:scene.text,provider,model:provider==='openai'?cfg.openaiTtsModel:null,voice:provider==='openai'?cfg.openaiTtsVoice:null,instructions:provider==='openai'?cfg.openaiTtsInstructions:null});
+  const key=sha256({text:scene.text,provider,...voiceCacheConfig(provider,cfg)});
   if (!force && scene.cache.voice===key && fileExists(file)) return file;
   log('voice:start',{scene:scene.id,provider});
-  if (provider==='mock') await synthesizeSpeechMock(scene.text,file,cfg,scene.durationMs/1000);
-  else if (provider==='openai') await synthesizeSpeechOpenAI(scene.text,file,cfg);
-  else throw new Error(`Unsupported VOICE_PROVIDER=${provider}`);
+  await synthesizeVoice({provider,text:scene.text,outputFile:file,cfg,durationSec:scene.durationMs/1000});
   scene.durationMs=Math.round((await probeDuration(file,cfg))*1000);
   scene.cache.voice=key; scene.artifacts.voice=path.relative(projectDir(cfg,project.id),file); scene.status='voice-ready';
   saveProject(updateTimeline(project),cfg); log('voice:done',{scene:scene.id,durationMs:scene.durationMs}); return file;

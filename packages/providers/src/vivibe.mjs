@@ -1,0 +1,67 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import { run } from '../../core/src/process.mjs';
+import { ensureDir, sleep } from '../../core/src/utils.mjs';
+
+function vivibeConfig(cfg) {
+  if (!cfg.vivibeApiKey) throw new Error('VIVIBE_API_KEY is required for the Vivibe voice provider');
+  if (!cfg.vivibeVoiceId) throw new Error('VIVIBE_VOICE_ID is required for the Vivibe voice provider');
+  return cfg;
+}
+
+async function vivibeRpc(cfg, method, input, fetchImpl=fetch) {
+  if (!cfg.vivibeApiKey) throw new Error('VIVIBE_API_KEY is required for Vivibe API requests');
+  const response=await fetchImpl(cfg.vivibeBaseUrl,{
+    method:'POST',
+    headers:{Authorization:`Bearer ${cfg.vivibeApiKey}`,'Content-Type':'application/json'},
+    body:JSON.stringify({method,input})
+  });
+  const body=await response.text();
+  let data;
+  try { data=body?JSON.parse(body):{}; } catch { throw new Error(`Vivibe ${method} returned invalid JSON (${response.status})`); }
+  if(!response.ok)throw new Error(`Vivibe ${method} failed (${response.status}): ${body.slice(0,1200)}`);
+  if(data?.error)throw new Error(`Vivibe ${method} failed: ${data.error.message||JSON.stringify(data.error)}`);
+  if(!data?.result)throw new Error(`Vivibe ${method} returned no result`);
+  return data.result;
+}
+
+export async function listVivibeVoices(cfg,{limit=100,page=1,fetchImpl=fetch}={}) {
+  const result=await vivibeRpc(cfg,'getUserVoices',{limit,page},fetchImpl);
+  return {items:Array.isArray(result.items)?result.items:[],total:Number(result.total||0)};
+}
+
+async function completedAudioUrl(text,cfg,{fetchImpl=fetch,sleepImpl=sleep}={}) {
+  vivibeConfig(cfg);
+  const created=await vivibeRpc(cfg,'ttsLongText',{text,userVoiceId:cfg.vivibeVoiceId,speed:cfg.vivibeSpeed},fetchImpl);
+  const exportId=created.projectExportId;
+  if(!exportId)throw new Error('Vivibe ttsLongText returned no projectExportId');
+  const deadline=Date.now()+cfg.vivibeTimeoutMs;
+  while(Date.now()<=deadline){
+    const status=await vivibeRpc(cfg,'getExportStatus',{projectExportId:exportId},fetchImpl);
+    if(status.state==='completed'){
+      if(!status.url)throw new Error('Vivibe export completed without an audio URL');
+      const url=new URL(status.url);
+      if(!['http:','https:'].includes(url.protocol)||url.username||url.password)throw new Error('Vivibe returned an unsafe audio URL');
+      return url.href;
+    }
+    if(status.state==='failed')throw new Error(`Vivibe voice export failed${status.message?`: ${status.message}`:''}`);
+    if(!['pending','processing'].includes(status.state))throw new Error(`Vivibe returned an unknown export state: ${status.state||'missing'}`);
+    await sleepImpl(cfg.vivibePollIntervalMs);
+  }
+  throw new Error(`Vivibe voice export timed out after ${cfg.vivibeTimeoutMs}ms`);
+}
+
+export async function synthesizeSpeechVivibe(text,outputFile,cfg,{fetchImpl=fetch,sleepImpl=sleep,runImpl=run}={}) {
+  ensureDir(path.dirname(outputFile));
+  const audioUrl=await completedAudioUrl(text,cfg,{fetchImpl,sleepImpl});
+  const response=await fetchImpl(audioUrl);
+  if(!response.ok)throw new Error(`Vivibe audio download failed (${response.status})`);
+  const sourceFile=`${outputFile}.vivibe-source-${process.pid}`;
+  try {
+    fs.writeFileSync(sourceFile,Buffer.from(await response.arrayBuffer()));
+    await runImpl(cfg.ffmpegBin,['-y','-i',sourceFile,'-vn','-c:a','libmp3lame','-b:a','192k',outputFile],{capture:true});
+  } finally {
+    fs.rmSync(sourceFile,{force:true});
+  }
+  return outputFile;
+}

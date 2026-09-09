@@ -145,21 +145,25 @@ function NewProjectDialog({open,onOpenChange,onCreate,busy,defaultRenderer='simp
 function SettingsDialog({open,onOpenChange,onSaved}){
   const [form,setForm]=useState(null);
   const [showKey,setShowKey]=useState(false);
+  const [showVivibeKey,setShowVivibeKey]=useState(false);
+  const [vivibeVoices,setVivibeVoices]=useState([]);
+  const [voiceLoading,setVoiceLoading]=useState(false);
   const [saving,setSaving]=useState(false);
   const [message,setMessage]=useState(null);
   const update=(key,value)=>setForm((current)=>({...current,[key]:value}));
+  const hydrated=(settings)=>({...settings,apiKey:'',clearApiKey:false,vivibeApiKey:'',clearVivibeApiKey:false});
 
   useEffect(()=>{
     if(!open)return;
-    setForm(null);setMessage(null);setShowKey(false);
-    api('/api/settings').then((settings)=>setForm({...settings,apiKey:'',clearApiKey:false})).catch((cause)=>setMessage({type:'error',text:cause.message}));
+    setForm(null);setMessage(null);setShowKey(false);setShowVivibeKey(false);setVivibeVoices([]);
+    api('/api/settings').then((settings)=>setForm(hydrated(settings))).catch((cause)=>setMessage({type:'error',text:cause.message}));
   },[open]);
 
   const persist=async(testAfter=false)=>{
     setSaving(true);setMessage(null);
     try{
       const settings=await api('/api/settings',{method:'PATCH',body:JSON.stringify(form)});
-      setForm({...settings,apiKey:'',clearApiKey:false});
+      setForm(hydrated(settings));
       await onSaved();
       if(testAfter){
         const result=await api('/api/settings/test',{method:'POST',body:'{}'});
@@ -169,19 +173,31 @@ function SettingsDialog({open,onOpenChange,onSaved}){
     finally{setSaving(false);}
   };
 
+  const loadVivibeVoices=async()=>{
+    setVoiceLoading(true);setMessage(null);
+    try{
+      const result=await api('/api/voice-providers/vivibe/voices',{method:'POST',body:JSON.stringify({apiKey:form.vivibeApiKey,baseUrl:form.vivibeBaseUrl})});
+      setVivibeVoices(result.items||[]);
+      if(!form.vivibeVoiceId&&result.items?.[0])update('vivibeVoiceId',result.items[0].id);
+      setMessage({type:'success',text:`Loaded ${result.items?.length||0} active Vivibe voices.`});
+    }catch(cause){setMessage({type:'error',text:cause.message});}
+    finally{setVoiceLoading(false);}
+  };
+
   return <Dialog open={open} onOpenChange={onOpenChange}>
     <DialogContent className="settings-dialog">
-      {!form?<div className="settings-loading"><DialogTitle className="sr-only">Provider settings</DialogTitle><DialogDescription className="sr-only">Loading local OpenAI configuration.</DialogDescription><LoaderCircle className="spin"/><span>Loading local configuration…</span></div>:<div className="settings-layout">
+      {!form?<div className="settings-loading"><DialogTitle className="sr-only">Provider settings</DialogTitle><DialogDescription className="sr-only">Loading local provider configuration.</DialogDescription><LoaderCircle className="spin"/><span>Loading local configuration…</span></div>:<div className="settings-layout">
         <aside className="settings-aside">
-          <div><div className="dialog-index">SYSTEM / OPENAI</div><DialogTitle>Provider settings</DialogTitle><DialogDescription>Configure generation models and credentials for this local production desk.</DialogDescription></div>
-          <div className="security-card"><ShieldCheck/><div><strong>Server-side secret</strong><p>Your key is written only to the local <code>.env</code> file. It is never returned to this browser after saving.</p></div></div>
-          <div className="connection-state"><span className={`status-light ${form.hasOpenAIKey&&!form.clearApiKey?'online':''}`}/><div><strong>{form.clearApiKey?'Key marked for removal':form.hasOpenAIKey?'API key configured':'No API key'}</strong><small>{form.enableOpenAI?'Live providers enabled':'Test providers enabled'}</small></div></div>
-          <div className="settings-mode"><div><strong>Use OpenAI providers</strong><span>Text, image and voice generation</span></div><Switch checked={form.enableOpenAI} onCheckedChange={(value)=>update('enableOpenAI',value)}/></div>
-          <div className="settings-aside-foot"><KeyRound/><span>Create and manage keys in the OpenAI Platform dashboard.</span></div>
+          <div><div className="dialog-index">SYSTEM / PROVIDERS</div><DialogTitle>Provider settings</DialogTitle><DialogDescription>Mix replaceable text, image, and voice services for this local production desk.</DialogDescription></div>
+          <div className="security-card"><ShieldCheck/><div><strong>Server-side secrets</strong><p>Provider keys are written only to the local <code>.env</code> file and are never returned to this browser.</p></div></div>
+          <div className="connection-state"><span className={`status-light ${form.hasOpenAIKey&&!form.clearApiKey?'online':''}`}/><div><strong>{form.clearApiKey?'OpenAI key marked for removal':form.hasOpenAIKey?'OpenAI connected':'No OpenAI key'}</strong><small>Text & image · {form.enableOpenAI?'live':'mock'}</small></div></div>
+          <div className="connection-state"><span className={`status-light ${form.voiceProvider==='mock'||form.voiceProvider==='openai'&&form.hasOpenAIKey||form.voiceProvider==='vivibe'&&form.hasVivibeKey?'online':''}`}/><div><strong>{form.voiceProvider==='vivibe'?'Vivibe / LucyAI':form.voiceProvider==='openai'?'OpenAI voice':'Mock voice'}</strong><small>Active voice source</small></div></div>
+          <div className="settings-mode"><div><strong>Use OpenAI generation</strong><span>Text and image providers</span></div><Switch checked={form.enableOpenAI} onCheckedChange={(value)=>update('enableOpenAI',value)}/></div>
+          <div className="settings-aside-foot"><KeyRound/><span>Voice is selected independently, so Vivibe can run alongside OpenAI text and images.</span></div>
         </aside>
 
         <div className="settings-main">
-          <DialogHeader><DialogTitle>Connection & models</DialogTitle><DialogDescription>Changes apply to new requests immediately. Existing scene artifacts stay cached until you re-render them.</DialogDescription></DialogHeader>
+          <DialogHeader><DialogTitle>Connections & models</DialogTitle><DialogDescription>Choose each provider independently. Existing scene artifacts stay cached until their provider inputs change.</DialogDescription></DialogHeader>
           <div className="settings-section">
             <div className="settings-section-title"><Server/><span><strong>Connection</strong><small>Credential and API endpoint</small></span></div>
             <div className="settings-fields two-columns">
@@ -200,21 +216,40 @@ function SettingsDialog({open,onOpenChange,onSaved}){
           </div>
           <Separator/>
           <div className="settings-section">
-            <div className="settings-section-title"><BrainCircuit/><span><strong>Generation stack</strong><small>Models used for each pipeline stage</small></span></div>
-            <div className="settings-fields three-columns">
+            <div className="settings-section-title"><BrainCircuit/><span><strong>Generation stack</strong><small>Models used for scripts and illustrations</small></span></div>
+            <div className="settings-fields two-columns">
               <label>Script model<Input value={form.textModel} onChange={(event)=>update('textModel',event.target.value)} /></label>
               <label>Image model<Input value={form.imageModel} onChange={(event)=>update('imageModel',event.target.value)} /></label>
-              <label>Speech model<Input value={form.ttsModel} onChange={(event)=>update('ttsModel',event.target.value)} /></label>
               <label>Image size<Select value={form.imageSize} onValueChange={(value)=>update('imageSize',value)}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent><SelectItem value="1536x1024">1536 × 1024 · landscape</SelectItem><SelectItem value="1024x1024">1024 × 1024 · square</SelectItem><SelectItem value="1024x1536">1024 × 1536 · portrait</SelectItem><SelectItem value="auto">Auto</SelectItem></SelectContent></Select></label>
               <label>Image quality<Select value={form.imageQuality} onValueChange={(value)=>update('imageQuality',value)}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent><SelectItem value="low">Low</SelectItem><SelectItem value="medium">Medium</SelectItem><SelectItem value="high">High</SelectItem><SelectItem value="auto">Auto</SelectItem></SelectContent></Select></label>
-              <label>Voice<Input value={form.ttsVoice} onChange={(event)=>update('ttsVoice',event.target.value)} /></label>
             </div>
-            <label className="instruction-field">Voice direction<Textarea rows={3} value={form.ttsInstructions} onChange={(event)=>update('ttsInstructions',event.target.value)} /></label>
+          </div>
+          <Separator/>
+          <div className="settings-section voice-provider-section">
+            <div className="settings-section-title"><Mic2/><span><strong>Voice source</strong><small>Provider adapter used for narration</small></span></div>
+            <div className="voice-provider-head">
+              <label>Provider<Select value={form.voiceProvider} onValueChange={(value)=>{update('voiceProvider',value);setVivibeVoices([]);}}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent><SelectItem value="openai">OpenAI Speech</SelectItem><SelectItem value="vivibe">Vivibe / LucyAI</SelectItem><SelectItem value="mock">Mock silence</SelectItem></SelectContent></Select></label>
+              <p>{form.voiceProvider==='vivibe'?'Async Vietnamese voice generation via ttsLongText. Audio is normalized to MP3 before entering the timeline.':form.voiceProvider==='openai'?'Direct speech synthesis with model, voice, and delivery instructions.':'Offline silent MP3 for smoke tests and zero-cost development.'}</p>
+            </div>
+            {form.voiceProvider==='openai'&&<><div className="settings-fields two-columns voice-fields"><label>Speech model<Input value={form.ttsModel} onChange={(event)=>update('ttsModel',event.target.value)} /></label><label>Voice<Input value={form.ttsVoice} onChange={(event)=>update('ttsVoice',event.target.value)} /></label></div><label className="instruction-field">Voice direction<Textarea rows={3} value={form.ttsInstructions} onChange={(event)=>update('ttsInstructions',event.target.value)} /></label></>}
+            {form.voiceProvider==='vivibe'&&<div className="vivibe-panel">
+              <div className="settings-fields two-columns">
+                <label className="key-field">Vivibe API key<div className="key-input"><Input type={showVivibeKey?'text':'password'} autoComplete="new-password" value={form.vivibeApiKey} onChange={(event)=>setForm((current)=>({...current,vivibeApiKey:event.target.value,clearVivibeApiKey:false}))} placeholder={form.hasVivibeKey?'Leave blank to keep saved key':'Paste Vivibe API key'}/><button type="button" onClick={()=>setShowVivibeKey((value)=>!value)} aria-label={showVivibeKey?'Hide Vivibe API key':'Show Vivibe API key'}>{showVivibeKey?<EyeOff/>:<Eye/>}</button></div><small>{form.hasVivibeKey&&!form.clearVivibeApiKey?'A key is already stored.':'Created at vivibe.app/docs/api-keys.'}</small></label>
+                <label>JSON-RPC URL<Input value={form.vivibeBaseUrl} onChange={(event)=>update('vivibeBaseUrl',event.target.value)} /><small>Default: api.lucylab.io/json-rpc</small></label>
+              </div>
+              {form.hasVivibeKey&&<Button type="button" size="sm" variant={form.clearVivibeApiKey?'secondary':'ghost'} className="remove-key" onClick={()=>setForm((current)=>({...current,clearVivibeApiKey:!current.clearVivibeApiKey,vivibeApiKey:''}))}>{form.clearVivibeApiKey?'Keep saved Vivibe key':'Remove saved Vivibe key'}</Button>}
+              <div className="voice-identity-row">
+                <label>Voice ID<Input value={form.vivibeVoiceId} onChange={(event)=>update('vivibeVoiceId',event.target.value)} placeholder="Your Vivibe voice ID"/></label>
+                <label>Speed<Input type="number" min="0.5" max="2" step="0.1" value={form.vivibeSpeed} onChange={(event)=>update('vivibeSpeed',event.target.value)}/></label>
+                <Button type="button" variant="outline" disabled={voiceLoading||form.clearVivibeApiKey||(!form.hasVivibeKey&&!form.vivibeApiKey)} onClick={loadVivibeVoices}>{voiceLoading?<LoaderCircle className="spin"/>:<RefreshCw/>}Load voices</Button>
+              </div>
+              {vivibeVoices.length>0&&<label className="vivibe-voice-list">Available voices<Select value={form.vivibeVoiceId||undefined} onValueChange={(value)=>update('vivibeVoiceId',value)}><SelectTrigger><SelectValue placeholder="Choose a voice"/></SelectTrigger><SelectContent>{vivibeVoices.map((voice)=><SelectItem key={voice.id} value={voice.id}>{voice.name}</SelectItem>)}</SelectContent></Select><small>{vivibeVoices.length} active voices returned by getUserVoices.</small></label>}
+            </div>}
           </div>
           {message&&<div className={`settings-message ${message.type}`}>
             {message.type==='success'?<CheckCircle2/>:<CircleDot/>}<span>{message.text}</span>
           </div>}
-          <DialogFooter className="settings-footer"><Button type="button" variant="ghost" onClick={()=>onOpenChange(false)}>Close</Button><Button type="button" variant="outline" disabled={saving||form.clearApiKey||(!form.hasOpenAIKey&&!form.apiKey)} onClick={()=>persist(true)}>{saving?<LoaderCircle className="spin"/>:<Activity/>}Save & test</Button><Button type="button" disabled={saving} onClick={()=>persist(false)}>{saving?<LoaderCircle className="spin"/>:<Save/>}Save settings</Button></DialogFooter>
+          <DialogFooter className="settings-footer"><Button type="button" variant="ghost" onClick={()=>onOpenChange(false)}>Close</Button><Button type="button" variant="outline" disabled={saving||form.clearApiKey||(!form.hasOpenAIKey&&!form.apiKey)} onClick={()=>persist(true)}>{saving?<LoaderCircle className="spin"/>:<Activity/>}Save & test OpenAI</Button><Button type="button" disabled={saving} onClick={()=>persist(false)}>{saving?<LoaderCircle className="spin"/>:<Save/>}Save settings</Button></DialogFooter>
         </div>
       </div>}
     </DialogContent>
@@ -275,7 +310,7 @@ export default function App(){
         </ScrollArea>
         <button className="rail-footer" onClick={()=>setSettingsOpen(true)}>
           <div><Settings2/><span><strong>{config?.mockMode?'TEST MODE':'PRODUCTION'}</strong><small>{config?.hasOpenAIKey?'API key configured':'OpenAI settings'}</small></span></div>
-          <div className="provider-line">{config?.imageModel||'image'}<br/>{config?.ttsVoice||'voice'}</div>
+          <div className="provider-line">{config?.imageModel||'image'}<br/>{config?.voiceProvider||'voice'}{config?.voiceProvider==='vivibe'&&config?.vivibeVoiceId?` · ${config.vivibeVoiceId.slice(0,8)}`:''}</div>
         </button>
       </aside>
 

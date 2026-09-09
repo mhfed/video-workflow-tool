@@ -27,3 +27,17 @@ test('mock mode permits missing OpenAI key',()=>{
   const result=validateConfig({...base,mockMode:true,openaiApiKey:''});
   assert.equal(result.ok,true);
 });
+
+test('accepts Vivibe as an independent voice provider',()=>{
+  const result=validateConfig({...base,mockMode:false,textProvider:'mock',imageProvider:'mock',voiceProvider:'vivibe',openaiApiKey:'',vivibeApiKey:'vivibe-key',vivibeBaseUrl:'https://api.lucylab.io/json-rpc',vivibeVoiceId:'voice-1',vivibeSpeed:1,vivibePollIntervalMs:2000,vivibeTimeoutMs:120000});
+  assert.equal(result.ok,true);
+});
+
+test('Vivibe voice provider requires credentials, voice, and valid speed',()=>{
+  const result=validateConfig({...base,voiceProvider:'vivibe',vivibeApiKey:'',vivibeBaseUrl:'not-a-url',vivibeVoiceId:'',vivibeSpeed:3,vivibePollIntervalMs:0,vivibeTimeoutMs:0});
+  assert.equal(result.ok,false);
+  assert.match(result.errors.join('\n'),/VIVIBE_API_KEY/);
+  assert.match(result.errors.join('\n'),/VIVIBE_VOICE_ID/);
+  assert.match(result.errors.join('\n'),/VIVIBE_SPEED/);
+  assert.match(result.errors.join('\n'),/VIVIBE_BASE_URL/);
+});

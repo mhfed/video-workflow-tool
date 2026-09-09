@@ -36,6 +36,7 @@ The default real configuration uses:
 - OpenAI Responses API with `gpt-5.6-luna` for topic → narration.
 - OpenAI Image API with `gpt-image-2` at supported landscape size `1536x1024` for illustrations.
 - OpenAI Speech API with `gpt-4o-mini-tts` for narration audio.
+- Optional Vivibe/LucyAI narration through a separate voice-provider adapter.
 - `geeklee/srt-whiteboard-animation` for whiteboard rendering. The engine is cloned/prepared automatically when `WHITEBOARD_AUTO_INSTALL=1`.
 - FFmpeg for per-scene muxing, 16:9 normalization, and final concatenation.
 
@@ -44,6 +45,8 @@ For handoff, review [`docs/REVIEW_CHECKLIST.md`](docs/REVIEW_CHECKLIST.md). The 
 ## Review control panel
 
 For each scene the UI can show the generated visual, narration audio, and rendered clip. Media endpoints support HTTP Range requests, so video/audio seek normally in the browser. A project-level lock prevents duplicate render runs, and failed runs persist their last error for review.
+
+Provider settings let text/images stay on OpenAI while narration uses OpenAI Speech, Vivibe/LucyAI, or the offline mock provider. Vivibe keys remain server-side in `.env`; the UI can fetch active voices through `getUserVoices` and save the selected Voice ID.
 
 ## Zero-cost smoke test
 

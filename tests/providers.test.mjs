@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { generateScriptOpenAI, generateImageOpenAI, synthesizeSpeechOpenAI } from '../packages/providers/src/openai.mjs';
+import { listVivibeVoices, synthesizeSpeechVivibe } from '../packages/providers/src/vivibe.mjs';
 
 const cfg = {
   openaiApiKey: 'test-key',
@@ -70,4 +71,44 @@ test('OpenAI speech provider sends configured TTS request and writes audio bytes
     assert.equal(request.body.response_format, 'mp3');
     assert.equal(fs.readFileSync(out, 'utf8'), 'mp3-bytes');
   } finally { globalThis.fetch = oldFetch; }
+});
+
+test('Vivibe lists active user voices through JSON-RPC',async()=>{
+  let request;
+  const fetchImpl=async(url,init)=>{
+    request={url,headers:init.headers,body:JSON.parse(init.body)};
+    return new Response(JSON.stringify({result:{items:[{id:'voice-1',name:'Vietnamese voice',isActive:true}],total:1}}),{status:200});
+  };
+  const result=await listVivibeVoices({vivibeApiKey:'vivibe-key',vivibeBaseUrl:'https://api.lucylab.io/json-rpc'},{fetchImpl});
+  assert.equal(request.url,'https://api.lucylab.io/json-rpc');
+  assert.equal(request.headers.Authorization,'Bearer vivibe-key');
+  assert.deepEqual(request.body,{method:'getUserVoices',input:{limit:100,page:1}});
+  assert.equal(result.items[0].id,'voice-1');
+});
+
+test('Vivibe creates, polls, downloads, and normalizes narration audio',async()=>{
+  const requests=[];
+  let statusCalls=0;
+  const fetchImpl=async(url,init={})=>{
+    if(url==='https://cdn.example.test/voice.wav')return new Response(Buffer.from('source-audio'),{status:200});
+    const body=JSON.parse(init.body);requests.push(body);
+    if(body.method==='ttsLongText')return new Response(JSON.stringify({result:{projectExportId:'export-1'}}),{status:200});
+    statusCalls++;
+    return new Response(JSON.stringify({result:statusCalls===1?{state:'processing'}:{state:'completed',url:'https://cdn.example.test/voice.wav'}}),{status:200});
+  };
+  const waits=[];
+  const runImpl=async(bin,args)=>{
+    assert.equal(bin,'ffmpeg-test');
+    assert.equal(fs.readFileSync(args[2],'utf8'),'source-audio');
+    fs.writeFileSync(args.at(-1),'normalized-mp3');
+  };
+  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'vwt-vivibe-'));
+  const output=path.join(dir,'voice.mp3');
+  await synthesizeSpeechVivibe('Xin chào',output,{vivibeApiKey:'vivibe-key',vivibeBaseUrl:'https://api.lucylab.io/json-rpc',vivibeVoiceId:'voice-1',vivibeSpeed:1.2,vivibePollIntervalMs:2000,vivibeTimeoutMs:30000,ffmpegBin:'ffmpeg-test'},{fetchImpl,sleepImpl:async(ms)=>waits.push(ms),runImpl});
+  assert.deepEqual(requests[0],{method:'ttsLongText',input:{text:'Xin chào',userVoiceId:'voice-1',speed:1.2}});
+  assert.deepEqual(requests[1],{method:'getExportStatus',input:{projectExportId:'export-1'}});
+  assert.equal(requests.length,3);
+  assert.deepEqual(waits,[2000]);
+  assert.equal(fs.readFileSync(output,'utf8'),'normalized-mp3');
+  assert.equal(fs.readdirSync(dir).some((name)=>name.includes('vivibe-source')),false);
 });

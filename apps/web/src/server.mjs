@@ -9,6 +9,7 @@ import { invalidateRenderedMedia, invalidateScene } from '../../../packages/core
 import { SUPPORTED_RENDERERS } from '../../../packages/core/src/validate-config.mjs';
 import { generateScriptOpenAI } from '../../../packages/providers/src/openai.mjs';
 import { generateScriptMock } from '../../../packages/providers/src/mock.mjs';
+import { listVivibeVoices } from '../../../packages/providers/src/vivibe.mjs';
 import { runPipeline } from '../../worker/src/pipeline.mjs';
 import { mediaTypeFor, serveMedia } from './media.mjs';
 
@@ -21,8 +22,8 @@ const json=(res,status,data)=>{res.writeHead(status,{'content-type':'application
 const readBody=(req)=>new Promise((resolve,reject)=>{let b='';req.on('data',d=>b+=d);req.on('end',()=>{try{resolve(b?JSON.parse(b):{});}catch(e){reject(e);}});req.on('error',reject);});
 const serve=(res,file,type)=>{const stream=fs.createReadStream(file);stream.on('error',()=>{if(!res.headersSent)res.writeHead(404);res.end();});res.writeHead(200,{'content-type':type});stream.pipe(res);};
 const mimeFor=(file)=>({'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.svg':'image/svg+xml','.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.webp':'image/webp','.ico':'image/x-icon'}[path.extname(file).toLowerCase()]||'application/octet-stream');
-const safeConfig=()=>({mockMode:cfg.mockMode,renderer:cfg.renderer,textProvider:cfg.textProvider,imageProvider:cfg.imageProvider,voiceProvider:cfg.voiceProvider,textModel:cfg.openaiTextModel,imageModel:cfg.openaiImageModel,imageSize:cfg.openaiImageSize,ttsModel:cfg.openaiTtsModel,ttsVoice:cfg.openaiTtsVoice,whiteboardAutoInstall:cfg.whiteboardAutoInstall,hasOpenAIKey:!!cfg.openaiApiKey});
-const safeSettings=()=>({hasOpenAIKey:!!cfg.openaiApiKey,enableOpenAI:!cfg.mockMode&&[cfg.textProvider,cfg.imageProvider,cfg.voiceProvider].every(value=>value==='openai'),renderer:cfg.renderer,baseUrl:cfg.openaiBaseUrl,textModel:cfg.openaiTextModel,imageModel:cfg.openaiImageModel,imageSize:cfg.openaiImageSize,imageQuality:cfg.openaiImageQuality,ttsModel:cfg.openaiTtsModel,ttsVoice:cfg.openaiTtsVoice,ttsInstructions:cfg.openaiTtsInstructions});
+const safeConfig=()=>({mockMode:cfg.mockMode,renderer:cfg.renderer,textProvider:cfg.textProvider,imageProvider:cfg.imageProvider,voiceProvider:cfg.voiceProvider,textModel:cfg.openaiTextModel,imageModel:cfg.openaiImageModel,imageSize:cfg.openaiImageSize,ttsModel:cfg.openaiTtsModel,ttsVoice:cfg.openaiTtsVoice,vivibeVoiceId:cfg.vivibeVoiceId,whiteboardAutoInstall:cfg.whiteboardAutoInstall,hasOpenAIKey:!!cfg.openaiApiKey,hasVivibeKey:!!cfg.vivibeApiKey});
+const safeSettings=()=>({hasOpenAIKey:!!cfg.openaiApiKey,hasVivibeKey:!!cfg.vivibeApiKey,enableOpenAI:!cfg.mockMode&&[cfg.textProvider,cfg.imageProvider].every(value=>value==='openai'),voiceProvider:cfg.voiceProvider,renderer:cfg.renderer,baseUrl:cfg.openaiBaseUrl,textModel:cfg.openaiTextModel,imageModel:cfg.openaiImageModel,imageSize:cfg.openaiImageSize,imageQuality:cfg.openaiImageQuality,ttsModel:cfg.openaiTtsModel,ttsVoice:cfg.openaiTtsVoice,ttsInstructions:cfg.openaiTtsInstructions,vivibeBaseUrl:cfg.vivibeBaseUrl,vivibeVoiceId:cfg.vivibeVoiceId,vivibeSpeed:cfg.vivibeSpeed});
 const isLoopback=(address='')=>address==='127.0.0.1'||address==='::1'||address.startsWith('::ffff:127.');
 const settingString=(body,key,{fallback='',max=500}={})=>typeof body[key]==='string'?body[key].replace(/[\r\n]+/g,' ').trim().slice(0,max):fallback;
 
@@ -53,14 +54,32 @@ function settingsUpdates(body) {
   const renderer=settingString(body,'renderer',{fallback:cfg.renderer,max:30});
   if(!SUPPORTED_RENDERERS.has(renderer))throw new Error('Unsupported video renderer.');
   updates.VIDEO_RENDERER=renderer;
-  if(typeof body.enableOpenAI==='boolean'){
-    updates.MOCK_MODE=body.enableOpenAI?'0':'1';
-    updates.TEXT_PROVIDER=body.enableOpenAI?'openai':'mock';
-    updates.IMAGE_PROVIDER=body.enableOpenAI?'openai':'mock';
-    updates.VOICE_PROVIDER=body.enableOpenAI?'openai':'mock';
-  }
+
+  const voiceProvider=settingString(body,'voiceProvider',{fallback:cfg.voiceProvider,max:30});
+  if(!['openai','vivibe','mock'].includes(voiceProvider))throw new Error('Unsupported voice provider.');
+  updates.VOICE_PROVIDER=voiceProvider;
+  const vivibeApiKey=settingString(body,'vivibeApiKey',{max:500});
+  if(vivibeApiKey)updates.VIVIBE_API_KEY=vivibeApiKey;
+  else if(body.clearVivibeApiKey===true)updates.VIVIBE_API_KEY='';
+  const vivibeBaseUrl=settingString(body,'vivibeBaseUrl',{fallback:cfg.vivibeBaseUrl,max:500});
+  let vivibeParsed;
+  try{vivibeParsed=new URL(vivibeBaseUrl);}catch{throw new Error('VIVIBE_BASE_URL must be a valid URL.');}
+  if(!['http:','https:'].includes(vivibeParsed.protocol)||vivibeParsed.username||vivibeParsed.password)throw new Error('VIVIBE_BASE_URL must use HTTP(S) and cannot include credentials.');
+  updates.VIVIBE_BASE_URL=vivibeBaseUrl.replace(/\/$/,'');
+  updates.VIVIBE_VOICE_ID=settingString(body,'vivibeVoiceId',{fallback:cfg.vivibeVoiceId,max:160});
+  const vivibeSpeed=Number(body.vivibeSpeed??cfg.vivibeSpeed);
+  if(!Number.isFinite(vivibeSpeed)||vivibeSpeed<0.5||vivibeSpeed>2)throw new Error('Vivibe speed must be between 0.5 and 2.0.');
+  updates.VIVIBE_SPEED=String(vivibeSpeed);
+
+  const enableOpenAI=typeof body.enableOpenAI==='boolean'?body.enableOpenAI:(!cfg.mockMode&&cfg.textProvider==='openai'&&cfg.imageProvider==='openai');
+  updates.TEXT_PROVIDER=enableOpenAI?'openai':'mock';
+  updates.IMAGE_PROVIDER=enableOpenAI?'openai':'mock';
+  updates.MOCK_MODE=!enableOpenAI&&voiceProvider==='mock'?'1':'0';
   const willHaveKey=updates.OPENAI_API_KEY!==undefined?!!updates.OPENAI_API_KEY:!!cfg.openaiApiKey;
-  if(body.enableOpenAI===true&&!willHaveKey)throw new Error('Add an OpenAI API key before enabling live providers.');
+  if((enableOpenAI||voiceProvider==='openai')&&!willHaveKey)throw new Error('Add an OpenAI API key before enabling an OpenAI provider.');
+  const willHaveVivibeKey=updates.VIVIBE_API_KEY!==undefined?!!updates.VIVIBE_API_KEY:!!cfg.vivibeApiKey;
+  if(voiceProvider==='vivibe'&&!willHaveVivibeKey)throw new Error('Add a Vivibe API key before selecting Vivibe voice.');
+  if(voiceProvider==='vivibe'&&!updates.VIVIBE_VOICE_ID)throw new Error('Choose or enter a Vivibe Voice ID.');
   return updates;
 }
 
@@ -87,6 +106,15 @@ const server=http.createServer(async (req,res)=>{
       const response=await fetch(endpoint,{headers:{authorization:`Bearer ${cfg.openaiApiKey}`}});
       if(!response.ok){const detail=await response.json().catch(()=>({}));return json(res,response.status,{error:detail.error?.message||`OpenAI returned HTTP ${response.status}.`});}
       return json(res,200,{ok:true,model:cfg.openaiTextModel,requestId:response.headers.get('x-request-id')||null});
+    }
+    if(req.method==='POST'&&url.pathname==='/api/voice-providers/vivibe/voices') {
+      if(!isLoopback(req.socket.remoteAddress))return json(res,403,{error:'Voice provider settings are only available from this machine.'});
+      const b=await readBody(req); const apiKey=settingString(b,'apiKey',{fallback:cfg.vivibeApiKey,max:500}); const baseUrl=settingString(b,'baseUrl',{fallback:cfg.vivibeBaseUrl,max:500});
+      if(!apiKey)return json(res,400,{error:'Add or save a Vivibe API key before loading voices.'});
+      let parsed;try{parsed=new URL(baseUrl);}catch{return json(res,400,{error:'VIVIBE_BASE_URL must be a valid URL.'});}
+      if(!['http:','https:'].includes(parsed.protocol)||parsed.username||parsed.password)return json(res,400,{error:'VIVIBE_BASE_URL must use HTTP(S) and cannot include credentials.'});
+      const voices=await listVivibeVoices({...cfg,vivibeApiKey:apiKey,vivibeBaseUrl:baseUrl});
+      return json(res,200,{items:voices.items.map((voice)=>({id:String(voice.id||''),name:String(voice.name||voice.id||'Unnamed voice'),isActive:voice.isActive!==false})).filter((voice)=>voice.id&&voice.isActive),total:voices.total});
     }
     if(req.method==='GET'&&parts[0]==='media'&&parts[1]) {
       const p=loadProject(decodeURIComponent(parts[1]),cfg);

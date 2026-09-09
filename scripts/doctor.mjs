@@ -33,6 +33,7 @@ console.log(`Mode: ${cfg.mockMode?'mock':'real'}`);
 console.log(`Renderer: ${cfg.renderer}`);
 console.log(`Providers: text=${cfg.textProvider}, image=${cfg.imageProvider}, voice=${cfg.voiceProvider}`);
 console.log(`Image: ${cfg.openaiImageModel} ${cfg.openaiImageSize} ${cfg.openaiImageQuality}`);
-console.log(`Voice: ${cfg.openaiTtsModel} / ${cfg.openaiTtsVoice}`);
+console.log(`Voice: ${cfg.voiceProvider==='vivibe'?`Vivibe ${cfg.vivibeVoiceId||'(no voice ID)'} @ ${cfg.vivibeSpeed}x`:cfg.voiceProvider==='openai'?`${cfg.openaiTtsModel} / ${cfg.openaiTtsVoice}`:'offline mock'}`);
 console.log(`OpenAI key: ${cfg.openaiApiKey?'configured':'missing'}`);
+console.log(`Vivibe key: ${cfg.vivibeApiKey?'configured':'missing'}`);
 if(checks.some(c=>!c.ok))process.exitCode=1;

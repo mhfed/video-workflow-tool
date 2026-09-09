@@ -58,9 +58,25 @@ SCENE_MAX_SEC=18
 
 - `MOCK_MODE=1`: no paid AI calls; useful for CI/smoke tests. Mock artifacts have distinct cache keys, so they cannot be silently reused in a later real run.
 - `VIDEO_RENDERER=simple|whiteboard`: `simple` is FFmpeg-only; `whiteboard` wraps `geeklee/srt-whiteboard-animation`.
-- `TEXT_PROVIDER`, `IMAGE_PROVIDER`, `VOICE_PROVIDER`: `openai` or `mock` in v0.1.
+- `TEXT_PROVIDER`, `IMAGE_PROVIDER`: `openai` or `mock`.
+- `VOICE_PROVIDER`: `openai`, `vivibe`, or `mock`. Voice selection is independent from the text/image source.
 - `WHITEBOARD_AUTO_INSTALL=1`: clones the upstream whiteboard engine when absent and prepares its isolated Python environment when needed.
 - `VIDEO_WIDTH`, `VIDEO_HEIGHT`, `VIDEO_FPS`: final clip normalization.
+
+## Vivibe / LucyAI voice
+
+The Settings dialog can load your active Vivibe voices and save the selected Voice ID. For manual configuration:
+
+```bash
+MOCK_MODE=0
+VOICE_PROVIDER=vivibe
+VIVIBE_API_KEY=<your-key>
+VIVIBE_BASE_URL=https://api.lucylab.io/json-rpc
+VIVIBE_VOICE_ID=<voice-id-from-getUserVoices>
+VIVIBE_SPEED=1
+```
+
+The adapter calls `ttsLongText`, polls `getExportStatus` every two seconds, downloads the completed audio, and normalizes it to MP3 with FFmpeg. Optional timeout controls are `VIVIBE_POLL_INTERVAL_MS` and `VIVIBE_TIMEOUT_MS`.
 
 ## Non-secret prerequisites
 
