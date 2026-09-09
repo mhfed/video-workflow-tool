@@ -57,6 +57,8 @@ The current upstream `scripts/prepare_env.py` also preserves the expected contra
 
 The tool therefore keeps the upstream repository as an external renderer dependency rather than copying renderer internals into the core workflow.
 
+The adapter also checks the upstream environment during `npm run doctor`. When auto-install is enabled and the engine-managed `.venv` exists without `pip`, setup attempts the standard-library `ensurepip --upgrade` recovery before rerunning the upstream preparation script.
+
 ## Local media requirements
 
 The real workflow still requires these machine-level executables:
@@ -68,6 +70,8 @@ The real workflow still requires these machine-level executables:
 - Python 3
 
 Run `npm run setup` followed by `npm run doctor` after filling `.env`.
+
+The offline `simple` renderer uses FFmpeg's `drawtext` filter when available. Minimal FFmpeg builds without `drawtext` remain supported: mock scenes render as plain placeholder cards so the zero-cost smoke path can still exercise narration, muxing, concatenation, and final MP4 output.
 
 ## Handoff status
 

@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import { config } from '../packages/core/src/env.mjs';
 import { validateConfig } from '../packages/core/src/validate-config.mjs';
 import { commandExists } from '../packages/core/src/process.mjs';
-import { whiteboardScript } from '../packages/renderers/src/whiteboard.mjs';
+import { inspectWhiteboardEnvironment, whiteboardScript } from '../packages/renderers/src/whiteboard.mjs';
 
 const cfg=config();
 const validation=validateConfig(cfg);
@@ -17,7 +17,11 @@ if(cfg.renderer==='whiteboard'){
   if(cfg.whiteboardPython) add('WHITEBOARD_PYTHON',fs.existsSync(cfg.whiteboardPython),cfg.whiteboardPython);
   else add('Python',await commandExists(cfg.pythonBin),cfg.pythonBin);
   const installed=fs.existsSync(whiteboardScript(cfg));
-  add('Whiteboard engine',installed||cfg.whiteboardAutoInstall,installed?'installed':(cfg.whiteboardAutoInstall?'will be installed by npm run setup':'missing'));
+  add('Whiteboard engine',installed,installed?'installed':(cfg.whiteboardAutoInstall?'missing; run npm run setup':'missing'));
+  if(installed){
+    const environment=await inspectWhiteboardEnvironment(cfg);
+    add('Whiteboard Python environment',environment.ok,environment.detail);
+  }
 }
 add('Configuration',validation.ok,validation.ok?'valid':validation.errors.join(' | '));
 

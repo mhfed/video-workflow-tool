@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { config } from '../../../packages/core/src/env.mjs';
+import { updateEnvFile } from '../../../packages/core/src/env-file.mjs';
 import { createProject, listProjects, loadProject, saveProject, projectDir } from '../../../packages/core/src/project.mjs';
 import { invalidateScene } from '../../../packages/core/src/invalidation.mjs';
 import { generateScriptOpenAI } from '../../../packages/providers/src/openai.mjs';
@@ -10,19 +11,79 @@ import { generateScriptMock } from '../../../packages/providers/src/mock.mjs';
 import { runPipeline } from '../../worker/src/pipeline.mjs';
 import { mediaTypeFor, serveMedia } from './media.mjs';
 
-const cfg=config();
+let cfg=config();
 const here=path.dirname(fileURLToPath(import.meta.url));
-const pub=path.resolve(here,'../public');
+const pub=path.resolve(here,'../dist');
+const envFile=path.resolve('.env');
 const running=new Set();
 const json=(res,status,data)=>{res.writeHead(status,{'content-type':'application/json; charset=utf-8'});res.end(JSON.stringify(data,null,2));};
 const readBody=(req)=>new Promise((resolve,reject)=>{let b='';req.on('data',d=>b+=d);req.on('end',()=>{try{resolve(b?JSON.parse(b):{});}catch(e){reject(e);}});req.on('error',reject);});
 const serve=(res,file,type)=>{const stream=fs.createReadStream(file);stream.on('error',()=>{if(!res.headersSent)res.writeHead(404);res.end();});res.writeHead(200,{'content-type':type});stream.pipe(res);};
+const mimeFor=(file)=>({'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.svg':'image/svg+xml','.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.webp':'image/webp','.ico':'image/x-icon'}[path.extname(file).toLowerCase()]||'application/octet-stream');
 const safeConfig=()=>({mockMode:cfg.mockMode,renderer:cfg.renderer,textProvider:cfg.textProvider,imageProvider:cfg.imageProvider,voiceProvider:cfg.voiceProvider,textModel:cfg.openaiTextModel,imageModel:cfg.openaiImageModel,imageSize:cfg.openaiImageSize,ttsModel:cfg.openaiTtsModel,ttsVoice:cfg.openaiTtsVoice,whiteboardAutoInstall:cfg.whiteboardAutoInstall,hasOpenAIKey:!!cfg.openaiApiKey});
+const safeSettings=()=>({hasOpenAIKey:!!cfg.openaiApiKey,enableOpenAI:!cfg.mockMode&&[cfg.textProvider,cfg.imageProvider,cfg.voiceProvider].every(value=>value==='openai'),baseUrl:cfg.openaiBaseUrl,textModel:cfg.openaiTextModel,imageModel:cfg.openaiImageModel,imageSize:cfg.openaiImageSize,imageQuality:cfg.openaiImageQuality,ttsModel:cfg.openaiTtsModel,ttsVoice:cfg.openaiTtsVoice,ttsInstructions:cfg.openaiTtsInstructions});
+const isLoopback=(address='')=>address==='127.0.0.1'||address==='::1'||address.startsWith('::ffff:127.');
+const settingString=(body,key,{fallback='',max=500}={})=>typeof body[key]==='string'?body[key].replace(/[\r\n]+/g,' ').trim().slice(0,max):fallback;
+
+function settingsUpdates(body) {
+  const updates={};
+  const apiKey=settingString(body,'apiKey',{max:500});
+  if(apiKey)updates.OPENAI_API_KEY=apiKey;
+  else if(body.clearApiKey===true)updates.OPENAI_API_KEY='';
+  const baseUrl=settingString(body,'baseUrl',{fallback:cfg.openaiBaseUrl,max:500});
+  let parsed;
+  try{parsed=new URL(baseUrl);}catch{throw new Error('OPENAI_BASE_URL must be a valid URL.');}
+  if(!['http:','https:'].includes(parsed.protocol)||parsed.username||parsed.password)throw new Error('OPENAI_BASE_URL must use HTTP(S) and cannot include credentials.');
+  updates.OPENAI_BASE_URL=baseUrl.replace(/\/$/,'');
+  updates.OPENAI_TEXT_MODEL=settingString(body,'textModel',{fallback:cfg.openaiTextModel,max:120});
+  updates.OPENAI_IMAGE_MODEL=settingString(body,'imageModel',{fallback:cfg.openaiImageModel,max:120});
+  updates.OPENAI_TTS_MODEL=settingString(body,'ttsModel',{fallback:cfg.openaiTtsModel,max:120});
+  updates.OPENAI_TTS_VOICE=settingString(body,'ttsVoice',{fallback:cfg.openaiTtsVoice,max:120});
+  for(const [label,key] of [['Script model','OPENAI_TEXT_MODEL'],['Image model','OPENAI_IMAGE_MODEL'],['Speech model','OPENAI_TTS_MODEL'],['Voice','OPENAI_TTS_VOICE']]){
+    if(!updates[key])throw new Error(`${label} cannot be empty.`);
+  }
+  updates.OPENAI_TTS_INSTRUCTIONS=settingString(body,'ttsInstructions',{fallback:cfg.openaiTtsInstructions,max:1000});
+  const imageSize=settingString(body,'imageSize',{fallback:cfg.openaiImageSize,max:30});
+  if(!['1024x1024','1024x1536','1536x1024','auto'].includes(imageSize))throw new Error('Unsupported OpenAI image size.');
+  updates.OPENAI_IMAGE_SIZE=imageSize;
+  const imageQuality=settingString(body,'imageQuality',{fallback:cfg.openaiImageQuality,max:30});
+  if(!['low','medium','high','auto'].includes(imageQuality))throw new Error('Unsupported OpenAI image quality.');
+  updates.OPENAI_IMAGE_QUALITY=imageQuality;
+  if(typeof body.enableOpenAI==='boolean'){
+    updates.MOCK_MODE=body.enableOpenAI?'0':'1';
+    updates.TEXT_PROVIDER=body.enableOpenAI?'openai':'mock';
+    updates.IMAGE_PROVIDER=body.enableOpenAI?'openai':'mock';
+    updates.VOICE_PROVIDER=body.enableOpenAI?'openai':'mock';
+  }
+  const willHaveKey=updates.OPENAI_API_KEY!==undefined?!!updates.OPENAI_API_KEY:!!cfg.openaiApiKey;
+  if(body.enableOpenAI===true&&!willHaveKey)throw new Error('Add an OpenAI API key before enabling live providers.');
+  return updates;
+}
 
 const server=http.createServer(async (req,res)=>{
   try {
     const url=new URL(req.url,`http://${req.headers.host}`); const parts=url.pathname.split('/').filter(Boolean);
     if(req.method==='GET'&&url.pathname==='/api/health') return json(res,200,{ok:true,running:[...running],config:safeConfig()});
+    if(url.pathname==='/api/settings') {
+      if(!isLoopback(req.socket.remoteAddress))return json(res,403,{error:'Settings are only available from this machine.'});
+      if(req.method==='GET')return json(res,200,safeSettings());
+      if(req.method==='PATCH'){
+        if(running.size)return json(res,409,{error:'Wait for the active render to finish before changing settings.'});
+        const updates=settingsUpdates(await readBody(req));
+        updateEnvFile(envFile,updates);
+        for(const [key,value] of Object.entries(updates))process.env[key]=value;
+        cfg=config();
+        return json(res,200,safeSettings());
+      }
+    }
+    if(req.method==='POST'&&url.pathname==='/api/settings/test') {
+      if(!isLoopback(req.socket.remoteAddress))return json(res,403,{error:'Settings are only available from this machine.'});
+      if(!cfg.openaiApiKey)return json(res,400,{error:'No OpenAI API key is configured.'});
+      const endpoint=`${cfg.openaiBaseUrl}/models/${encodeURIComponent(cfg.openaiTextModel)}`;
+      const response=await fetch(endpoint,{headers:{authorization:`Bearer ${cfg.openaiApiKey}`}});
+      if(!response.ok){const detail=await response.json().catch(()=>({}));return json(res,response.status,{error:detail.error?.message||`OpenAI returned HTTP ${response.status}.`});}
+      return json(res,200,{ok:true,model:cfg.openaiTextModel,requestId:response.headers.get('x-request-id')||null});
+    }
     if(req.method==='GET'&&parts[0]==='media'&&parts[1]) {
       const p=loadProject(decodeURIComponent(parts[1]),cfg);
       if(parts[2]==='final') {
@@ -56,9 +117,11 @@ const server=http.createServer(async (req,res)=>{
         finally { running.delete(id); }
       }
     }
-    if(req.method==='GET' && url.pathname==='/app.js') return serve(res,path.join(pub,'app.js'),'text/javascript; charset=utf-8');
-    if(req.method==='GET' && url.pathname==='/styles.css') return serve(res,path.join(pub,'styles.css'),'text/css; charset=utf-8');
-    if(req.method==='GET' && (url.pathname==='/'||url.pathname==='/index.html')) return serve(res,path.join(pub,'index.html'),'text/html; charset=utf-8');
+    if(req.method==='GET') {
+      const relative=url.pathname==='/'?'index.html':decodeURIComponent(url.pathname).replace(/^\/+/, '');
+      const file=path.resolve(pub,relative);
+      if(file.startsWith(`${pub}${path.sep}`)&&fs.existsSync(file)&&fs.statSync(file).isFile()) return serve(res,file,mimeFor(file));
+    }
     res.writeHead(404).end('Not found');
   } catch(e) { json(res,500,{error:e.message,stack:process.env.NODE_ENV==='development'?e.stack:undefined}); }
 });

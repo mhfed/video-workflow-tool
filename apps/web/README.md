@@ -1,3 +1,11 @@
 # Web App
 
-TanStack Start application. Owns UI and local API routes, but not renderer implementation details.
+React + Vite review desk using local shadcn UI components. The Node server owns the local API and serves the production build; renderer implementation details remain behind the renderer adapters.
+
+From the repository root:
+
+```bash
+npm run web
+```
+
+`npm run web` builds the client into `apps/web/dist` before starting the local server at `http://127.0.0.1:4173`.

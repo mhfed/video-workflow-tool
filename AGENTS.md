@@ -11,6 +11,7 @@ Keep this repository a reliable local-first video workflow tool for one owner.
 - Do not commit generated media, `.env`, API keys, or the cloned whiteboard engine.
 - The `simple` renderer + mock providers must remain an offline smoke-test path.
 - Before committing a meaningful phase, run `npm test` and `npm run smoke` when FFmpeg is available.
+- After completing a requested change, commit all task-related changes and push the current branch to `origin`; never include ignored secrets, generated media, build output, or the external whiteboard engine.
 
 ## Architecture
 

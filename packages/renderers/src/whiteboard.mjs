@@ -2,15 +2,72 @@ import fs from 'node:fs'; import path from 'node:path'; import { run } from '../
 export function whiteboardScript(cfg) { return path.join(cfg.whiteboardEngineDir,'scripts','render_stream_whiteboard.py'); }
 function prepareScript(cfg) { return path.join(cfg.whiteboardEngineDir,'scripts','prepare_env.py'); }
 function parseEnvPython(output) { const match=String(output||'').match(/(?:^|\n)ENV_PY=(.+)\s*$/m); return match?.[1]?.trim() || ''; }
+
+function managedVenvPython(cfg) {
+  return process.platform === 'win32'
+    ? path.join(cfg.whiteboardEngineDir, '.venv', 'Scripts', 'python.exe')
+    : path.join(cfg.whiteboardEngineDir, '.venv', 'bin', 'python');
+}
+
+async function repairManagedVenvPip(cfg) {
+  const python = managedVenvPython(cfg);
+  if (!fs.existsSync(python)) return false;
+  try {
+    await run(python, ['-m', 'pip', '--version'], { cwd: cfg.whiteboardEngineDir, capture: true });
+    return false;
+  } catch {}
+  try {
+    await run(python, ['-m', 'ensurepip', '--upgrade'], { cwd: cfg.whiteboardEngineDir, capture: true });
+    await run(python, ['-m', 'pip', '--version'], { cwd: cfg.whiteboardEngineDir, capture: true });
+    return true;
+  } catch (error) {
+    throw new Error(`Whiteboard virtual environment is missing pip and could not be repaired with ensurepip: ${error.message}`, { cause: error });
+  }
+}
+
+async function prepareUpstreamEnvironment(cfg) {
+  await repairManagedVenvPip(cfg);
+  try {
+    await run(cfg.pythonBin, [prepareScript(cfg)], { cwd: cfg.whiteboardEngineDir });
+  } catch (error) {
+    if (!await repairManagedVenvPip(cfg)) throw error;
+    await run(cfg.pythonBin, [prepareScript(cfg)], { cwd: cfg.whiteboardEngineDir });
+  }
+}
+
+function whiteboardCheckDetail(output) {
+  const missing = [...String(output || '').matchAll(/\[miss\]\s*([^\r\n]+)/g)].map((match) => match[1].trim());
+  if (missing.length) return `missing dependencies: ${missing.join(', ')}`;
+  return 'prepare_env.py --check did not return a usable ENV_PY interpreter';
+}
+
+export async function inspectWhiteboardEnvironment(cfg) {
+  if (cfg.whiteboardPython) {
+    return fs.existsSync(cfg.whiteboardPython)
+      ? { ok: true, python: cfg.whiteboardPython, detail: cfg.whiteboardPython }
+      : { ok: false, python: '', detail: `missing: ${cfg.whiteboardPython}` };
+  }
+  const prepare = prepareScript(cfg);
+  if (!fs.existsSync(prepare)) return { ok: true, python: cfg.pythonBin, detail: `${cfg.pythonBin} (no prepare_env.py)` };
+  try {
+    const result = await run(cfg.pythonBin, [prepare, '--check'], { cwd: cfg.whiteboardEngineDir, capture: true });
+    const python = parseEnvPython(`${result.stdout}\n${result.stderr}`);
+    if (python && fs.existsSync(python)) return { ok: true, python, detail: python };
+    return { ok: false, python: '', detail: whiteboardCheckDetail(`${result.stdout}\n${result.stderr}`) };
+  } catch (error) {
+    return { ok: false, python: '', detail: whiteboardCheckDetail(`${error.stdout || ''}\n${error.stderr || ''}`) };
+  }
+}
+
 async function checkedUpstreamPython(cfg) {
-  if (cfg.whiteboardPython) { if (!fs.existsSync(cfg.whiteboardPython)) throw new Error(`WHITEBOARD_PYTHON does not exist: ${cfg.whiteboardPython}`); return cfg.whiteboardPython; }
+  const inspection = await inspectWhiteboardEnvironment(cfg);
+  if (inspection.ok) return inspection.python;
   const prepare=prepareScript(cfg); if (!fs.existsSync(prepare)) return cfg.pythonBin;
-  try { const r=await run(cfg.pythonBin,[prepare,'--check'],{cwd:cfg.whiteboardEngineDir,capture:true}); const py=parseEnvPython(`${r.stdout}\n${r.stderr}`); if(py && fs.existsSync(py)) return py; } catch {}
   if (!cfg.whiteboardAutoInstall) throw new Error('Whiteboard Python environment is not ready. Set WHITEBOARD_AUTO_INSTALL=1, run the upstream prepare_env.py, or set WHITEBOARD_PYTHON explicitly.');
-  await run(cfg.pythonBin,[prepare],{cwd:cfg.whiteboardEngineDir});
-  const r=await run(cfg.pythonBin,[prepare,'--check'],{cwd:cfg.whiteboardEngineDir,capture:true}); const py=parseEnvPython(`${r.stdout}\n${r.stderr}`);
-  if (!py || !fs.existsSync(py)) throw new Error('Whiteboard prepare_env.py completed but did not return a usable ENV_PY interpreter.');
-  return py;
+  await prepareUpstreamEnvironment(cfg);
+  const prepared = await inspectWhiteboardEnvironment(cfg);
+  if (!prepared.ok) throw new Error(`Whiteboard prepare_env.py completed but the environment is not ready: ${prepared.detail}`);
+  return prepared.python;
 }
 export async function ensureWhiteboardEngine(cfg) {
   if (!fs.existsSync(whiteboardScript(cfg))) {

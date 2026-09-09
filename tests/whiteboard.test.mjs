@@ -31,3 +31,39 @@ test('whiteboard engine honors explicit interpreter override', async()=>{
   const root=fs.mkdtempSync(path.join(os.tmpdir(),'vwt-wb-py-')); const engine=path.join(root,'engine'); fs.mkdirSync(path.join(engine,'scripts'),{recursive:true}); fs.writeFileSync(path.join(engine,'scripts','render_stream_whiteboard.py'),'# fake');
   const py=await ensureWhiteboardEngine({whiteboardEngineDir:engine,whiteboardAutoInstall:false,whiteboardPython:process.execPath,pythonBin:'python3'}); assert.equal(py,process.execPath);
 });
+
+test('whiteboard engine repairs a managed virtual environment without pip', async()=>{
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'vwt-wb-pip-'));
+  const engine=path.join(root,'engine');
+  const scripts=path.join(engine,'scripts');
+  const venvBin=path.join(engine,'.venv','bin');
+  const py=path.join(venvBin,'python');
+  const pipMarker=path.join(engine,'.venv','pip-ready');
+  fs.mkdirSync(scripts,{recursive:true});
+  fs.mkdirSync(venvBin,{recursive:true});
+  fs.writeFileSync(path.join(scripts,'render_stream_whiteboard.py'),'# fake');
+  fs.writeFileSync(py,`#!/bin/sh
+if [ "$1 $2" = "-m ensurepip" ]; then
+  touch ${JSON.stringify(pipMarker)}
+  exit 0
+fi
+if [ "$1 $2" = "-m pip" ]; then
+  test -f ${JSON.stringify(pipMarker)}
+  exit $?
+fi
+exit 0
+`);
+  fs.chmodSync(py,0o755);
+  fs.writeFileSync(path.join(scripts,'prepare_env.py'),`import subprocess
+import sys
+py=${JSON.stringify(py)}
+if subprocess.run([py, '-m', 'pip', '--version']).returncode != 0:
+    print('[miss] pip')
+    sys.exit(1)
+print('ENV_PY=' + py)
+`);
+
+  const selected=await ensureWhiteboardEngine({whiteboardEngineDir:engine,whiteboardAutoInstall:true,whiteboardPython:'',pythonBin:'python3'});
+  assert.equal(selected,py);
+  assert.ok(fs.existsSync(pipMarker));
+});
