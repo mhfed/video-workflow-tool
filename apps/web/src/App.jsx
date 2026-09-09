@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   Activity,
+  ArrowLeft,
   ArrowRight,
   BrainCircuit,
   Bot,
@@ -30,7 +31,7 @@ import {
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { CardDescription } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -72,74 +73,87 @@ function EmptyState({onCreate,onDemo,c}){
   </div>;
 }
 
-function ArtifactPreview({project,scene,c}){
-  const artifacts=scene.artifacts||{};
+function StagePreview({project,scene,stage,c}){
   const version=encodeURIComponent(project.updatedAt||'current');
   const media=(kind)=>`/media/${encodeURIComponent(project.id)}/scenes/${encodeURIComponent(scene.id)}/${kind}?v=${version}`;
-  if(!artifacts.visual&&!artifacts.voice&&!artifacts.clip)return <div className="artifact-placeholder">
+  if(stage==='clip'&&scene.artifacts?.clip)return <video className="workbench-video" controls preload="metadata" src={media('clip')}/>;
+  if(stage==='visual'&&scene.artifacts?.visual)return <img className="workbench-image" src={media('visual')} alt={`${c.visual} ${scene.id}`}/>;
+  if(stage==='voice'&&scene.artifacts?.voice)return <div className="voice-stage-preview"><Mic2/><strong>{c.narration}</strong><p>{scene.text}</p><audio controls preload="metadata" src={media('voice')}/></div>;
+  if(stage==='script')return <div className="script-stage-preview"><span>“</span><p>{scene.text}</p><small>{scene.text.length} {c.chars} · {(scene.durationMs/1000).toFixed(1)} {c.seconds}</small></div>;
+  return <div className="artifact-placeholder workbench-placeholder">
     <div className="frame-corners"><span/><span/><span/><span/></div>
-    <ImageIcon size={24}/><span>{c.awaitingRender}</span>
-  </div>;
-  return <div className="artifact-grid">
-    {artifacts.visual&&<figure><img src={media('visual')} alt={`${c.visual} ${scene.id}`}/><figcaption><ImageIcon/>{c.visual}</figcaption></figure>}
-    {artifacts.clip&&<figure className="clip-preview"><video controls preload="metadata" src={media('clip')}/><figcaption><Film/>{c.renderedClip}</figcaption></figure>}
-    {artifacts.voice&&<figure className="audio-preview"><audio controls preload="metadata" src={media('voice')}/><figcaption><Mic2/>{c.narration}</figcaption></figure>}
+    {stage==='voice'?<Mic2/>:stage==='clip'?<Film/>:<ImageIcon/>}<span>{stage==='visual'&&scene.cache?.image?c.mockVisualReady:c.awaitingStage}</span>
   </div>;
 }
 
 const stageArtifactReady=(scene,stage)=>stage==='script'||stage==='voice'&&!!scene.cache?.voice||stage==='visual'&&!!scene.cache?.image||stage==='clip'&&!!scene.artifacts?.clip;
+const WORKBENCH_STAGES=['script','voice','visual','clip'];
+const stageLabel=(stage,c)=>({script:c.scriptStage,voice:c.voiceStage,visual:c.visualStage,clip:c.clipStage}[stage]);
 
-function ReviewStage({scene,stage,label,running,onRun,onReview,c}){
-  const decision=scene.review?.[stage]||'pending';
-  const ready=stageArtifactReady(scene,stage);
-  const canGenerate=stage!=='script';
-  const upstreamApproved=stage==='voice'||stage==='visual'?scene.review?.script==='approved':stage==='clip'?scene.review?.voice==='approved'&&scene.review?.visual==='approved':true;
-  return <div className={`review-stage ${decision}`}>
-    <div className="review-stage-head"><span>{label}</span><small>{c.review[decision]||decision}</small></div>
-    <div className="review-stage-actions">
-      {canGenerate&&<button disabled={running||!upstreamApproved} onClick={()=>onRun(scene.id,stage)}><RefreshCw/>{ready?c.regenerate:c.generate}</button>}
-      {ready&&<>
-        <button className="approve" disabled={running||decision==='approved'} onClick={()=>onReview(scene.id,stage,'approved')} aria-label={`${c.approve} ${label}`}><Check/></button>
-        <button className="reject" disabled={running||decision==='changes-requested'} onClick={()=>onReview(scene.id,stage,'changes-requested')} aria-label={`${c.requestChanges} ${label}`}><X/></button>
-      </>}
-    </div>
-  </div>;
-}
-
-function SceneCard({project,scene,index,running,onSave,onRunStage,onReview,c}){
+function Workbench({project,running,onSave,onRunStage,onReview,c}){
+  const [selectedId,setSelectedId]=useState(project.scenes[0]?.id);
+  const [stage,setStage]=useState('script');
+  const sceneIndex=Math.max(0,project.scenes.findIndex((item)=>item.id===selectedId));
+  const scene=project.scenes[sceneIndex]||project.scenes[0];
   const [text,setText]=useState(scene.text);
   const [prompt,setPrompt]=useState(scene.visualPrompt);
-  useEffect(()=>{setText(scene.text);setPrompt(scene.visualPrompt);},[scene.text,scene.visualPrompt]);
+  useEffect(()=>{if(!project.scenes.some((item)=>item.id===selectedId))setSelectedId(project.scenes[0]?.id);},[project.id,project.scenes,selectedId]);
+  useEffect(()=>{setText(scene.text);setPrompt(scene.visualPrompt);},[scene.id,scene.text,scene.visualPrompt]);
   const dirty=text!==scene.text||prompt!==scene.visualPrompt;
-  return <Card className="scene-card">
-    <CardHeader className="scene-card-header">
-      <div className="scene-number">{String(index+1).padStart(2,'0')}</div>
-      <div className="scene-heading">
-        <div className="scene-meta"><span>{scene.id}</span><Badge variant={badgeVariant(scene.status)}>{statusLabel(scene.status,c)}</Badge></div>
-        <CardTitle>{text.split(/[.!?]/)[0]||`${c.scenes} ${index+1}`}</CardTitle>
+  const decision=scene.review?.[stage]||'pending';
+  const ready=stageArtifactReady(scene,stage);
+  const upstreamApproved=stage==='voice'||stage==='visual'?scene.review?.script==='approved':stage==='clip'?scene.review?.voice==='approved'&&scene.review?.visual==='approved':true;
+  const go=(offset)=>setSelectedId(project.scenes[Math.min(project.scenes.length-1,Math.max(0,sceneIndex+offset))].id);
+  const approveAndNext=async()=>{await onReview(scene.id,stage,'approved');if(sceneIndex<project.scenes.length-1)go(1);};
+
+  useEffect(()=>{
+    const handle=(event)=>{
+      if(['INPUT','TEXTAREA','BUTTON'].includes(event.target?.tagName))return;
+      if(event.key==='ArrowDown')go(1);
+      if(event.key==='ArrowUp')go(-1);
+      if(/^[1-4]$/.test(event.key))setStage(WORKBENCH_STAGES[Number(event.key)-1]);
+    };
+    window.addEventListener('keydown',handle);return()=>window.removeEventListener('keydown',handle);
+  },[sceneIndex,project.scenes.length]);
+
+  return <section className="workbench">
+    <aside className="scene-navigator">
+      <div className="workbench-pane-head"><span>{c.sceneNavigator}</span><Badge variant="outline">{project.scenes.length}</Badge></div>
+      <div className="scene-nav-list">{project.scenes.map((item,index)=><button key={item.id} className={item.id===scene.id?'active':''} onClick={()=>setSelectedId(item.id)}>
+        <span className="scene-nav-number">{String(index+1).padStart(2,'0')}</span>
+        <span className="scene-nav-copy"><strong>{item.text.split(/[.!?]/)[0]}</strong><small>{(item.durationMs/1000).toFixed(1)} {c.seconds}</small></span>
+        <span className="scene-nav-dots">{WORKBENCH_STAGES.map((itemStage)=><i key={itemStage} className={item.review?.[itemStage]||'pending'} title={`${stageLabel(itemStage,c)}: ${c.review[item.review?.[itemStage]||'pending']}`}/>)}</span>
+      </button>)}</div>
+    </aside>
+
+    <div className="preview-deck">
+      <div className="preview-toolbar"><div><span>{scene.id}</span><strong>{stageLabel(stage,c)}</strong></div><Badge variant={badgeVariant(scene.status)}>{statusLabel(scene.status,c)}</Badge></div>
+      <div className="preview-canvas"><StagePreview project={project} scene={scene} stage={stage} c={c}/></div>
+      <div className="scene-pager"><button disabled={sceneIndex===0} onClick={()=>go(-1)}><ArrowLeft/>{c.previousScene}</button><span>{sceneIndex+1} / {project.scenes.length}</span><button disabled={sceneIndex===project.scenes.length-1} onClick={()=>go(1)}>{c.nextScene}<ArrowRight/></button></div>
+    </div>
+
+    <aside className="scene-inspector">
+      <div className="workbench-pane-head"><span>{c.inspector}</span><small>{stageLabel(stage,c)}</small></div>
+      <div className="inspector-body">
+        {stage==='script'&&<label><span>{c.narration}</span><small>{text.length} {c.chars}</small><Textarea value={text} onChange={(event)=>setText(event.target.value)} rows={12}/></label>}
+        {stage==='visual'&&<label><span>{c.visualDirection}</span><small>{c.imagePrompt}</small><Textarea value={prompt} onChange={(event)=>setPrompt(event.target.value)} rows={14}/></label>}
+        {stage==='voice'&&<div className="inspector-note"><Mic2/><strong>{c.voiceStage}</strong><p>{c.voiceInspectorBody}</p><small>{(scene.durationMs/1000).toFixed(1)} {c.seconds}</small></div>}
+        {stage==='clip'&&<div className="inspector-note"><Film/><strong>{c.clipStage}</strong><p>{c.clipInspectorBody}</p><small>{scene.artifacts?.clip||c.awaitingStage}</small></div>}
       </div>
-      <div className="scene-duration"><span>{(scene.durationMs/1000).toFixed(1)}</span> {c.seconds}</div>
-    </CardHeader>
-    <CardContent className="scene-card-content">
-      <ArtifactPreview project={project} scene={scene} c={c}/>
-      <div className="scene-editor">
-        <label htmlFor={`${scene.id}-narration`}><span>{c.narration}</span><small>{text.length} {c.chars}</small></label>
-        <Textarea id={`${scene.id}-narration`} value={text} onChange={(event)=>setText(event.target.value)} rows={5}/>
-        <label htmlFor={`${scene.id}-prompt`}><span>{c.visualDirection}</span><small>{c.imagePrompt}</small></label>
-        <Textarea id={`${scene.id}-prompt`} value={prompt} onChange={(event)=>setPrompt(event.target.value)} rows={6}/>
-        <div className="scene-actions">
-          <Button variant="ghost" disabled={!dirty||running} onClick={()=>onSave(scene.id,{text,visualPrompt:prompt})}><Save/>{c.saveEdit}</Button>
-          {project.settings?.workflowMode==='auto'&&<Button disabled={running} onClick={async()=>{if(dirty)await onSave(scene.id,{text,visualPrompt:prompt});await onRunStage(scene.id,'all');}}>{running?<LoaderCircle className="spin"/>:<WandSparkles/>}{c.renderScene}</Button>}
-        </div>
+      <div className="inspector-actions"><Button variant="outline" disabled={!dirty||running} onClick={()=>onSave(scene.id,{text,visualPrompt:prompt})}><Save/>{c.saveEdit}</Button></div>
+    </aside>
+
+    <footer className="stage-dock">
+      <div className="stage-tabs">{WORKBENCH_STAGES.map((itemStage,index)=>{const itemDecision=scene.review?.[itemStage]||'pending';return <button key={itemStage} className={`${stage===itemStage?'active':''} ${itemDecision}`} onClick={()=>setStage(itemStage)}><span>0{index+1}</span><strong>{stageLabel(itemStage,c)}</strong><small>{c.review[itemDecision]}</small></button>;})}</div>
+      <div className="stage-primary">
+        {project.settings?.workflowMode==='auto'?<Button disabled={running} onClick={async()=>{if(dirty)await onSave(scene.id,{text,visualPrompt:prompt});await onRunStage(scene.id,'all');}}>{running?<LoaderCircle className="spin"/>:<WandSparkles/>}{c.renderScene}</Button>:<>
+          {stage!=='script'&&<Button variant="outline" disabled={running||!upstreamApproved} onClick={()=>onRunStage(scene.id,stage)}><RefreshCw/>{ready?c.regenerate:c.generate}</Button>}
+          {ready&&decision!=='changes-requested'&&<Button variant="ghost" disabled={running} onClick={()=>onReview(scene.id,stage,'changes-requested')}><X/>{c.requestChanges}</Button>}
+          <Button disabled={running||dirty||!ready||decision==='approved'} onClick={approveAndNext}><Check/>{sceneIndex<project.scenes.length-1?c.approveNext:c.approve}</Button>
+        </>}
       </div>
-    </CardContent>
-    {project.settings?.workflowMode==='studio'&&<div className="review-track">
-      <ReviewStage scene={scene} stage="script" label={c.scriptStage} running={running||dirty} onRun={onRunStage} onReview={onReview} c={c}/>
-      <ReviewStage scene={scene} stage="voice" label={c.voiceStage} running={running} onRun={onRunStage} onReview={onReview} c={c}/>
-      <ReviewStage scene={scene} stage="visual" label={c.visualStage} running={running} onRun={onRunStage} onReview={onReview} c={c}/>
-      <ReviewStage scene={scene} stage="clip" label={c.clipStage} running={running} onRun={onRunStage} onReview={onReview} c={c}/>
-    </div>}
-  </Card>;
+    </footer>
+  </section>;
 }
 
 function NewProjectDialog({open,onOpenChange,onCreate,busy,defaultRenderer='simple',defaultLanguage='vi',c}){
@@ -310,7 +324,6 @@ export default function App(){
   const running=!!current&&health?.running?.includes(current.id);
   const config=health?.config;
   const c=copyFor(config?.uiLanguage||'vi');
-  const completed=useMemo(()=>current?.scenes?.filter((scene)=>scene.status==='ready').length||0,[current]);
   const approvedClips=useMemo(()=>current?.scenes?.filter((scene)=>scene.review?.clip==='approved').length||0,[current]);
 
   const refreshHealth=async()=>setHealth(await api('/api/health'));
@@ -343,8 +356,8 @@ export default function App(){
       <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onClick={()=>Promise.all([refreshProjects(),refreshHealth()])}><RefreshCw/></Button></TooltipTrigger><TooltipContent>{c.refreshWorkspace}</TooltipContent></Tooltip>
     </header>
 
-    <div className="workspace-grid">
-      <aside className="project-rail">
+    <div className={`workspace-grid ${current?'project-open':''}`}>
+      <aside className={`project-rail ${current?'compact':''}`}>
         <div className="rail-heading"><span>{c.productions}</span><Badge variant="outline">{projects.length}</Badge></div>
         <Button className="new-project-button" onClick={()=>setDialogOpen(true)}><Plus/>{c.newProduction}</Button>
         <ScrollArea className="project-scroll">
@@ -360,22 +373,20 @@ export default function App(){
         </button>
       </aside>
 
-      <main className="main-stage">
+      <main className={`main-stage ${current?'workbench-stage':''}`}>
         {error&&<div className="error-banner"><CircleDot/><span>{error}</span><button onClick={()=>setError('')}>{c.dismiss}</button></div>}
         {!current?<EmptyState onCreate={()=>setDialogOpen(true)} onDemo={createDemo} c={c}/>:<>
-          <section className="project-header">
-            <div><div className="eyebrow">{c.production} / {current.id.slice(-6).toUpperCase()}</div><h1>{current.title}</h1><div className="project-subline"><Badge variant={badgeVariant(current.status)}>{statusLabel(current.status,c)}</Badge><span>{current.scenes.length} {c.scenes}</span><span>{completed}/{current.scenes.length} {c.rendered}</span></div></div>
+          <section className="project-header compact-header">
+            <div><div className="eyebrow">{c.production} / {current.id.slice(-6).toUpperCase()}</div><h1>{current.title}</h1></div>
             <div className="project-actions">
+              <div className="compact-progress"><strong>{approvedClips}/{current.scenes.length}</strong><small>{c.clipsApproved}</small></div>
+              <div className="mode-switch light"><button className={current.settings?.workflowMode==='studio'?'active':''} disabled={busy||running} onClick={()=>updateProject({workflowMode:'studio'})}><SlidersHorizontal/>{c.studioMode}</button><button className={current.settings?.workflowMode==='auto'?'active':''} disabled={busy||running} onClick={()=>updateProject({workflowMode:'auto'})}><Bot/>{c.autoMode}</button></div>
               <label className="renderer-control"><span>{c.renderer}</span><Select value={current.settings?.renderer||config?.renderer||'simple'} onValueChange={changeRenderer} disabled={busy||running}><SelectTrigger aria-label={c.renderer}><SelectValue/></SelectTrigger><SelectContent><SelectItem value="whiteboard">{c.whiteboard}</SelectItem><SelectItem value="simple">{c.simple}</SelectItem></SelectContent></Select></label>
-              <Button variant="outline" onClick={()=>load(current.id)}><RefreshCw/>{c.refresh}</Button><Button size="lg" disabled={busy||running||current.settings?.workflowMode==='studio'&&approvedClips!==current.scenes.length} onClick={()=>run({stage:current.settings?.workflowMode==='studio'?'final':'all'})}>{busy||running?<LoaderCircle className="spin"/>:<Play/>}{busy||running?c.rendering:current.settings?.workflowMode==='studio'?c.assembleFinal:c.runPipeline}</Button>
+              <Button size="lg" disabled={busy||running||current.settings?.workflowMode==='studio'&&approvedClips!==current.scenes.length} onClick={()=>run({stage:current.settings?.workflowMode==='studio'?'final':'all'})}>{busy||running?<LoaderCircle className="spin"/>:<Play/>}{busy||running?c.rendering:current.settings?.workflowMode==='studio'?c.assembleFinal:c.runPipeline}</Button>
             </div>
           </section>
-          <div className="workflow-console"><div><span>{c.workflowMode}</span><strong>{current.settings?.workflowMode==='auto'?c.autoMode:c.studioMode}</strong><small>{current.settings?.workflowMode==='auto'?c.autoModeBody:c.studioModeBody}</small></div><div className="mode-switch"><button className={current.settings?.workflowMode==='studio'?'active':''} disabled={busy||running} onClick={()=>updateProject({workflowMode:'studio'})}><SlidersHorizontal/>{c.studioMode}</button><button className={current.settings?.workflowMode==='auto'?'active':''} disabled={busy||running} onClick={()=>updateProject({workflowMode:'auto'})}><Bot/>{c.autoMode}</button></div>{current.settings?.workflowMode==='studio'&&<div className="approval-meter"><span>{approvedClips}/{current.scenes.length}</span><small>{c.clipsApproved}</small></div>}</div>
-          <Separator/>
           {current.error&&<div className="project-error"><strong>{c.lastRunStopped}</strong><span>{current.error.message}</span></div>}
-          {current.artifacts?.final?<Card className="final-card"><div className="final-copy"><Badge>{c.masterCut}</Badge><h2>{c.finalFilm}</h2><p>{c.finalBody}</p><code>{current.artifacts.final}</code></div><video controls preload="metadata" src={`/media/${encodeURIComponent(current.id)}/final?v=${encodeURIComponent(current.updatedAt||'current')}`}>{current.artifacts?.captions&&<track key={current.updatedAt} kind="subtitles" src={`/media/${encodeURIComponent(current.id)}/captions?v=${encodeURIComponent(current.updatedAt||'current')}`} srcLang={current.settings?.captionLanguage||'vi'} label={current.settings?.captionLanguage==='vi'?'Tiếng Việt':c.subtitles} default/>}</video></Card>:<div className="final-awaiting"><Film/><div><strong>{c.masterPending}</strong><span>{c.masterPendingBody}</span></div><span className="progress-count">{completed}/{current.scenes.length}</span></div>}
-          <div className="section-heading"><div><span>{c.sceneDesk}</span><h2>{c.directBeat}</h2></div><p>{c.sceneDeskBody}</p></div>
-          <div className="scene-list">{current.scenes.map((scene,index)=><SceneCard key={scene.id} project={current} scene={scene} index={index} running={busy||running} onSave={saveScene} onRunStage={runStage} onReview={reviewStage} c={c}/>)}</div>
+          <Workbench project={current} running={busy||running} onSave={saveScene} onRunStage={runStage} onReview={reviewStage} c={c}/>
         </>}
       </main>
     </div>

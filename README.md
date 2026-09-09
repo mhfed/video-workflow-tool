@@ -31,6 +31,8 @@ npm run web
 
 Open `http://127.0.0.1:4173`. The default **Topic → auto script** input lets you enter an idea and choose target minutes. New projects default to **Studio**, where script, voice, visual, and clip checkpoints are reviewed independently. Switch a project to **Auto run** when you want a complete first draft in one pass.
 
+The Studio UI uses a single-scene workbench: compact scene navigation on the left, one stage preview in the center, a focused inspector on the right, and the approval pipeline fixed along the bottom. On desktop the production workspace stays within one viewport; long scene lists and editor content scroll independently.
+
 The interface and new video projects default to Vietnamese. In **Provider settings → Language**, you can switch the interface and independently choose Vietnamese or English as the default content language. Each project records its own language in `project.json`, and generated narration plus embedded subtitles follow that setting.
 
 The default real configuration uses:
