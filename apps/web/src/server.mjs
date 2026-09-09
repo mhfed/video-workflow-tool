@@ -176,10 +176,22 @@ const server=http.createServer(async (req,res)=>{
         if(b.decision==='approved'&&!reviewable)return json(res,409,{error:`Generate ${b.stage} before approving it.`});
         setReviewDecision(p,s,b.stage,b.decision); saveProject(p,cfg); return json(res,200,p);
       }
+      if(req.method==='POST'&&parts[3]==='review'&&parts.length===4) {
+        if(running.has(id))return json(res,409,{error:'Wait for this project render to finish before reviewing scenes.'});
+        const b=await readBody(req); const p=loadProject(id,cfg); const ids=Array.isArray(b.sceneIds)?[...new Set(b.sceneIds)]:[];
+        const scenes=p.scenes.filter((scene)=>ids.includes(scene.id));
+        if(!ids.length||scenes.length!==ids.length)return json(res,400,{error:'Choose one or more valid scenes.'});
+        for(const s of scenes){
+          const reviewable=b.stage==='script'||b.stage==='voice'&&!!s.cache?.voice||b.stage==='visual'&&!!s.cache?.image||b.stage==='clip'&&!!s.artifacts?.clip;
+          if(b.decision==='approved'&&!reviewable)return json(res,409,{error:`Generate ${b.stage} for ${s.id} before approving it.`});
+        }
+        for(const s of scenes)setReviewDecision(p,s,b.stage,b.decision);
+        saveProject(p,cfg); return json(res,200,p);
+      }
       if(req.method==='POST'&&parts[3]==='run') {
         if(running.has(id)) return json(res,409,{error:'This project is already running'});
         const b=await readBody(req); running.add(id);
-        try { const result=await runPipeline(id,{force:!!b.force,sceneId:b.sceneId||null,stage:b.stage||'all'}); return json(res,200,{project:result.project,final:result.final}); }
+        try { const result=await runPipeline(id,{force:!!b.force,sceneId:b.sceneId||null,sceneIds:Array.isArray(b.sceneIds)?b.sceneIds:null,stage:b.stage||'all'}); return json(res,200,{project:result.project,final:result.final}); }
         catch(e){ try{const p=loadProject(id,cfg);p.status='error';p.error={message:e.message,at:new Date().toISOString()};saveProject(p,cfg);}catch{} throw e; }
         finally { running.delete(id); }
       }

@@ -78,6 +78,8 @@ These are orchestration policies, not separate pipelines. Both modes call the sa
 
 In Studio mode, script approval unlocks voice and visual generation. Approved voice and visual artifacts unlock clip rendering. Every scene clip must be approved before final assembly.
 
+Stage-first and bulk operations pass an explicit scene ID set into the same pipeline runner. The runner validates that set and processes only those scenes, preserving the per-scene cache and the invariant that unrelated scenes are never rerun.
+
 ## 5. Cache / stale behavior
 
 Every scene stores independent SHA-256 keys for voice, image, video, and clip outputs. Each key includes only the inputs relevant to that step.

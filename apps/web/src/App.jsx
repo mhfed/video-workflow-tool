@@ -14,6 +14,8 @@ import {
   Film,
   Image as ImageIcon,
   KeyRound,
+  Layers3,
+  ListChecks,
   LoaderCircle,
   Mic2,
   MoreHorizontal,
@@ -89,10 +91,13 @@ function StagePreview({project,scene,stage,c}){
 const stageArtifactReady=(scene,stage)=>stage==='script'||stage==='voice'&&!!scene.cache?.voice||stage==='visual'&&!!scene.cache?.image||stage==='clip'&&!!scene.artifacts?.clip;
 const WORKBENCH_STAGES=['script','voice','visual','clip'];
 const stageLabel=(stage,c)=>({script:c.scriptStage,voice:c.voiceStage,visual:c.visualStage,clip:c.clipStage}[stage]);
+const canGenerateStage=(scene,stage)=>stage==='voice'||stage==='visual'?scene.review?.script==='approved':stage==='clip'?scene.review?.voice==='approved'&&scene.review?.visual==='approved':false;
+const reviewRank=(decision)=>({'changes-requested':0,stale:1,pending:2,approved:9}[decision]??3);
 
-function Workbench({project,running,onSave,onRunStage,onReview,c}){
+function Workbench({project,running,onSave,onRunStage,onReview,onBulkRun,onBulkReview,c}){
   const [selectedId,setSelectedId]=useState(project.scenes[0]?.id);
   const [stage,setStage]=useState('script');
+  const [viewMode,setViewMode]=useState('scene');
   const sceneIndex=Math.max(0,project.scenes.findIndex((item)=>item.id===selectedId));
   const scene=project.scenes[sceneIndex]||project.scenes[0];
   const [text,setText]=useState(scene.text);
@@ -102,9 +107,21 @@ function Workbench({project,running,onSave,onRunStage,onReview,c}){
   const dirty=text!==scene.text||prompt!==scene.visualPrompt;
   const decision=scene.review?.[stage]||'pending';
   const ready=stageArtifactReady(scene,stage);
-  const upstreamApproved=stage==='voice'||stage==='visual'?scene.review?.script==='approved':stage==='clip'?scene.review?.voice==='approved'&&scene.review?.visual==='approved':true;
+  const upstreamApproved=stage==='script'||canGenerateStage(scene,stage);
   const go=(offset)=>setSelectedId(project.scenes[Math.min(project.scenes.length-1,Math.max(0,sceneIndex+offset))].id);
-  const approveAndNext=async()=>{await onReview(scene.id,stage,'approved');if(sceneIndex<project.scenes.length-1)go(1);};
+  const bulkGenerateIds=project.scenes.filter((item)=>stage!=='script'&&canGenerateStage(item,stage)&&item.review?.[stage]!=='approved').map((item)=>item.id);
+  const bulkApproveIds=project.scenes.filter((item)=>stageArtifactReady(item,stage)&&item.review?.[stage]!=='approved').map((item)=>item.id);
+  const smartNext=(approvedCurrent=false)=>{
+    const candidates=[];
+    for(const [itemIndex,item] of project.scenes.entries())for(const [stageIndex,itemStage] of WORKBENCH_STAGES.entries()){
+      const itemDecision=approvedCurrent&&item.id===scene.id&&itemStage===stage?'approved':item.review?.[itemStage]||'pending';
+      if(itemDecision!=='approved')candidates.push({item,itemStage,itemIndex,stageIndex,rank:reviewRank(itemDecision)});
+    }
+    const filtered=viewMode==='stage'?candidates.filter((item)=>item.itemStage===stage):candidates;
+    filtered.sort((a,b)=>a.rank-b.rank||(viewMode==='stage'?a.itemIndex-b.itemIndex:a.itemIndex-b.itemIndex||a.stageIndex-b.stageIndex));
+    const next=filtered[0];if(next){setSelectedId(next.item.id);setStage(next.itemStage);}
+  };
+  const approveAndNext=async()=>{await onReview(scene.id,stage,'approved');smartNext(true);};
 
   useEffect(()=>{
     const handle=(event)=>{
@@ -117,12 +134,14 @@ function Workbench({project,running,onSave,onRunStage,onReview,c}){
   },[sceneIndex,project.scenes.length]);
 
   return <section className="workbench">
-    <aside className="scene-navigator">
+    <aside className={`scene-navigator view-${viewMode}`}>
       <div className="workbench-pane-head"><span>{c.sceneNavigator}</span><Badge variant="outline">{project.scenes.length}</Badge></div>
+      <div className="review-view-toggle"><button className={viewMode==='scene'?'active':''} onClick={()=>setViewMode('scene')}><ListChecks/>{c.byScene}</button><button className={viewMode==='stage'?'active':''} onClick={()=>setViewMode('stage')}><Layers3/>{c.byStage}</button></div>
+      <button className="smart-next" onClick={()=>smartNext()}><Sparkles/>{c.nextTask}<ArrowRight/></button>
       <div className="scene-nav-list">{project.scenes.map((item,index)=><button key={item.id} className={item.id===scene.id?'active':''} onClick={()=>setSelectedId(item.id)}>
         <span className="scene-nav-number">{String(index+1).padStart(2,'0')}</span>
         <span className="scene-nav-copy"><strong>{item.text.split(/[.!?]/)[0]}</strong><small>{(item.durationMs/1000).toFixed(1)} {c.seconds}</small></span>
-        <span className="scene-nav-dots">{WORKBENCH_STAGES.map((itemStage)=><i key={itemStage} className={item.review?.[itemStage]||'pending'} title={`${stageLabel(itemStage,c)}: ${c.review[item.review?.[itemStage]||'pending']}`}/>)}</span>
+        <span className="scene-nav-dots">{WORKBENCH_STAGES.map((itemStage)=><i key={itemStage} className={`${item.review?.[itemStage]||'pending'} ${itemStage===stage?'current-stage':''}`} title={`${stageLabel(itemStage,c)}: ${c.review[item.review?.[itemStage]||'pending']}`}/>)}</span>
       </button>)}</div>
     </aside>
 
@@ -152,6 +171,7 @@ function Workbench({project,running,onSave,onRunStage,onReview,c}){
           <Button disabled={running||dirty||!ready||decision==='approved'} onClick={approveAndNext}><Check/>{sceneIndex<project.scenes.length-1?c.approveNext:c.approve}</Button>
         </>}
       </div>
+      {project.settings?.workflowMode==='studio'&&<div className="bulk-actions"><span>{c.bulkActions}</span>{stage!=='script'&&<button disabled={running||!bulkGenerateIds.length} onClick={()=>onBulkRun(stage,bulkGenerateIds)}><RefreshCw/>{c.generateEligible} <b>{bulkGenerateIds.length}</b></button>}<button disabled={running||!bulkApproveIds.length} onClick={()=>onBulkReview(stage,bulkApproveIds,'approved')}><Check/>{c.approveReady} <b>{bulkApproveIds.length}</b></button></div>}
     </footer>
   </section>;
 }
@@ -343,7 +363,9 @@ export default function App(){
   const changeRenderer=async(renderer)=>{if(!current||renderer===current.settings?.renderer)return;await updateProject({renderer});};
   const run=async(body={})=>{setBusy(true);setError('');try{await api(`/api/projects/${encodeURIComponent(current.id)}/run`,{method:'POST',body:JSON.stringify(body)});await load(current.id);}catch(cause){setError(cause.message);try{await load(current.id);}catch{}}finally{setBusy(false);await refreshHealth().catch(()=>{});}};
   const runStage=async(sceneId,stage)=>run({sceneId,stage});
+  const runBulk=async(stage,sceneIds)=>run({stage,sceneIds});
   const reviewStage=async(sceneId,stage,decision)=>{setBusy(true);setError('');try{const project=await api(`/api/projects/${encodeURIComponent(current.id)}/scenes/${encodeURIComponent(sceneId)}/review`,{method:'POST',body:JSON.stringify({stage,decision})});setCurrent(project);await refreshProjects();}catch(cause){setError(cause.message);}finally{setBusy(false);}};
+  const reviewBulk=async(stage,sceneIds,decision)=>{setBusy(true);setError('');try{const project=await api(`/api/projects/${encodeURIComponent(current.id)}/review`,{method:'POST',body:JSON.stringify({stage,sceneIds,decision})});setCurrent(project);await refreshProjects();}catch(cause){setError(cause.message);}finally{setBusy(false);}};
 
   return <div className="app-shell">
     <header className="app-header">
@@ -386,7 +408,7 @@ export default function App(){
             </div>
           </section>
           {current.error&&<div className="project-error"><strong>{c.lastRunStopped}</strong><span>{current.error.message}</span></div>}
-          <Workbench project={current} running={busy||running} onSave={saveScene} onRunStage={runStage} onReview={reviewStage} c={c}/>
+          <Workbench project={current} running={busy||running} onSave={saveScene} onRunStage={runStage} onReview={reviewStage} onBulkRun={runBulk} onBulkReview={reviewBulk} c={c}/>
         </>}
       </main>
     </div>

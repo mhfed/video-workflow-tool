@@ -90,14 +90,18 @@ async function concatClips(project,cfg,clips) {
   project.artifacts.final=path.relative(projectDir(cfg,project.id),final); project.status='complete'; saveProject(project,cfg); return final;
 }
 
-export async function runPipeline(projectId,{force=false,sceneId=null,stage='all'}={}) {
+export async function runPipeline(projectId,{force=false,sceneId=null,sceneIds=null,stage='all'}={}) {
   const cfg=config(); const project=normalizeWorkflow(loadProject(projectId,cfg)); const clips=[];
   const studio=project.settings.workflowMode==='studio';
+  const targets=sceneId?[sceneId]:Array.isArray(sceneIds)?[...new Set(sceneIds)]:null;
   if(!['voice','visual','clip','final','all'].includes(stage))throw new Error(`Unsupported pipeline stage: ${stage}`);
+  if(targets&&!targets.length)throw new Error('Choose at least one scene to run.');
+  if(targets&&stage==='final')throw new Error('Final assembly always runs at project scope.');
   if(studio&&stage==='all')throw new Error('Studio mode runs one reviewed stage at a time. Switch to Auto run for an end-to-end render.');
-  if (sceneId) { invalidateFinal(project); saveProject(project,cfg); }
+  if(targets?.some((id)=>!project.scenes.some((scene)=>scene.id===id)))throw new Error('One or more selected scenes do not exist.');
+  if (targets) { invalidateFinal(project); saveProject(project,cfg); }
   for (const scene of project.scenes) {
-    if (sceneId && scene.id!==sceneId) { if (scene.artifacts.clip) clips.push(path.join(projectDir(cfg,project.id),scene.artifacts.clip)); continue; }
+    if (targets && !targets.includes(scene.id)) { if (scene.artifacts.clip) clips.push(path.join(projectDir(cfg,project.id),scene.artifacts.clip)); continue; }
     if(stage==='final')continue;
     if(studio)requireApproved(scene,['script'],`generating ${stage==='all'?'media':stage}`);
     if(stage==='voice'){await ensureVoice(scene,project,cfg,force);continue;}
@@ -109,7 +113,7 @@ export async function runPipeline(projectId,{force=false,sceneId=null,stage='all
     const video=await ensureVideo(scene,project,cfg,image,force);
     const clip=await ensureClip(scene,project,cfg,video,voice,force); clips.push(clip);
   }
-  if (sceneId || stage!=='all'&&stage!=='final') return {project:loadProject(projectId,cfg),final:null};
+  if (targets || stage!=='all'&&stage!=='final') return {project:loadProject(projectId,cfg),final:null};
   if(studio)for(const scene of project.scenes)requireApproved(scene,['clip'],'assembling the final cut');
   const allClips=project.scenes.map((s)=>s.artifacts.clip ? path.join(projectDir(cfg,project.id),s.artifacts.clip) : null);
   if (allClips.some((x)=>!x || !fileExists(x))) throw new Error('Not all scenes have final clips');
