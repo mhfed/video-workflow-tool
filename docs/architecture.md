@@ -67,11 +67,24 @@ script / SRT
 
 Narration is generated per scene. The measured voice duration updates that scene's timeline before video rendering, which keeps audio and visuals synchronized.
 
+### Workflow modes
+
+The application exposes two operating modes over this same dependency graph:
+
+- `auto` runs every stale stage through the final cut and is intended for fast first drafts and automation;
+- `studio` exposes script, voice, visual, and clip checkpoints. Creative downstream work is gated by explicit owner approval.
+
+These are orchestration policies, not separate pipelines. Both modes call the same provider/renderer adapters, use the same cache keys, and persist to the same `project.json`. A project can switch modes without copying artifacts or losing completed work.
+
+In Studio mode, script approval unlocks voice and visual generation. Approved voice and visual artifacts unlock clip rendering. Every scene clip must be approved before final assembly.
+
 ## 5. Cache / stale behavior
 
 Every scene stores independent SHA-256 keys for voice, image, video, and clip outputs. Each key includes only the inputs relevant to that step.
 
 Changing one scene narration or visual prompt invalidates that scene's downstream artifacts without forcing other scenes to rerender. A full run reuses valid files and creates only stale outputs.
+
+Technical readiness and creative approval are separate state. Regenerating an artifact returns its checkpoint to `pending`; editing an upstream input marks affected downstream reviews `stale`.
 
 ## 6. Provider boundary
 

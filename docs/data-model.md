@@ -19,6 +19,7 @@ Representative shape:
   },
   "settings": {
     "renderer": "whiteboard",
+    "workflowMode": "studio",
     "width": 1920,
     "height": 1080,
     "fps": 30
@@ -47,6 +48,12 @@ Representative shape:
   "sourceEndMs": null,
   "visualPrompt": "Create one clean 16:9 whiteboard-style illustration...",
   "status": "ready",
+  "review": {
+    "script": "approved",
+    "voice": "approved",
+    "visual": "approved",
+    "clip": "pending"
+  },
   "cache": {
     "voice": "sha256...",
     "image": "sha256...",
@@ -60,6 +67,16 @@ Representative shape:
     "clip": "scenes/scene-001/clip.mp4"
   }
 }
+```
+
+`settings.workflowMode` is `auto` or `studio`. Review decisions are independent from the technical `status` and can be `pending`, `approved`, `changes-requested`, or `stale`.
+
+Studio dependency gates are:
+
+```text
+script approval -> voice / visual generation
+voice + visual approval -> clip render
+all clip approvals -> final assembly
 ```
 
 For SRT imports, `sourceStartMs` and `sourceEndMs` retain the source cue timing. For generated speech, `durationMs` is updated from the measured audio duration and the project timeline is recalculated.

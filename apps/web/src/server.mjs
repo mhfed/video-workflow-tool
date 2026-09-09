@@ -8,6 +8,7 @@ import { createProject, listProjects, loadProject, saveProject, projectDir } fro
 import { invalidateRenderedMedia, invalidateScene } from '../../../packages/core/src/invalidation.mjs';
 import { SUPPORTED_RENDERERS } from '../../../packages/core/src/validate-config.mjs';
 import { SUPPORTED_LANGUAGES } from '../../../packages/core/src/languages.mjs';
+import { setReviewDecision, WORKFLOW_MODES } from '../../../packages/core/src/workflow.mjs';
 import { generateScriptOpenAI } from '../../../packages/providers/src/openai.mjs';
 import { generateScriptMock } from '../../../packages/providers/src/mock.mjs';
 import { listVivibeVoices } from '../../../packages/providers/src/vivibe.mjs';
@@ -140,29 +141,45 @@ const server=http.createServer(async (req,res)=>{
       }
     }
     if(req.method==='GET' && url.pathname==='/api/projects') return json(res,200,listProjects(cfg));
-    if(req.method==='POST' && url.pathname==='/api/projects') { const b=await readBody(req); let sourceText=b.sourceText||'',sourceType=b.sourceType||'script',topic=''; const renderer=typeof b.renderer==='string'?b.renderer:cfg.renderer; const language=typeof b.language==='string'?b.language:cfg.contentLanguage; if(!SUPPORTED_RENDERERS.has(renderer))return json(res,400,{error:'Unsupported video renderer.'}); if(!SUPPORTED_LANGUAGES.has(language))return json(res,400,{error:'Unsupported project language.'}); if(sourceType==='topic'){topic=String(b.topic||b.sourceText||'').trim();if(!topic)throw new Error('topic is required');sourceText=cfg.mockMode||cfg.textProvider==='mock'?generateScriptMock(topic,{language}):await generateScriptOpenAI(topic,cfg,{minutes:Number(b.minutes||cfg.scriptMinutes),language});} return json(res,201,createProject({title:b.title||topic,sourceText,sourceType,topic},{...cfg,renderer,contentLanguage:language})); }
+    if(req.method==='POST' && url.pathname==='/api/projects') { const b=await readBody(req); let sourceText=b.sourceText||'',sourceType=b.sourceType||'script',topic=''; const renderer=typeof b.renderer==='string'?b.renderer:cfg.renderer; const language=typeof b.language==='string'?b.language:cfg.contentLanguage; const workflowMode=WORKFLOW_MODES.has(b.workflowMode)?b.workflowMode:'studio'; if(!SUPPORTED_RENDERERS.has(renderer))return json(res,400,{error:'Unsupported video renderer.'}); if(!SUPPORTED_LANGUAGES.has(language))return json(res,400,{error:'Unsupported project language.'}); if(sourceType==='topic'){topic=String(b.topic||b.sourceText||'').trim();if(!topic)throw new Error('topic is required');sourceText=cfg.mockMode||cfg.textProvider==='mock'?generateScriptMock(topic,{language}):await generateScriptOpenAI(topic,cfg,{minutes:Number(b.minutes||cfg.scriptMinutes),language});} return json(res,201,createProject({title:b.title||topic,sourceText,sourceType,topic,workflowMode},{...cfg,renderer,contentLanguage:language})); }
     if(parts[0]==='api'&&parts[1]==='projects'&&parts[2]) {
       const id=decodeURIComponent(parts[2]);
       if(req.method==='GET'&&parts.length===3) return json(res,200,loadProject(id,cfg));
       if(req.method==='PATCH'&&parts.length===3) {
         if(running.has(id))return json(res,409,{error:'Wait for this project render to finish before changing its renderer.'});
-        const b=await readBody(req); const renderer=typeof b.renderer==='string'?b.renderer:'';
-        if(!SUPPORTED_RENDERERS.has(renderer))return json(res,400,{error:'Unsupported video renderer.'});
         const p=loadProject(id,cfg); p.settings||={};
-        if(p.settings.renderer!==renderer){p.settings.renderer=renderer;invalidateRenderedMedia(p);saveProject(p,cfg);}
+        const b=await readBody(req);
+        if(typeof b.renderer==='string'){
+          if(!SUPPORTED_RENDERERS.has(b.renderer))return json(res,400,{error:'Unsupported video renderer.'});
+          if(p.settings.renderer!==b.renderer){p.settings.renderer=b.renderer;invalidateRenderedMedia(p);}
+        }
+        if(typeof b.workflowMode==='string'){
+          if(!WORKFLOW_MODES.has(b.workflowMode))return json(res,400,{error:'Unsupported workflow mode.'});
+          p.settings.workflowMode=b.workflowMode;
+        }
+        saveProject(p,cfg);
         return json(res,200,p);
       }
       if(req.method==='PATCH'&&parts[3]==='scenes'&&parts[4]) {
+        if(running.has(id))return json(res,409,{error:'Wait for this project render to finish before editing a scene.'});
         const b=await readBody(req); const p=loadProject(id,cfg); const s=p.scenes.find(x=>x.id===parts[4]);
         if(!s) return json(res,404,{error:'scene not found'});
         const nextText=typeof b.text==='string'?b.text:s.text; const nextPrompt=typeof b.visualPrompt==='string'?b.visualPrompt:s.visualPrompt;
         const textChanged=nextText!==s.text,promptChanged=nextPrompt!==s.visualPrompt; s.text=nextText;s.visualPrompt=nextPrompt;
         invalidateScene(p,s,{textChanged,promptChanged}); saveProject(p,cfg); return json(res,200,p);
       }
+      if(req.method==='POST'&&parts[3]==='scenes'&&parts[4]&&parts[5]==='review') {
+        if(running.has(id))return json(res,409,{error:'Wait for this project render to finish before reviewing a scene.'});
+        const b=await readBody(req); const p=loadProject(id,cfg); const s=p.scenes.find(x=>x.id===parts[4]);
+        if(!s)return json(res,404,{error:'scene not found'});
+        const reviewable=b.stage==='script'||b.stage==='voice'&&!!s.cache?.voice||b.stage==='visual'&&!!s.cache?.image||b.stage==='clip'&&!!s.artifacts?.clip;
+        if(b.decision==='approved'&&!reviewable)return json(res,409,{error:`Generate ${b.stage} before approving it.`});
+        setReviewDecision(p,s,b.stage,b.decision); saveProject(p,cfg); return json(res,200,p);
+      }
       if(req.method==='POST'&&parts[3]==='run') {
         if(running.has(id)) return json(res,409,{error:'This project is already running'});
         const b=await readBody(req); running.add(id);
-        try { const result=await runPipeline(id,{force:!!b.force,sceneId:b.sceneId||null}); return json(res,200,{project:result.project,final:result.final}); }
+        try { const result=await runPipeline(id,{force:!!b.force,sceneId:b.sceneId||null,stage:b.stage||'all'}); return json(res,200,{project:result.project,final:result.final}); }
         catch(e){ try{const p=loadProject(id,cfg);p.status='error';p.error={message:e.message,at:new Date().toISOString()};saveProject(p,cfg);}catch{} throw e; }
         finally { running.delete(id); }
       }

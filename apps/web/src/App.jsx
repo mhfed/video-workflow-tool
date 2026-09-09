@@ -3,6 +3,8 @@ import {
   Activity,
   ArrowRight,
   BrainCircuit,
+  Bot,
+  Check,
   CheckCircle2,
   CircleDot,
   Clapperboard,
@@ -21,8 +23,10 @@ import {
   Server,
   Settings2,
   ShieldCheck,
+  SlidersHorizontal,
   Sparkles,
   WandSparkles,
+  X,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -83,7 +87,26 @@ function ArtifactPreview({project,scene,c}){
   </div>;
 }
 
-function SceneCard({project,scene,index,running,onSave,onRender,c}){
+const stageArtifactReady=(scene,stage)=>stage==='script'||stage==='voice'&&!!scene.cache?.voice||stage==='visual'&&!!scene.cache?.image||stage==='clip'&&!!scene.artifacts?.clip;
+
+function ReviewStage({scene,stage,label,running,onRun,onReview,c}){
+  const decision=scene.review?.[stage]||'pending';
+  const ready=stageArtifactReady(scene,stage);
+  const canGenerate=stage!=='script';
+  const upstreamApproved=stage==='voice'||stage==='visual'?scene.review?.script==='approved':stage==='clip'?scene.review?.voice==='approved'&&scene.review?.visual==='approved':true;
+  return <div className={`review-stage ${decision}`}>
+    <div className="review-stage-head"><span>{label}</span><small>{c.review[decision]||decision}</small></div>
+    <div className="review-stage-actions">
+      {canGenerate&&<button disabled={running||!upstreamApproved} onClick={()=>onRun(scene.id,stage)}><RefreshCw/>{ready?c.regenerate:c.generate}</button>}
+      {ready&&<>
+        <button className="approve" disabled={running||decision==='approved'} onClick={()=>onReview(scene.id,stage,'approved')} aria-label={`${c.approve} ${label}`}><Check/></button>
+        <button className="reject" disabled={running||decision==='changes-requested'} onClick={()=>onReview(scene.id,stage,'changes-requested')} aria-label={`${c.requestChanges} ${label}`}><X/></button>
+      </>}
+    </div>
+  </div>;
+}
+
+function SceneCard({project,scene,index,running,onSave,onRunStage,onReview,c}){
   const [text,setText]=useState(scene.text);
   const [prompt,setPrompt]=useState(scene.visualPrompt);
   useEffect(()=>{setText(scene.text);setPrompt(scene.visualPrompt);},[scene.text,scene.visualPrompt]);
@@ -106,10 +129,16 @@ function SceneCard({project,scene,index,running,onSave,onRender,c}){
         <Textarea id={`${scene.id}-prompt`} value={prompt} onChange={(event)=>setPrompt(event.target.value)} rows={6}/>
         <div className="scene-actions">
           <Button variant="ghost" disabled={!dirty||running} onClick={()=>onSave(scene.id,{text,visualPrompt:prompt})}><Save/>{c.saveEdit}</Button>
-          <Button disabled={running} onClick={()=>onRender(scene.id,{text,visualPrompt:prompt})}>{running?<LoaderCircle className="spin"/>:<WandSparkles/>}{c.renderScene}</Button>
+          {project.settings?.workflowMode==='auto'&&<Button disabled={running} onClick={async()=>{if(dirty)await onSave(scene.id,{text,visualPrompt:prompt});await onRunStage(scene.id,'all');}}>{running?<LoaderCircle className="spin"/>:<WandSparkles/>}{c.renderScene}</Button>}
         </div>
       </div>
     </CardContent>
+    {project.settings?.workflowMode==='studio'&&<div className="review-track">
+      <ReviewStage scene={scene} stage="script" label={c.scriptStage} running={running||dirty} onRun={onRunStage} onReview={onReview} c={c}/>
+      <ReviewStage scene={scene} stage="voice" label={c.voiceStage} running={running} onRun={onRunStage} onReview={onReview} c={c}/>
+      <ReviewStage scene={scene} stage="visual" label={c.visualStage} running={running} onRun={onRunStage} onReview={onReview} c={c}/>
+      <ReviewStage scene={scene} stage="clip" label={c.clipStage} running={running} onRun={onRunStage} onReview={onReview} c={c}/>
+    </div>}
   </Card>;
 }
 
@@ -117,8 +146,9 @@ function NewProjectDialog({open,onOpenChange,onCreate,busy,defaultRenderer='simp
   const [sourceType,setSourceType]=useState('topic');
   const [renderer,setRenderer]=useState(defaultRenderer);
   const [language,setLanguage]=useState(defaultLanguage);
-  useEffect(()=>{if(open){setRenderer(defaultRenderer);setLanguage(defaultLanguage);}},[open,defaultRenderer,defaultLanguage]);
-  const submit=(event)=>{event.preventDefault();const data=Object.fromEntries(new FormData(event.currentTarget));onCreate({...data,sourceType,renderer,language});};
+  const [workflowMode,setWorkflowMode]=useState('studio');
+  useEffect(()=>{if(open){setRenderer(defaultRenderer);setLanguage(defaultLanguage);setWorkflowMode('studio');}},[open,defaultRenderer,defaultLanguage]);
+  const submit=(event)=>{event.preventDefault();const data=Object.fromEntries(new FormData(event.currentTarget));onCreate({...data,sourceType,renderer,language,workflowMode});};
   return <Dialog open={open} onOpenChange={onOpenChange}>
     <DialogContent className="new-project-dialog">
       <DialogHeader>
@@ -139,6 +169,7 @@ function NewProjectDialog({open,onOpenChange,onCreate,busy,defaultRenderer='simp
           <label>{c.contentLanguage}<Select value={language} onValueChange={setLanguage}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent>{UI_LANGUAGES.map((item)=><SelectItem key={item.code} value={item.code}>{item.label}</SelectItem>)}</SelectContent></Select></label>
           <label className="minutes-field">{c.targetLength}<Input name="minutes" type="number" min="1" max="60" defaultValue="6"/><span>{c.minutes}</span></label>
         </div>
+        <div className="mode-picker"><button type="button" className={workflowMode==='studio'?'active':''} onClick={()=>setWorkflowMode('studio')}><SlidersHorizontal/><span><strong>{c.studioMode}</strong><small>{c.studioModeBody}</small></span></button><button type="button" className={workflowMode==='auto'?'active':''} onClick={()=>setWorkflowMode('auto')}><Bot/><span><strong>{c.autoMode}</strong><small>{c.autoModeBody}</small></span></button></div>
         <DialogFooter><Button type="button" variant="ghost" onClick={()=>onOpenChange(false)}>{c.cancel}</Button><Button type="submit" disabled={busy}>{busy?<LoaderCircle className="spin"/>:<Clapperboard/>}{c.createProduction}</Button></DialogFooter>
       </form>
     </DialogContent>
@@ -280,6 +311,7 @@ export default function App(){
   const config=health?.config;
   const c=copyFor(config?.uiLanguage||'vi');
   const completed=useMemo(()=>current?.scenes?.filter((scene)=>scene.status==='ready').length||0,[current]);
+  const approvedClips=useMemo(()=>current?.scenes?.filter((scene)=>scene.review?.clip==='approved').length||0,[current]);
 
   const refreshHealth=async()=>setHealth(await api('/api/health'));
   const refreshProjects=async()=>setProjects(await api('/api/projects'));
@@ -294,9 +326,11 @@ export default function App(){
   };
   const createDemo=()=>createProject(config?.contentLanguage==='en'?{title:'Small Habits — Test Cut',sourceType:'script',sourceText:'Small habits feel insignificant at first, but repetition gives them power. Each action becomes a vote for the person you want to become. Make the next step obvious, easy, and satisfying, then let consistency do the heavy lifting.',minutes:1,language:'en'}:{title:'Thói quen nhỏ — Bản thử',sourceType:'script',sourceText:'Những thói quen nhỏ ban đầu có vẻ không đáng kể, nhưng sự lặp lại tạo cho chúng sức mạnh. Mỗi hành động là một lá phiếu cho con người bạn muốn trở thành. Hãy làm cho bước tiếp theo thật rõ ràng, dễ dàng và thú vị, rồi để sự kiên trì tạo nên khác biệt.',minutes:1,language:'vi'});
   const saveScene=async(sceneId,payload)=>{setBusy(true);setError('');try{const project=await api(`/api/projects/${encodeURIComponent(current.id)}/scenes/${encodeURIComponent(sceneId)}`,{method:'PATCH',body:JSON.stringify(payload)});setCurrent(project);await refreshProjects();}catch(cause){setError(cause.message);}finally{setBusy(false);}};
-  const changeRenderer=async(renderer)=>{if(!current||renderer===current.settings?.renderer)return;setBusy(true);setError('');try{const project=await api(`/api/projects/${encodeURIComponent(current.id)}`,{method:'PATCH',body:JSON.stringify({renderer})});setCurrent(project);await refreshProjects();}catch(cause){setError(cause.message);}finally{setBusy(false);}};
+  const updateProject=async(payload)=>{setBusy(true);setError('');try{const project=await api(`/api/projects/${encodeURIComponent(current.id)}`,{method:'PATCH',body:JSON.stringify(payload)});setCurrent(project);await refreshProjects();}catch(cause){setError(cause.message);}finally{setBusy(false);}};
+  const changeRenderer=async(renderer)=>{if(!current||renderer===current.settings?.renderer)return;await updateProject({renderer});};
   const run=async(body={})=>{setBusy(true);setError('');try{await api(`/api/projects/${encodeURIComponent(current.id)}/run`,{method:'POST',body:JSON.stringify(body)});await load(current.id);}catch(cause){setError(cause.message);try{await load(current.id);}catch{}}finally{setBusy(false);await refreshHealth().catch(()=>{});}};
-  const renderScene=async(sceneId,payload)=>{await saveScene(sceneId,payload);await run({sceneId});};
+  const runStage=async(sceneId,stage)=>run({sceneId,stage});
+  const reviewStage=async(sceneId,stage,decision)=>{setBusy(true);setError('');try{const project=await api(`/api/projects/${encodeURIComponent(current.id)}/scenes/${encodeURIComponent(sceneId)}/review`,{method:'POST',body:JSON.stringify({stage,decision})});setCurrent(project);await refreshProjects();}catch(cause){setError(cause.message);}finally{setBusy(false);}};
 
   return <div className="app-shell">
     <header className="app-header">
@@ -333,14 +367,15 @@ export default function App(){
             <div><div className="eyebrow">{c.production} / {current.id.slice(-6).toUpperCase()}</div><h1>{current.title}</h1><div className="project-subline"><Badge variant={badgeVariant(current.status)}>{statusLabel(current.status,c)}</Badge><span>{current.scenes.length} {c.scenes}</span><span>{completed}/{current.scenes.length} {c.rendered}</span></div></div>
             <div className="project-actions">
               <label className="renderer-control"><span>{c.renderer}</span><Select value={current.settings?.renderer||config?.renderer||'simple'} onValueChange={changeRenderer} disabled={busy||running}><SelectTrigger aria-label={c.renderer}><SelectValue/></SelectTrigger><SelectContent><SelectItem value="whiteboard">{c.whiteboard}</SelectItem><SelectItem value="simple">{c.simple}</SelectItem></SelectContent></Select></label>
-              <Button variant="outline" onClick={()=>load(current.id)}><RefreshCw/>{c.refresh}</Button><Button size="lg" disabled={busy||running} onClick={()=>run()}>{busy||running?<LoaderCircle className="spin"/>:<Play/>}{busy||running?c.rendering:c.runPipeline}</Button>
+              <Button variant="outline" onClick={()=>load(current.id)}><RefreshCw/>{c.refresh}</Button><Button size="lg" disabled={busy||running||current.settings?.workflowMode==='studio'&&approvedClips!==current.scenes.length} onClick={()=>run({stage:current.settings?.workflowMode==='studio'?'final':'all'})}>{busy||running?<LoaderCircle className="spin"/>:<Play/>}{busy||running?c.rendering:current.settings?.workflowMode==='studio'?c.assembleFinal:c.runPipeline}</Button>
             </div>
           </section>
+          <div className="workflow-console"><div><span>{c.workflowMode}</span><strong>{current.settings?.workflowMode==='auto'?c.autoMode:c.studioMode}</strong><small>{current.settings?.workflowMode==='auto'?c.autoModeBody:c.studioModeBody}</small></div><div className="mode-switch"><button className={current.settings?.workflowMode==='studio'?'active':''} disabled={busy||running} onClick={()=>updateProject({workflowMode:'studio'})}><SlidersHorizontal/>{c.studioMode}</button><button className={current.settings?.workflowMode==='auto'?'active':''} disabled={busy||running} onClick={()=>updateProject({workflowMode:'auto'})}><Bot/>{c.autoMode}</button></div>{current.settings?.workflowMode==='studio'&&<div className="approval-meter"><span>{approvedClips}/{current.scenes.length}</span><small>{c.clipsApproved}</small></div>}</div>
           <Separator/>
           {current.error&&<div className="project-error"><strong>{c.lastRunStopped}</strong><span>{current.error.message}</span></div>}
           {current.artifacts?.final?<Card className="final-card"><div className="final-copy"><Badge>{c.masterCut}</Badge><h2>{c.finalFilm}</h2><p>{c.finalBody}</p><code>{current.artifacts.final}</code></div><video controls preload="metadata" src={`/media/${encodeURIComponent(current.id)}/final?v=${encodeURIComponent(current.updatedAt||'current')}`}>{current.artifacts?.captions&&<track key={current.updatedAt} kind="subtitles" src={`/media/${encodeURIComponent(current.id)}/captions?v=${encodeURIComponent(current.updatedAt||'current')}`} srcLang={current.settings?.captionLanguage||'vi'} label={current.settings?.captionLanguage==='vi'?'Tiếng Việt':c.subtitles} default/>}</video></Card>:<div className="final-awaiting"><Film/><div><strong>{c.masterPending}</strong><span>{c.masterPendingBody}</span></div><span className="progress-count">{completed}/{current.scenes.length}</span></div>}
           <div className="section-heading"><div><span>{c.sceneDesk}</span><h2>{c.directBeat}</h2></div><p>{c.sceneDeskBody}</p></div>
-          <div className="scene-list">{current.scenes.map((scene,index)=><SceneCard key={scene.id} project={current} scene={scene} index={index} running={busy||running} onSave={saveScene} onRender={renderScene} c={c}/>)}</div>
+          <div className="scene-list">{current.scenes.map((scene,index)=><SceneCard key={scene.id} project={current} scene={scene} index={index} running={busy||running} onSave={saveScene} onRunStage={runStage} onReview={reviewStage} c={c}/>)}</div>
         </>}
       </main>
     </div>
