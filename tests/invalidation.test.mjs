@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { invalidateFinal, invalidateScene } from '../packages/core/src/invalidation.mjs';
+import { invalidateFinal, invalidateRenderedMedia, invalidateScene } from '../packages/core/src/invalidation.mjs';
 
 function fixture() {
   const scene={
@@ -50,4 +50,23 @@ test('explicit final invalidation removes stale final metadata',()=>{
   invalidateFinal(project);
   assert.equal(project.artifacts.final,undefined);
   assert.equal(project.status,'planned');
+});
+
+test('renderer change preserves source media and invalidates every rendered artifact',()=>{
+  const first=fixture();
+  const second={...structuredClone(first.scene),artifacts:{voice:'voice-2.mp3'},cache:{voice:'voice-2-key',video:'video-2-key',clip:'clip-2-key'}};
+  first.project.scenes.push(second);
+  invalidateRenderedMedia(first.project);
+  assert.equal(first.scene.cache.voice,'voice-key');
+  assert.equal(first.scene.cache.image,'image-key');
+  assert.equal(first.scene.artifacts.voice,'voice.mp3');
+  assert.equal(first.scene.artifacts.visual,'visual.png');
+  assert.equal(first.scene.cache.video,undefined);
+  assert.equal(first.scene.artifacts.clip,undefined);
+  assert.equal(first.scene.status,'visual-ready');
+  assert.equal(second.cache.voice,'voice-2-key');
+  assert.equal(second.cache.video,undefined);
+  assert.equal(second.status,'voice-ready');
+  assert.equal(first.project.artifacts.final,undefined);
+  assert.equal(first.project.status,'planned');
 });

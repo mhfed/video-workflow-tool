@@ -112,9 +112,11 @@ function SceneCard({project,scene,index,running,onSave,onRender}){
   </Card>;
 }
 
-function NewProjectDialog({open,onOpenChange,onCreate,busy}){
+function NewProjectDialog({open,onOpenChange,onCreate,busy,defaultRenderer='simple'}){
   const [sourceType,setSourceType]=useState('topic');
-  const submit=(event)=>{event.preventDefault();const data=Object.fromEntries(new FormData(event.currentTarget));onCreate({...data,sourceType});};
+  const [renderer,setRenderer]=useState(defaultRenderer);
+  useEffect(()=>{if(open)setRenderer(defaultRenderer);},[open,defaultRenderer]);
+  const submit=(event)=>{event.preventDefault();const data=Object.fromEntries(new FormData(event.currentTarget));onCreate({...data,sourceType,renderer});};
   return <Dialog open={open} onOpenChange={onOpenChange}>
     <DialogContent className="new-project-dialog">
       <DialogHeader>
@@ -130,7 +132,10 @@ function NewProjectDialog({open,onOpenChange,onCreate,busy}){
         <label>{sourceType==='topic'?'What should the film explain?':sourceType==='srt'?'Paste SRT subtitles':'Paste narration script'}
           <Textarea name="sourceText" rows={10} placeholder={sourceType==='topic'?'Why tiny habits compound over time':sourceType==='srt'?'1\n00:00:00,000 --> 00:00:04,000\nYour first subtitle…':'Begin with the idea you want viewers to remember…'} required/>
         </label>
-        <label className="minutes-field">Target length<Input name="minutes" type="number" min="1" max="60" defaultValue="6"/><span>minutes</span></label>
+        <div className="production-options">
+          <label>Render style<Select value={renderer} onValueChange={setRenderer}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent><SelectItem value="whiteboard">Whiteboard draw</SelectItem><SelectItem value="simple">Simple motion</SelectItem></SelectContent></Select><small>Saved with this project; you can change it later.</small></label>
+          <label className="minutes-field">Target length<Input name="minutes" type="number" min="1" max="60" defaultValue="6"/><span>minutes</span></label>
+        </div>
         <DialogFooter><Button type="button" variant="ghost" onClick={()=>onOpenChange(false)}>Cancel</Button><Button type="submit" disabled={busy}>{busy?<LoaderCircle className="spin"/>:<Clapperboard/>}Create production</Button></DialogFooter>
       </form>
     </DialogContent>
@@ -187,6 +192,14 @@ function SettingsDialog({open,onOpenChange,onSaved}){
           </div>
           <Separator/>
           <div className="settings-section">
+            <div className="settings-section-title"><Clapperboard/><span><strong>Default renderer</strong><small>Applied when a new production is created</small></span></div>
+            <div className="renderer-setting">
+              <label>Render style<Select value={form.renderer} onValueChange={(value)=>update('renderer',value)}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent><SelectItem value="whiteboard">Whiteboard draw</SelectItem><SelectItem value="simple">Simple motion</SelectItem></SelectContent></Select></label>
+              <p><strong>{form.renderer==='whiteboard'?'Draw-on animation':'Fast image motion'}</strong><span>{form.renderer==='whiteboard'?'Uses the external whiteboard engine and generated scene illustration.':'Uses FFmpeg for a subtle zoom and remains the offline fallback.'}</span></p>
+            </div>
+          </div>
+          <Separator/>
+          <div className="settings-section">
             <div className="settings-section-title"><BrainCircuit/><span><strong>Generation stack</strong><small>Models used for each pipeline stage</small></span></div>
             <div className="settings-fields three-columns">
               <label>Script model<Input value={form.textModel} onChange={(event)=>update('textModel',event.target.value)} /></label>
@@ -234,6 +247,7 @@ export default function App(){
   };
   const createDemo=()=>createProject({title:'Small Habits — Test Cut',sourceType:'script',sourceText:'Small habits feel insignificant at first, but repetition gives them power. Each action becomes a vote for the person you want to become. Make the next step obvious, easy, and satisfying, then let consistency do the heavy lifting.',minutes:1});
   const saveScene=async(sceneId,payload)=>{setBusy(true);setError('');try{const project=await api(`/api/projects/${encodeURIComponent(current.id)}/scenes/${encodeURIComponent(sceneId)}`,{method:'PATCH',body:JSON.stringify(payload)});setCurrent(project);await refreshProjects();}catch(cause){setError(cause.message);}finally{setBusy(false);}};
+  const changeRenderer=async(renderer)=>{if(!current||renderer===current.settings?.renderer)return;setBusy(true);setError('');try{const project=await api(`/api/projects/${encodeURIComponent(current.id)}`,{method:'PATCH',body:JSON.stringify({renderer})});setCurrent(project);await refreshProjects();}catch(cause){setError(cause.message);}finally{setBusy(false);}};
   const run=async(body={})=>{setBusy(true);setError('');try{await api(`/api/projects/${encodeURIComponent(current.id)}/run`,{method:'POST',body:JSON.stringify(body)});await load(current.id);}catch(cause){setError(cause.message);try{await load(current.id);}catch{}}finally{setBusy(false);await refreshHealth().catch(()=>{});}};
   const renderScene=async(sceneId,payload)=>{await saveScene(sceneId,payload);await run({sceneId});};
 
@@ -270,7 +284,10 @@ export default function App(){
         {!current?<EmptyState onCreate={()=>setDialogOpen(true)} onDemo={createDemo}/>:<>
           <section className="project-header">
             <div><div className="eyebrow">PRODUCTION / {current.id.slice(-6).toUpperCase()}</div><h1>{current.title}</h1><div className="project-subline"><Badge variant={badgeVariant(current.status)}>{statusLabel(current.status)}</Badge><span>{current.scenes.length} scenes</span><span>{completed}/{current.scenes.length} rendered</span></div></div>
-            <div className="project-actions"><Button variant="outline" onClick={()=>load(current.id)}><RefreshCw/>Refresh</Button><Button size="lg" disabled={busy||running} onClick={()=>run()}>{busy||running?<LoaderCircle className="spin"/>:<Play/>}{busy||running?'Rendering…':'Run full pipeline'}</Button></div>
+            <div className="project-actions">
+              <label className="renderer-control"><span>Renderer</span><Select value={current.settings?.renderer||config?.renderer||'simple'} onValueChange={changeRenderer} disabled={busy||running}><SelectTrigger aria-label="Project renderer"><SelectValue/></SelectTrigger><SelectContent><SelectItem value="whiteboard">Whiteboard draw</SelectItem><SelectItem value="simple">Simple motion</SelectItem></SelectContent></Select></label>
+              <Button variant="outline" onClick={()=>load(current.id)}><RefreshCw/>Refresh</Button><Button size="lg" disabled={busy||running} onClick={()=>run()}>{busy||running?<LoaderCircle className="spin"/>:<Play/>}{busy||running?'Rendering…':'Run full pipeline'}</Button>
+            </div>
           </section>
           <Separator/>
           {current.error&&<div className="project-error"><strong>Last run stopped</strong><span>{current.error.message}</span></div>}
@@ -280,7 +297,7 @@ export default function App(){
         </>}
       </main>
     </div>
-    <NewProjectDialog open={dialogOpen} onOpenChange={setDialogOpen} onCreate={createProject} busy={busy}/>
+    <NewProjectDialog open={dialogOpen} onOpenChange={setDialogOpen} onCreate={createProject} busy={busy} defaultRenderer={config?.renderer||'simple'}/>
     <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} onSaved={refreshHealth}/>
   </div>;
 }

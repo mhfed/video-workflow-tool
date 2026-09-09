@@ -5,7 +5,8 @@ import { fileURLToPath } from 'node:url';
 import { config } from '../../../packages/core/src/env.mjs';
 import { updateEnvFile } from '../../../packages/core/src/env-file.mjs';
 import { createProject, listProjects, loadProject, saveProject, projectDir } from '../../../packages/core/src/project.mjs';
-import { invalidateScene } from '../../../packages/core/src/invalidation.mjs';
+import { invalidateRenderedMedia, invalidateScene } from '../../../packages/core/src/invalidation.mjs';
+import { SUPPORTED_RENDERERS } from '../../../packages/core/src/validate-config.mjs';
 import { generateScriptOpenAI } from '../../../packages/providers/src/openai.mjs';
 import { generateScriptMock } from '../../../packages/providers/src/mock.mjs';
 import { runPipeline } from '../../worker/src/pipeline.mjs';
@@ -21,7 +22,7 @@ const readBody=(req)=>new Promise((resolve,reject)=>{let b='';req.on('data',d=>b
 const serve=(res,file,type)=>{const stream=fs.createReadStream(file);stream.on('error',()=>{if(!res.headersSent)res.writeHead(404);res.end();});res.writeHead(200,{'content-type':type});stream.pipe(res);};
 const mimeFor=(file)=>({'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.svg':'image/svg+xml','.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.webp':'image/webp','.ico':'image/x-icon'}[path.extname(file).toLowerCase()]||'application/octet-stream');
 const safeConfig=()=>({mockMode:cfg.mockMode,renderer:cfg.renderer,textProvider:cfg.textProvider,imageProvider:cfg.imageProvider,voiceProvider:cfg.voiceProvider,textModel:cfg.openaiTextModel,imageModel:cfg.openaiImageModel,imageSize:cfg.openaiImageSize,ttsModel:cfg.openaiTtsModel,ttsVoice:cfg.openaiTtsVoice,whiteboardAutoInstall:cfg.whiteboardAutoInstall,hasOpenAIKey:!!cfg.openaiApiKey});
-const safeSettings=()=>({hasOpenAIKey:!!cfg.openaiApiKey,enableOpenAI:!cfg.mockMode&&[cfg.textProvider,cfg.imageProvider,cfg.voiceProvider].every(value=>value==='openai'),baseUrl:cfg.openaiBaseUrl,textModel:cfg.openaiTextModel,imageModel:cfg.openaiImageModel,imageSize:cfg.openaiImageSize,imageQuality:cfg.openaiImageQuality,ttsModel:cfg.openaiTtsModel,ttsVoice:cfg.openaiTtsVoice,ttsInstructions:cfg.openaiTtsInstructions});
+const safeSettings=()=>({hasOpenAIKey:!!cfg.openaiApiKey,enableOpenAI:!cfg.mockMode&&[cfg.textProvider,cfg.imageProvider,cfg.voiceProvider].every(value=>value==='openai'),renderer:cfg.renderer,baseUrl:cfg.openaiBaseUrl,textModel:cfg.openaiTextModel,imageModel:cfg.openaiImageModel,imageSize:cfg.openaiImageSize,imageQuality:cfg.openaiImageQuality,ttsModel:cfg.openaiTtsModel,ttsVoice:cfg.openaiTtsVoice,ttsInstructions:cfg.openaiTtsInstructions});
 const isLoopback=(address='')=>address==='127.0.0.1'||address==='::1'||address.startsWith('::ffff:127.');
 const settingString=(body,key,{fallback='',max=500}={})=>typeof body[key]==='string'?body[key].replace(/[\r\n]+/g,' ').trim().slice(0,max):fallback;
 
@@ -49,6 +50,9 @@ function settingsUpdates(body) {
   const imageQuality=settingString(body,'imageQuality',{fallback:cfg.openaiImageQuality,max:30});
   if(!['low','medium','high','auto'].includes(imageQuality))throw new Error('Unsupported OpenAI image quality.');
   updates.OPENAI_IMAGE_QUALITY=imageQuality;
+  const renderer=settingString(body,'renderer',{fallback:cfg.renderer,max:30});
+  if(!SUPPORTED_RENDERERS.has(renderer))throw new Error('Unsupported video renderer.');
+  updates.VIDEO_RENDERER=renderer;
   if(typeof body.enableOpenAI==='boolean'){
     updates.MOCK_MODE=body.enableOpenAI?'0':'1';
     updates.TEXT_PROVIDER=body.enableOpenAI?'openai':'mock';
@@ -98,10 +102,18 @@ const server=http.createServer(async (req,res)=>{
       }
     }
     if(req.method==='GET' && url.pathname==='/api/projects') return json(res,200,listProjects(cfg));
-    if(req.method==='POST' && url.pathname==='/api/projects') { const b=await readBody(req); let sourceText=b.sourceText||'',sourceType=b.sourceType||'script',topic=''; if(sourceType==='topic'){topic=String(b.topic||b.sourceText||'').trim();if(!topic)throw new Error('topic is required');sourceText=cfg.mockMode||cfg.textProvider==='mock'?generateScriptMock(topic):await generateScriptOpenAI(topic,cfg,{minutes:Number(b.minutes||cfg.scriptMinutes)});} return json(res,201,createProject({title:b.title||topic,sourceText,sourceType,topic},cfg)); }
+    if(req.method==='POST' && url.pathname==='/api/projects') { const b=await readBody(req); let sourceText=b.sourceText||'',sourceType=b.sourceType||'script',topic=''; const renderer=typeof b.renderer==='string'?b.renderer:cfg.renderer; if(!SUPPORTED_RENDERERS.has(renderer))return json(res,400,{error:'Unsupported video renderer.'}); if(sourceType==='topic'){topic=String(b.topic||b.sourceText||'').trim();if(!topic)throw new Error('topic is required');sourceText=cfg.mockMode||cfg.textProvider==='mock'?generateScriptMock(topic):await generateScriptOpenAI(topic,cfg,{minutes:Number(b.minutes||cfg.scriptMinutes)});} return json(res,201,createProject({title:b.title||topic,sourceText,sourceType,topic},{...cfg,renderer})); }
     if(parts[0]==='api'&&parts[1]==='projects'&&parts[2]) {
       const id=decodeURIComponent(parts[2]);
       if(req.method==='GET'&&parts.length===3) return json(res,200,loadProject(id,cfg));
+      if(req.method==='PATCH'&&parts.length===3) {
+        if(running.has(id))return json(res,409,{error:'Wait for this project render to finish before changing its renderer.'});
+        const b=await readBody(req); const renderer=typeof b.renderer==='string'?b.renderer:'';
+        if(!SUPPORTED_RENDERERS.has(renderer))return json(res,400,{error:'Unsupported video renderer.'});
+        const p=loadProject(id,cfg); p.settings||={};
+        if(p.settings.renderer!==renderer){p.settings.renderer=renderer;invalidateRenderedMedia(p);saveProject(p,cfg);}
+        return json(res,200,p);
+      }
       if(req.method==='PATCH'&&parts[3]==='scenes'&&parts[4]) {
         const b=await readBody(req); const p=loadProject(id,cfg); const s=p.scenes.find(x=>x.id===parts[4]);
         if(!s) return json(res,404,{error:'scene not found'});

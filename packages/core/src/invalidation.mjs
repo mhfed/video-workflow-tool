@@ -28,3 +28,14 @@ export function invalidateScene(project, scene, { textChanged=false, promptChang
   }
   return project;
 }
+
+export function invalidateRenderedMedia(project) {
+  for (const scene of project.scenes || []) {
+    scene.cache ||= {};
+    scene.artifacts ||= {};
+    for (const key of ['video','clip']) drop(scene.cache,key);
+    for (const key of ['video','clip']) drop(scene.artifacts,key);
+    scene.status=scene.artifacts.visual?'visual-ready':scene.artifacts.voice?'voice-ready':'planned';
+  }
+  return invalidateFinal(project);
+}

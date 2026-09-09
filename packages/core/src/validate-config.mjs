@@ -1,10 +1,10 @@
 export const SUPPORTED_IMAGE_SIZES=new Set(['1024x1024','1024x1536','1536x1024','auto']);
+export const SUPPORTED_RENDERERS=new Set(['simple','whiteboard']);
 const PROVIDERS=new Set(['openai','mock']);
-const RENDERERS=new Set(['simple','whiteboard']);
 
 export function validateConfig(cfg){
   const errors=[],warnings=[];
-  if(!RENDERERS.has(cfg.renderer))errors.push(`VIDEO_RENDERER must be one of: ${[...RENDERERS].join(', ')}`);
+  if(!SUPPORTED_RENDERERS.has(cfg.renderer))errors.push(`VIDEO_RENDERER must be one of: ${[...SUPPORTED_RENDERERS].join(', ')}`);
   for(const [name,value] of [['TEXT_PROVIDER',cfg.textProvider],['IMAGE_PROVIDER',cfg.imageProvider],['VOICE_PROVIDER',cfg.voiceProvider]]) if(!PROVIDERS.has(value))errors.push(`${name} must be one of: ${[...PROVIDERS].join(', ')}`);
   const usesOpenAI=[cfg.textProvider,cfg.imageProvider,cfg.voiceProvider].includes('openai');
   if(!cfg.mockMode&&usesOpenAI&&!cfg.openaiApiKey)errors.push('OPENAI_API_KEY is required because at least one real provider is set to openai.');
