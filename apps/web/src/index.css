@@ -239,7 +239,7 @@ video::cue { color: #fffdf8; background: rgba(22,21,18,.82); font-family: var(--
 .new-project-form { display: grid; gap: 5px; margin-top: 10px; }
 .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .new-project-form [data-slot="select-trigger"] { width: 100%; text-transform: none; letter-spacing: 0; font-weight: 500; }
-.production-options { display: grid; grid-template-columns: minmax(220px,1fr) 150px; gap: 12px; align-items: start; }
+.production-options { display: grid; grid-template-columns: minmax(220px,1fr) minmax(150px,.65fr) 150px; gap: 12px; align-items: start; }
 .production-options label { min-width: 0; }
 .production-options label > small { color: #918a7e; font-size: 8px; font-weight: 500; letter-spacing: 0; line-height: 1.4; text-transform: none; }
 .minutes-field { position: relative; max-width: 150px; }

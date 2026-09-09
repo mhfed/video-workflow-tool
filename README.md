@@ -31,6 +31,8 @@ npm run web
 
 Open `http://127.0.0.1:4173`. The default **Topic → auto script** mode lets you enter an idea, choose target minutes, review the generated scenes/prompts, render/review scenes individually, then click **Run full pipeline**.
 
+The interface and new video projects default to Vietnamese. In **Provider settings → Language**, you can switch the interface and independently choose Vietnamese or English as the default content language. Each project records its own language in `project.json`, and generated narration plus embedded subtitles follow that setting.
+
 The default real configuration uses:
 
 - OpenAI Responses API with `gpt-5.6-luna` for topic → narration.
@@ -64,7 +66,7 @@ npm run smoke
 Topic all the way to final video:
 
 ```bash
-npm run cli -- create --title "Why we procrastinate" --topic "Why do people procrastinate?" --minutes 6
+npm run cli -- create --title "Vì sao ta trì hoãn" --topic "Vì sao con người hay trì hoãn?" --minutes 6 --language vi
 npm run cli -- run --project <project-id>
 ```
 
@@ -74,6 +76,8 @@ Or start from material you already have:
 npm run cli -- create --title "My explainer" --script ./script.md
 npm run cli -- create --title "Existing narration" --srt ./subtitles.srt
 ```
+
+Use `--language vi` or `--language en` to override `CONTENT_LANGUAGE` for one project.
 
 Operate/review:
 

@@ -4,6 +4,7 @@ import { config } from '../../../packages/core/src/env.mjs';
 import { loadProject, saveProject, sceneDir, projectDir, updateTimeline } from '../../../packages/core/src/project.mjs';
 import { invalidateFinal } from '../../../packages/core/src/invalidation.mjs';
 import { buildWebVtt } from '../../../packages/core/src/captions.mjs';
+import { languageInfo, normalizeLanguage } from '../../../packages/core/src/languages.mjs';
 import { sha256, fileExists, ensureDir } from '../../../packages/core/src/utils.mjs';
 import { probeDuration } from '../../../packages/core/src/media.mjs';
 import { run } from '../../../packages/core/src/process.mjs';
@@ -69,8 +70,8 @@ async function concatClips(project,cfg,clips) {
   const joined=path.join(outDir,'joined.mp4');
   const captions=path.join(outDir,'captions.vtt');
   const captionsEnabled=project.settings?.captions!==false;
-  const captionLanguage=project.settings?.captionLanguage||'und';
-  const embeddedLanguage=({vi:'vie',en:'eng'}[captionLanguage])||(/^[a-z]{3}$/i.test(captionLanguage)?captionLanguage:'und');
+  const captionLanguage=normalizeLanguage(project.settings?.captionLanguage||project.settings?.language||cfg.contentLanguage);
+  const embeddedLanguage=languageInfo(captionLanguage).mp4Code;
   fs.writeFileSync(list,clips.map((f)=>`file '${f.replaceAll("'","'\\''")}'`).join('\n')+'\n');
   await run(cfg.ffmpegBin,['-y','-f','concat','-safe','0','-i',list,'-c','copy','-movflags','+faststart',captionsEnabled?joined:final],{capture:true});
   if(captionsEnabled) {

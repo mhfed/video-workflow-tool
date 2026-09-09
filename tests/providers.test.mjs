@@ -32,6 +32,7 @@ test('OpenAI script provider uses Responses API and returns narration text', asy
     assert.equal(request.url, 'https://api.openai.com/v1/responses');
     assert.equal(request.body.model, 'gpt-5.6-luna');
     assert.match(request.body.input, /4 minutes/);
+    assert.match(request.body.input, /Vietnamese/);
   } finally { globalThis.fetch = oldFetch; }
 });
 

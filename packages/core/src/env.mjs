@@ -21,6 +21,8 @@ export function config() {
   const env = loadEnv();
   return {
     workspaceDir: path.resolve(env.WORKSPACE_DIR || './workspace'),
+    uiLanguage: env.UI_LANGUAGE || 'vi',
+    contentLanguage: env.CONTENT_LANGUAGE || 'vi',
     mockMode: /^(1|true|yes)$/i.test(env.MOCK_MODE || ''),
     renderer: env.VIDEO_RENDERER || 'simple',
     imageProvider: env.IMAGE_PROVIDER || (env.OPENAI_API_KEY ? 'openai' : 'mock'),

@@ -1,3 +1,5 @@
+import { SUPPORTED_LANGUAGES } from './languages.mjs';
+
 export const SUPPORTED_IMAGE_SIZES=new Set(['1024x1024','1024x1536','1536x1024','auto']);
 export const SUPPORTED_RENDERERS=new Set(['simple','whiteboard']);
 const TEXT_IMAGE_PROVIDERS=new Set(['openai','mock']);
@@ -5,6 +7,7 @@ const VOICE_PROVIDERS=new Set(['openai','vivibe','mock']);
 
 export function validateConfig(cfg){
   const errors=[],warnings=[];
+  for(const [name,value] of [['UI_LANGUAGE',cfg.uiLanguage],['CONTENT_LANGUAGE',cfg.contentLanguage]]) if(!SUPPORTED_LANGUAGES.has(value))errors.push(`${name} must be one of: ${[...SUPPORTED_LANGUAGES].join(', ')}`);
   if(!SUPPORTED_RENDERERS.has(cfg.renderer))errors.push(`VIDEO_RENDERER must be one of: ${[...SUPPORTED_RENDERERS].join(', ')}`);
   for(const [name,value] of [['TEXT_PROVIDER',cfg.textProvider],['IMAGE_PROVIDER',cfg.imageProvider]]) if(!TEXT_IMAGE_PROVIDERS.has(value))errors.push(`${name} must be one of: ${[...TEXT_IMAGE_PROVIDERS].join(', ')}`);
   if(!VOICE_PROVIDERS.has(cfg.voiceProvider))errors.push(`VOICE_PROVIDER must be one of: ${[...VOICE_PROVIDERS].join(', ')}`);

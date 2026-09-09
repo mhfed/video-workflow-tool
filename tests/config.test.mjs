@@ -2,7 +2,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { validateConfig } from '../packages/core/src/validate-config.mjs';
 
-const base={renderer:'whiteboard',mockMode:false,textProvider:'openai',imageProvider:'openai',voiceProvider:'openai',openaiApiKey:'test',openaiImageSize:'1536x1024',scriptMinutes:6,sceneMinSec:6,sceneTargetSec:12,sceneMaxSec:18,wordsPerMinute:150,width:1920,height:1080,fps:30};
+const base={uiLanguage:'vi',contentLanguage:'vi',renderer:'whiteboard',mockMode:false,textProvider:'openai',imageProvider:'openai',voiceProvider:'openai',openaiApiKey:'test',openaiImageSize:'1536x1024',scriptMinutes:6,sceneMinSec:6,sceneTargetSec:12,sceneMaxSec:18,wordsPerMinute:150,width:1920,height:1080,fps:30};
+
+test('rejects unsupported interface or content languages',()=>{
+  const result=validateConfig({...base,uiLanguage:'fr'});
+  assert.equal(result.ok,false);
+  assert.match(result.errors.join('\n'),/UI_LANGUAGE/);
+});
 
 test('accepts default real workflow configuration',()=>{
   const result=validateConfig(base);

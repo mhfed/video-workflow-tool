@@ -14,6 +14,8 @@ Unless you intentionally want another provider/style, keep:
 
 ```bash
 MOCK_MODE=0
+UI_LANGUAGE=vi
+CONTENT_LANGUAGE=vi
 VIDEO_RENDERER=whiteboard
 TEXT_PROVIDER=openai
 IMAGE_PROVIDER=openai
@@ -57,6 +59,8 @@ SCENE_MAX_SEC=18
 ## Useful switches
 
 - `MOCK_MODE=1`: no paid AI calls; useful for CI/smoke tests. Mock artifacts have distinct cache keys, so they cannot be silently reused in a later real run.
+- `UI_LANGUAGE=vi|en`: web interface language; defaults to Vietnamese.
+- `CONTENT_LANGUAGE=vi|en`: language for new projects and topic-to-script generation; each project keeps its own value in `project.json`.
 - `VIDEO_RENDERER=simple|whiteboard`: `simple` is FFmpeg-only; `whiteboard` wraps `geeklee/srt-whiteboard-animation`.
 - `TEXT_PROVIDER`, `IMAGE_PROVIDER`: `openai` or `mock`.
 - `VOICE_PROVIDER`: `openai`, `vivibe`, or `mock`. Voice selection is independent from the text/image source.

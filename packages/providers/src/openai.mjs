@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { ensureDir, sleep } from '../../core/src/utils.mjs';
+import { languageInfo, normalizeLanguage } from '../../core/src/languages.mjs';
 
 async function openaiFetch(cfg, endpoint, init, attempts = 3) {
   if (!cfg.openaiApiKey) throw new Error('OPENAI_API_KEY is required for the OpenAI provider');
@@ -19,8 +20,9 @@ function responseText(data) {
   if (typeof data?.output_text === 'string' && data.output_text.trim()) return data.output_text.trim();
   return (data?.output || []).flatMap((item)=>item.content || []).map((c)=>c.text || c.output_text || '').join('').trim();
 }
-export async function generateScriptOpenAI(topic, cfg, {minutes=cfg.scriptMinutes}={}) {
-  const prompt = `Write a complete YouTube explainer narration in the same language as the topic. Topic: ${topic}\nTarget duration: about ${minutes} minutes. Start with a strong hook, build a clear logical story, use concrete examples, keep sentences natural for voice-over, and end with a memorable conclusion. Do not use markdown headings, bullet lists, citations, stage directions, or image instructions. Return only the narration script.`;
+export async function generateScriptOpenAI(topic, cfg, {minutes=cfg.scriptMinutes,language=cfg.contentLanguage}={}) {
+  const outputLanguage=languageInfo(normalizeLanguage(language)).promptName;
+  const prompt = `Write a complete YouTube explainer narration in ${outputLanguage}. Topic: ${topic}\nTarget duration: about ${minutes} minutes. Start with a strong hook, build a clear logical story, use concrete examples, keep sentences natural for voice-over, and end with a memorable conclusion. Do not use markdown headings, bullet lists, citations, stage directions, or image instructions. Return only the narration script in ${outputLanguage}.`;
   const res = await openaiFetch(cfg, '/responses', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ model: cfg.openaiTextModel, input: prompt }) });
   const text=responseText(await res.json()); if(!text) throw new Error('OpenAI Responses API returned no narration text'); return text;
 }
