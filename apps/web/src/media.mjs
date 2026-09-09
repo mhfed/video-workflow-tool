@@ -19,4 +19,4 @@ export function serveMedia(req,res,file,type){
   res.writeHead(200,{...base,'content-length':size});fs.createReadStream(file).pipe(res);
 }
 
-export const mediaTypeFor=(kind)=>({visual:'image/png',voice:'audio/mpeg',video:'video/mp4',clip:'video/mp4',final:'video/mp4'}[kind]||'application/octet-stream');
+export const mediaTypeFor=(kind)=>({visual:'image/png',voice:'audio/mpeg',video:'video/mp4',clip:'video/mp4',final:'video/mp4',captions:'text/vtt; charset=utf-8'}[kind]||'application/octet-stream');

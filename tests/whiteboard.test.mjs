@@ -12,7 +12,7 @@ test('whiteboard adapter writes annotation and uses valid pause enum', async () 
   fs.mkdirSync(path.join(engine,'scripts'),{recursive:true});
   fs.mkdirSync(path.join(engine,'assets'),{recursive:true});
   const fake=path.join(engine,'scripts','render_stream_whiteboard.py');
-  fs.writeFileSync(fake, `import json,sys,subprocess\nassert '--pause' in sys.argv and sys.argv[sys.argv.index('--pause')+1]=='off'\nann=json.load(open(sys.argv[2]))\nassert ann['elements'][0]['region']['width']>0\nout=sys.argv[3]\nsubprocess.run(['ffmpeg','-loglevel','error','-y','-f','lavfi','-i','color=c=white:s=320x180:r=10','-t','1','-c:v','libx264','-pix_fmt','yuv420p',out],check=True)\n`);
+  fs.writeFileSync(fake, `import json,sys,subprocess\nassert '--pause' in sys.argv and sys.argv[sys.argv.index('--pause')+1]=='off'\nassert sys.argv[4].endswith('drawing-hand-vi.png')\nann=json.load(open(sys.argv[2]))\nassert ann['elements'][0]['region']['width']>0\nout=sys.argv[3]\nsubprocess.run(['ffmpeg','-loglevel','error','-y','-f','lavfi','-i','color=c=white:s=320x180:r=10','-t','1','-c:v','libx264','-pix_fmt','yuv420p',out],check=True)\n`);
   const image=path.join(root,'scene-001','visual.png');
   const out=path.join(root,'scene-001','video.mp4');
   fs.mkdirSync(path.dirname(image),{recursive:true});

@@ -122,6 +122,10 @@ const server=http.createServer(async (req,res)=>{
         if(!p.artifacts?.final){res.writeHead(404).end('No final video');return;}
         return serveMedia(req,res,path.join(projectDir(cfg,p.id),p.artifacts.final),mediaTypeFor('final'));
       }
+      if(parts[2]==='captions') {
+        if(!p.artifacts?.captions){res.writeHead(404).end('No captions');return;}
+        return serveMedia(req,res,path.join(projectDir(cfg,p.id),p.artifacts.captions),mediaTypeFor('captions'));
+      }
       if(parts[2]==='scenes'&&parts[3]&&parts[4]) {
         const s=p.scenes.find(x=>x.id===decodeURIComponent(parts[3])); if(!s){res.writeHead(404).end('Scene not found');return;}
         const kind=parts[4]; const artifactKey=kind==='visual'?'visual':kind;

@@ -3,6 +3,7 @@ const drop = (object, key) => { if (object && Object.prototype.hasOwnProperty.ca
 export function invalidateFinal(project) {
   project.artifacts ||= {};
   drop(project.artifacts,'final');
+  drop(project.artifacts,'captions');
   project.status='planned';
   return project;
 }

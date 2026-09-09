@@ -17,4 +17,5 @@ test('maps review artifact media types',()=>{
   assert.equal(mediaTypeFor('visual'),'image/png');
   assert.equal(mediaTypeFor('voice'),'audio/mpeg');
   assert.equal(mediaTypeFor('clip'),'video/mp4');
+  assert.equal(mediaTypeFor('captions'),'text/vtt; charset=utf-8');
 });

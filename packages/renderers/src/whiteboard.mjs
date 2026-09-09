@@ -1,5 +1,8 @@
-import fs from 'node:fs'; import path from 'node:path'; import { run } from '../../core/src/process.mjs'; import { ensureDir, writeJson } from '../../core/src/utils.mjs'; import { probeVideoSize } from '../../core/src/media.mjs';
+import crypto from 'node:crypto'; import fs from 'node:fs'; import path from 'node:path'; import { fileURLToPath } from 'node:url'; import { run } from '../../core/src/process.mjs'; import { ensureDir, writeJson } from '../../core/src/utils.mjs'; import { probeVideoSize } from '../../core/src/media.mjs';
+const localizedHand=fileURLToPath(new URL('../assets/drawing-hand-vi.png',import.meta.url));
 export function whiteboardScript(cfg) { return path.join(cfg.whiteboardEngineDir,'scripts','render_stream_whiteboard.py'); }
+export function whiteboardHandAsset(cfg) { const upstream=path.join(cfg.whiteboardEngineDir,'assets','drawing-hand.png'); return fs.existsSync(localizedHand)?localizedHand:upstream; }
+export function whiteboardHandSignature(cfg) { const hand=whiteboardHandAsset(cfg); return fs.existsSync(hand)?crypto.createHash('sha256').update(fs.readFileSync(hand)).digest('hex'):null; }
 function prepareScript(cfg) { return path.join(cfg.whiteboardEngineDir,'scripts','prepare_env.py'); }
 function parseEnvPython(output) { const match=String(output||'').match(/(?:^|\n)ENV_PY=(.+)\s*$/m); return match?.[1]?.trim() || ''; }
 
@@ -80,5 +83,5 @@ export async function renderWhiteboardScene({ scene, imageFile, outputFile, dura
   if (!imageFile || !fs.existsSync(imageFile)) throw new Error(`Whiteboard renderer requires a generated image for ${scene.id}`); const python=await ensureWhiteboardEngine(cfg);
   const {width,height}=await probeVideoSize(imageFile,cfg); const annotationFile = path.join(path.dirname(imageFile),`${scene.id}.annotation.json`); const durationMs = Math.max(1000,Math.round(durationSec*1000));
   writeJson(annotationFile,{sceneId:scene.id,canvas:{width,height},storyBasis:scene.text,sceneDurationMs:durationMs,elements:[{id:'scene-illustration',label:'full scene illustration',sequence:1,narrativeRole:'main scene',subtitle:scene.text,type:'scene',region:{x:0,y:0,width,height},reveal:{direction:'top_to_bottom',startMs:0,durationMs:Math.max(500,durationMs-500),maskPaddingPx:0,protectedRegions:[]},handPath:{start:[Math.round(width/2),0],end:[Math.round(width/2),height],easing:'easeInOut'}}]});
-  const hand = path.join(cfg.whiteboardEngineDir,'assets','drawing-hand.png'); const args=[whiteboardScript(cfg),imageFile,annotationFile,outputFile]; if (fs.existsSync(hand)) args.push(hand); args.push('--ink-path','grid','--color-fill','contour-wipe','--total-ms',String(durationMs),'--pause','off'); await run(python,args,{cwd:cfg.whiteboardEngineDir}); return outputFile;
+  const hand=whiteboardHandAsset(cfg); const args=[whiteboardScript(cfg),imageFile,annotationFile,outputFile]; if (fs.existsSync(hand)) args.push(hand); args.push('--ink-path','grid','--color-fill','contour-wipe','--total-ms',String(durationMs),'--pause','off'); await run(python,args,{cwd:cfg.whiteboardEngineDir}); return outputFile;
 }

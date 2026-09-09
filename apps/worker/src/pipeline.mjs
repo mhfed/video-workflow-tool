@@ -3,13 +3,14 @@ import path from 'node:path';
 import { config } from '../../../packages/core/src/env.mjs';
 import { loadProject, saveProject, sceneDir, projectDir, updateTimeline } from '../../../packages/core/src/project.mjs';
 import { invalidateFinal } from '../../../packages/core/src/invalidation.mjs';
+import { buildWebVtt } from '../../../packages/core/src/captions.mjs';
 import { sha256, fileExists, ensureDir } from '../../../packages/core/src/utils.mjs';
 import { probeDuration } from '../../../packages/core/src/media.mjs';
 import { run } from '../../../packages/core/src/process.mjs';
 import { generateImageOpenAI } from '../../../packages/providers/src/openai.mjs';
 import { synthesizeVoice, voiceCacheConfig } from '../../../packages/providers/src/voice.mjs';
 import { renderSimpleScene } from '../../../packages/renderers/src/simple.mjs';
-import { renderWhiteboardScene } from '../../../packages/renderers/src/whiteboard.mjs';
+import { renderWhiteboardScene, whiteboardHandSignature } from '../../../packages/renderers/src/whiteboard.mjs';
 
 function log(event, detail={}) { console.log(JSON.stringify({time:new Date().toISOString(),event,...detail})); }
 const effectiveProvider = (configured, cfg) => cfg.mockMode ? 'mock' : configured;
@@ -43,7 +44,7 @@ async function ensureVideo(scene, project, cfg, imageFile, force=false) {
   const dir=ensureDir(sceneDir(cfg,project.id,scene.id));
   const file=path.join(dir,'video.mp4');
   const renderer = project.settings.renderer || cfg.renderer;
-  const key=sha256({renderer,durationMs:scene.durationMs,image:scene.cache.image,text:scene.text,width:cfg.width,height:cfg.height,fps:cfg.fps});
+  const key=sha256({renderer,durationMs:scene.durationMs,image:scene.cache.image,text:scene.text,width:cfg.width,height:cfg.height,fps:cfg.fps,hand:renderer==='whiteboard'?whiteboardHandSignature(cfg):null});
   if (!force && scene.cache.video===key && fileExists(file)) return file;
   log('render:start',{scene:scene.id,renderer});
   const args={scene,imageFile,outputFile:file,durationSec:scene.durationMs/1000,cfg};
@@ -65,8 +66,23 @@ async function concatClips(project,cfg,clips) {
   const outDir=ensureDir(path.join(projectDir(cfg,project.id),'output'));
   const list=path.join(outDir,'concat.txt');
   const final=path.join(outDir,'final.mp4');
+  const joined=path.join(outDir,'joined.mp4');
+  const captions=path.join(outDir,'captions.vtt');
+  const captionsEnabled=project.settings?.captions!==false;
+  const captionLanguage=project.settings?.captionLanguage||'und';
+  const embeddedLanguage=({vi:'vie',en:'eng'}[captionLanguage])||(/^[a-z]{3}$/i.test(captionLanguage)?captionLanguage:'und');
   fs.writeFileSync(list,clips.map((f)=>`file '${f.replaceAll("'","'\\''")}'`).join('\n')+'\n');
-  await run(cfg.ffmpegBin,['-y','-f','concat','-safe','0','-i',list,'-c','copy','-movflags','+faststart',final],{capture:true});
+  await run(cfg.ffmpegBin,['-y','-f','concat','-safe','0','-i',list,'-c','copy','-movflags','+faststart',captionsEnabled?joined:final],{capture:true});
+  if(captionsEnabled) {
+    fs.writeFileSync(captions,buildWebVtt(project));
+    try {
+      await run(cfg.ffmpegBin,['-y','-i',joined,'-i',captions,'-map','0:v:0','-map','0:a:0?','-map','1:0','-c:v','copy','-c:a','copy','-c:s','mov_text','-metadata:s:s:0',`language=${embeddedLanguage}`,'-disposition:s:0','default','-movflags','+faststart',final],{capture:true});
+    } finally { fs.rmSync(joined,{force:true}); }
+    project.artifacts.captions=path.relative(projectDir(cfg,project.id),captions);
+  } else {
+    delete project.artifacts.captions;
+    fs.rmSync(captions,{force:true});
+  }
   project.artifacts.final=path.relative(projectDir(cfg,project.id),final); project.status='complete'; saveProject(project,cfg); return final;
 }
 

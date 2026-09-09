@@ -63,6 +63,7 @@ body {
 }
 button { cursor: pointer; }
 button:disabled { cursor: not-allowed; }
+video::cue { color: #fffdf8; background: rgba(22,21,18,.82); font-family: var(--font-sans); font-size: 1.05em; line-height: 1.35; }
 
 .app-shell {
   min-height: 100vh;

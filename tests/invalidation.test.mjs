@@ -47,8 +47,10 @@ test('no-op edit keeps caches and final artifact intact',()=>{
 
 test('explicit final invalidation removes stale final metadata',()=>{
   const {project}=fixture();
+  project.artifacts.captions='output/captions.vtt';
   invalidateFinal(project);
   assert.equal(project.artifacts.final,undefined);
+  assert.equal(project.artifacts.captions,undefined);
   assert.equal(project.status,'planned');
 });
 
