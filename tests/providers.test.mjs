@@ -94,7 +94,8 @@ test('Vivibe creates, polls, downloads, and normalizes narration audio',async()=
     const body=JSON.parse(init.body);requests.push(body);
     if(body.method==='ttsLongText')return new Response(JSON.stringify({result:{projectExportId:'export-1'}}),{status:200});
     statusCalls++;
-    return new Response(JSON.stringify({result:statusCalls===1?{state:'processing'}:{state:'completed',url:'https://cdn.example.test/voice.wav'}}),{status:200});
+    const statuses=[{state:'active'},{state:'processing'},{state:'completed',url:'https://cdn.example.test/voice.wav'}];
+    return new Response(JSON.stringify({result:statuses[statusCalls-1]}),{status:200});
   };
   const waits=[];
   const runImpl=async(bin,args)=>{
@@ -107,8 +108,8 @@ test('Vivibe creates, polls, downloads, and normalizes narration audio',async()=
   await synthesizeSpeechVivibe('Xin chào',output,{vivibeApiKey:'vivibe-key',vivibeBaseUrl:'https://api.lucylab.io/json-rpc',vivibeVoiceId:'voice-1',vivibeSpeed:1.2,vivibePollIntervalMs:2000,vivibeTimeoutMs:30000,ffmpegBin:'ffmpeg-test'},{fetchImpl,sleepImpl:async(ms)=>waits.push(ms),runImpl});
   assert.deepEqual(requests[0],{method:'ttsLongText',input:{text:'Xin chào',userVoiceId:'voice-1',speed:1.2}});
   assert.deepEqual(requests[1],{method:'getExportStatus',input:{projectExportId:'export-1'}});
-  assert.equal(requests.length,3);
-  assert.deepEqual(waits,[2000]);
+  assert.equal(requests.length,4);
+  assert.deepEqual(waits,[2000,2000]);
   assert.equal(fs.readFileSync(output,'utf8'),'normalized-mp3');
   assert.equal(fs.readdirSync(dir).some((name)=>name.includes('vivibe-source')),false);
 });
