@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   Activity,
+  AlertTriangle,
   ArrowLeft,
   ArrowRight,
   BrainCircuit,
@@ -12,6 +13,7 @@ import {
   Eye,
   EyeOff,
   Film,
+  Grid2X2,
   Image as ImageIcon,
   KeyRound,
   Layers3,
@@ -94,9 +96,35 @@ const stageLabel=(stage,c)=>({script:c.scriptStage,voice:c.voiceStage,visual:c.v
 const canGenerateStage=(scene,stage)=>stage==='voice'||stage==='visual'?scene.review?.script==='approved':stage==='clip'?scene.review?.voice==='approved'&&scene.review?.visual==='approved':false;
 const reviewRank=(decision)=>({'changes-requested':0,stale:1,pending:2,approved:9}[decision]??3);
 
-function Workbench({project,running,onSave,onRunStage,onReview,onBulkRun,onBulkReview,c}){
-  const [selectedId,setSelectedId]=useState(project.scenes[0]?.id);
-  const [stage,setStage]=useState('script');
+function ProjectOverview({project,running,onOpenScene,onBulkRun,onBulkReview,c}){
+  const stats=WORKBENCH_STAGES.map((stage)=>({stage,approved:project.scenes.filter((scene)=>scene.review?.[stage]==='approved').length}));
+  const attention=[];
+  for(const scene of project.scenes)for(const stage of WORKBENCH_STAGES){const decision=scene.review?.[stage]||'pending';if(decision==='changes-requested'||decision==='stale')attention.push({scene,stage,decision});}
+  const next=[...attention].sort((a,b)=>reviewRank(a.decision)-reviewRank(b.decision))[0]||project.scenes.flatMap((scene)=>WORKBENCH_STAGES.map((stage)=>({scene,stage,decision:scene.review?.[stage]||'pending'}))).find((item)=>item.decision!=='approved');
+  const version=encodeURIComponent(project.updatedAt||'current');
+  return <section className="project-overview">
+    <div className="overview-progress">{stats.map(({stage,approved},index)=><button key={stage} onClick={()=>onOpenScene(project.scenes.find((scene)=>scene.review?.[stage]!=='approved')?.id||project.scenes[0].id,stage)}><span>0{index+1}</span><div><strong>{stageLabel(stage,c)}</strong><small>{approved}/{project.scenes.length} {c.approvedLower}</small></div><i><b style={{width:`${approved/project.scenes.length*100}%`}}/></i></button>)}</div>
+    <div className="overview-board">
+      <div className="overview-section-head"><div><span>{c.productionMap}</span><strong>{c.allScenesAtGlance}</strong></div>{next&&<button className="continue-work" onClick={()=>onOpenScene(next.scene.id,next.stage)}><Sparkles/>{c.continueWork}<ArrowRight/></button>}</div>
+      <div className="scene-matrix">
+        <div className="matrix-head"><span>{c.sceneNavigator}</span>{WORKBENCH_STAGES.map((stage)=><strong key={stage}>{stageLabel(stage,c)}</strong>)}</div>
+        <div className="matrix-body">{project.scenes.map((scene,index)=><div className="matrix-row" key={scene.id}>
+          <button className="matrix-scene" onClick={()=>onOpenScene(scene.id,'script')}><b>{String(index+1).padStart(2,'0')}</b><span>{scene.text.split(/[.!?]/)[0]}</span><small>{(scene.durationMs/1000).toFixed(1)}s</small></button>
+          {WORKBENCH_STAGES.map((stage)=>{const decision=scene.review?.[stage]||'pending';return <button key={stage} className={`matrix-cell ${decision}`} onClick={()=>onOpenScene(scene.id,stage)} title={`${scene.id} · ${stageLabel(stage,c)} · ${c.review[decision]}`}>{decision==='approved'?<Check/>:decision==='changes-requested'?<X/>:decision==='stale'?<AlertTriangle/>:<span/>}</button>;})}
+        </div>)}</div>
+      </div>
+    </div>
+    <aside className="overview-side">
+      <div className="attention-panel"><div className="overview-section-head"><div><span>{c.attention}</span><strong>{attention.length} {c.items}</strong></div></div><div className="attention-list">{attention.length?attention.slice(0,6).map((item)=><button key={`${item.scene.id}-${item.stage}`} onClick={()=>onOpenScene(item.scene.id,item.stage)}><i className={item.decision}/><span><strong>{item.scene.id} · {stageLabel(item.stage,c)}</strong><small>{c.review[item.decision]}</small></span><ArrowRight/></button>):<div className="all-clear"><CheckCircle2/><strong>{c.noIssues}</strong><small>{c.noIssuesBody}</small></div>}</div></div>
+      <div className="overview-bulk"><div className="overview-section-head"><div><span>{c.bulkActions}</span><strong>{c.productionActions}</strong></div></div>{WORKBENCH_STAGES.map((stage)=>{const generateIds=project.scenes.filter((scene)=>stage!=='script'&&canGenerateStage(scene,stage)&&scene.review?.[stage]!=='approved').map((scene)=>scene.id);const approveIds=project.scenes.filter((scene)=>stageArtifactReady(scene,stage)&&scene.review?.[stage]!=='approved').map((scene)=>scene.id);return <div className="overview-bulk-row" key={stage}><strong>{stageLabel(stage,c)}</strong>{stage!=='script'&&<button disabled={running||!generateIds.length} onClick={()=>onBulkRun(stage,generateIds)}><RefreshCw/>{c.generate} <b>{generateIds.length}</b></button>}<button disabled={running||!approveIds.length} onClick={()=>onBulkReview(stage,approveIds,'approved')}><Check/>{c.approve} <b>{approveIds.length}</b></button></div>;})}</div>
+      <div className="final-overview">{project.artifacts?.final?<><div><Badge>{c.masterCut}</Badge><strong>{c.finalFilm}</strong></div><video controls preload="metadata" src={`/media/${encodeURIComponent(project.id)}/final?v=${version}`}/></>:<div className="final-empty"><Film/><span><strong>{c.masterPending}</strong><small>{c.masterPendingBody}</small></span></div>}</div>
+    </aside>
+  </section>;
+}
+
+function Workbench({project,initialSceneId,initialStage,running,onSave,onRunStage,onReview,onBulkRun,onBulkReview,c}){
+  const [selectedId,setSelectedId]=useState(initialSceneId||project.scenes[0]?.id);
+  const [stage,setStage]=useState(initialStage||'script');
   const [viewMode,setViewMode]=useState('scene');
   const sceneIndex=Math.max(0,project.scenes.findIndex((item)=>item.id===selectedId));
   const scene=project.scenes[sceneIndex]||project.scenes[0];
@@ -340,6 +368,8 @@ export default function App(){
   const [error,setError]=useState('');
   const [dialogOpen,setDialogOpen]=useState(false);
   const [settingsOpen,setSettingsOpen]=useState(false);
+  const [projectView,setProjectView]=useState('overview');
+  const [workbenchFocus,setWorkbenchFocus]=useState({sceneId:null,stage:'script'});
 
   const running=!!current&&health?.running?.includes(current.id);
   const config=health?.config;
@@ -348,7 +378,7 @@ export default function App(){
 
   const refreshHealth=async()=>setHealth(await api('/api/health'));
   const refreshProjects=async()=>setProjects(await api('/api/projects'));
-  const load=async(id)=>{const project=await api(`/api/projects/${encodeURIComponent(id)}`);setCurrent(project);await Promise.all([refreshProjects(),refreshHealth()]);};
+  const load=async(id)=>{const project=await api(`/api/projects/${encodeURIComponent(id)}`);setCurrent(project);setProjectView('overview');await Promise.all([refreshProjects(),refreshHealth()]);};
 
   useEffect(()=>{Promise.all([refreshProjects(),refreshHealth()]).catch((cause)=>setError(cause.message));},[]);
 
@@ -366,6 +396,7 @@ export default function App(){
   const runBulk=async(stage,sceneIds)=>run({stage,sceneIds});
   const reviewStage=async(sceneId,stage,decision)=>{setBusy(true);setError('');try{const project=await api(`/api/projects/${encodeURIComponent(current.id)}/scenes/${encodeURIComponent(sceneId)}/review`,{method:'POST',body:JSON.stringify({stage,decision})});setCurrent(project);await refreshProjects();}catch(cause){setError(cause.message);}finally{setBusy(false);}};
   const reviewBulk=async(stage,sceneIds,decision)=>{setBusy(true);setError('');try{const project=await api(`/api/projects/${encodeURIComponent(current.id)}/review`,{method:'POST',body:JSON.stringify({stage,sceneIds,decision})});setCurrent(project);await refreshProjects();}catch(cause){setError(cause.message);}finally{setBusy(false);}};
+  const openWorkbench=(sceneId,stage='script')=>{setWorkbenchFocus({sceneId,stage});setProjectView('workbench');};
 
   return <div className="app-shell">
     <header className="app-header">
@@ -401,6 +432,7 @@ export default function App(){
           <section className="project-header compact-header">
             <div><div className="eyebrow">{c.production} / {current.id.slice(-6).toUpperCase()}</div><h1>{current.title}</h1></div>
             <div className="project-actions">
+              <div className="project-view-tabs"><button className={projectView==='overview'?'active':''} onClick={()=>setProjectView('overview')}><Grid2X2/>{c.overview}</button><button className={projectView==='workbench'?'active':''} onClick={()=>openWorkbench(workbenchFocus.sceneId||current.scenes[0].id,workbenchFocus.stage)}><SlidersHorizontal/>{c.workbench}</button></div>
               <div className="compact-progress"><strong>{approvedClips}/{current.scenes.length}</strong><small>{c.clipsApproved}</small></div>
               <div className="mode-switch light"><button className={current.settings?.workflowMode==='studio'?'active':''} disabled={busy||running} onClick={()=>updateProject({workflowMode:'studio'})}><SlidersHorizontal/>{c.studioMode}</button><button className={current.settings?.workflowMode==='auto'?'active':''} disabled={busy||running} onClick={()=>updateProject({workflowMode:'auto'})}><Bot/>{c.autoMode}</button></div>
               <label className="renderer-control"><span>{c.renderer}</span><Select value={current.settings?.renderer||config?.renderer||'simple'} onValueChange={changeRenderer} disabled={busy||running}><SelectTrigger aria-label={c.renderer}><SelectValue/></SelectTrigger><SelectContent><SelectItem value="whiteboard">{c.whiteboard}</SelectItem><SelectItem value="simple">{c.simple}</SelectItem></SelectContent></Select></label>
@@ -408,7 +440,7 @@ export default function App(){
             </div>
           </section>
           {current.error&&<div className="project-error"><strong>{c.lastRunStopped}</strong><span>{current.error.message}</span></div>}
-          <Workbench project={current} running={busy||running} onSave={saveScene} onRunStage={runStage} onReview={reviewStage} onBulkRun={runBulk} onBulkReview={reviewBulk} c={c}/>
+          {projectView==='overview'?<ProjectOverview project={current} running={busy||running} onOpenScene={openWorkbench} onBulkRun={runBulk} onBulkReview={reviewBulk} c={c}/>:<Workbench key={`${current.id}:${workbenchFocus.sceneId}:${workbenchFocus.stage}`} project={current} initialSceneId={workbenchFocus.sceneId} initialStage={workbenchFocus.stage} running={busy||running} onSave={saveScene} onRunStage={runStage} onReview={reviewStage} onBulkRun={runBulk} onBulkReview={reviewBulk} c={c}/>}
         </>}
       </main>
     </div>

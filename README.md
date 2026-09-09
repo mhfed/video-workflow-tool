@@ -31,7 +31,7 @@ npm run web
 
 Open `http://127.0.0.1:4173`. The default **Topic → auto script** input lets you enter an idea and choose target minutes. New projects default to **Studio**, where script, voice, visual, and clip checkpoints are reviewed independently. Switch a project to **Auto run** when you want a complete first draft in one pass.
 
-The Studio UI uses a single-scene workbench: compact scene navigation on the left, one stage preview in the center, a focused inspector on the right, and the approval pipeline fixed along the bottom. On desktop the production workspace stays within one viewport; long scene lists and editor content scroll independently.
+Projects open on a one-viewport **Overview** with stage progress, a scene-by-stage production matrix, attention queue, bulk actions, and final-cut status. Selecting any matrix cell opens the matching scene and stage in the single-scene **Workbench**: compact scene navigation on the left, one stage preview in the center, a focused inspector on the right, and the approval pipeline fixed along the bottom.
 
 Use **Scene** view to finish one scene across its stages, or **Stage** view to review the same creative stage across the production. **Next task** prioritizes requested changes and stale work before pending work. Bulk controls generate only eligible scenes and approve only artifacts that already exist.
 
