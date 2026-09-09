@@ -19,6 +19,8 @@ Representative shape:
   },
   "settings": {
     "renderer": "whiteboard",
+    "format": "landscape",
+    "aspectRatio": "16:9",
     "workflowMode": "studio",
     "width": 1920,
     "height": 1080,
@@ -70,6 +72,8 @@ Representative shape:
 ```
 
 `settings.workflowMode` is `auto` or `studio`. Review decisions are independent from the technical `status` and can be `pending`, `approved`, `changes-requested`, or `stale`.
+
+`settings.format` is `landscape` (16:9) or `short` (9:16). Short projects use 1080 × 1920. These dimensions are canonical project state and override environment defaults while rendering. Changing only the format invalidates rendered scene video, synchronized clips, and the final cut; voice and generated visuals remain reusable.
 
 Studio dependency gates are:
 

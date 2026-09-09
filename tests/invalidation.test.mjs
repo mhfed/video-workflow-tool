@@ -72,3 +72,15 @@ test('renderer change preserves source media and invalidates every rendered arti
   assert.equal(first.project.artifacts.final,undefined);
   assert.equal(first.project.status,'planned');
 });
+
+test('format change can reuse voice and visual source artifacts',()=>{
+  const {project,scene}=fixture();
+  project.settings={format:'landscape',width:1920,height:1080};
+  Object.assign(project.settings,{format:'short',width:1080,height:1920});
+  invalidateRenderedMedia(project);
+  assert.equal(scene.cache.voice,'voice-key');
+  assert.equal(scene.cache.image,'image-key');
+  assert.equal(scene.cache.video,undefined);
+  assert.equal(scene.cache.clip,undefined);
+  assert.equal(project.artifacts.final,undefined);
+});

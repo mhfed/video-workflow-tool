@@ -91,7 +91,8 @@ async function concatClips(project,cfg,clips) {
 }
 
 export async function runPipeline(projectId,{force=false,sceneId=null,sceneIds=null,stage='all'}={}) {
-  const cfg=config(); const project=normalizeWorkflow(loadProject(projectId,cfg)); const clips=[];
+  const baseCfg=config(); const project=normalizeWorkflow(loadProject(projectId,baseCfg));
+  const cfg={...baseCfg,width:project.settings.width,height:project.settings.height,fps:project.settings.fps,openaiImageSize:project.settings.format==='short'?'1024x1536':baseCfg.openaiImageSize}; const clips=[];
   const studio=project.settings.workflowMode==='studio';
   const targets=sceneId?[sceneId]:Array.isArray(sceneIds)?[...new Set(sceneIds)]:null;
   if(!['voice','visual','clip','final','all'].includes(stage))throw new Error(`Unsupported pipeline stage: ${stage}`);

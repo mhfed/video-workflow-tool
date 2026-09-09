@@ -182,7 +182,7 @@ function Workbench({project,initialSceneId,initialStage,running,onSave,onRunStag
 
     <div className="preview-deck">
       <div className="preview-toolbar"><div><span>{scene.id}</span><strong>{stageLabel(stage,c)}</strong></div><Badge variant={badgeVariant(scene.status)}>{statusLabel(scene.status,c)}</Badge></div>
-      <div className="preview-canvas"><StagePreview project={project} scene={scene} stage={stage} c={c}/></div>
+      <div className={`preview-canvas format-${project.settings?.format||'landscape'}`}><StagePreview project={project} scene={scene} stage={stage} c={c}/></div>
       <div className="scene-pager"><button disabled={sceneIndex===0} onClick={()=>go(-1)}><ArrowLeft/>{c.previousScene}</button><span>{sceneIndex+1} / {project.scenes.length}</span><button disabled={sceneIndex===project.scenes.length-1} onClick={()=>go(1)}>{c.nextScene}<ArrowRight/></button></div>
     </div>
 
@@ -215,8 +215,9 @@ function NewProjectDialog({open,onOpenChange,onCreate,busy,defaultRenderer='simp
   const [renderer,setRenderer]=useState(defaultRenderer);
   const [language,setLanguage]=useState(defaultLanguage);
   const [workflowMode,setWorkflowMode]=useState('studio');
-  useEffect(()=>{if(open){setRenderer(defaultRenderer);setLanguage(defaultLanguage);setWorkflowMode('studio');}},[open,defaultRenderer,defaultLanguage]);
-  const submit=(event)=>{event.preventDefault();const data=Object.fromEntries(new FormData(event.currentTarget));onCreate({...data,sourceType,renderer,language,workflowMode});};
+  const [format,setFormat]=useState('landscape');
+  useEffect(()=>{if(open){setRenderer(defaultRenderer);setLanguage(defaultLanguage);setWorkflowMode('studio');setFormat('landscape');}},[open,defaultRenderer,defaultLanguage]);
+  const submit=(event)=>{event.preventDefault();const data=Object.fromEntries(new FormData(event.currentTarget));onCreate({...data,sourceType,renderer,language,workflowMode,format});};
   return <Dialog open={open} onOpenChange={onOpenChange}>
     <DialogContent className="new-project-dialog">
       <DialogHeader>
@@ -233,6 +234,7 @@ function NewProjectDialog({open,onOpenChange,onCreate,busy,defaultRenderer='simp
           <Textarea name="sourceText" rows={10} placeholder={sourceType==='topic'?c.topicPlaceholder:sourceType==='srt'?'1\n00:00:00,000 --> 00:00:04,000\n…':c.scriptPlaceholder} required/>
         </label>
         <div className="production-options">
+          <label>{c.videoFormat}<Select value={format} onValueChange={setFormat}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent><SelectItem value="landscape">{c.landscapeFormat}</SelectItem><SelectItem value="short">{c.shortFormat}</SelectItem></SelectContent></Select><small>{format==='short'?c.shortFormatHint:c.landscapeFormatHint}</small></label>
           <label>{c.renderStyle}<Select value={renderer} onValueChange={setRenderer}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent><SelectItem value="whiteboard">{c.whiteboard}</SelectItem><SelectItem value="simple">{c.simple}</SelectItem></SelectContent></Select><small>{c.rendererHint}</small></label>
           <label>{c.contentLanguage}<Select value={language} onValueChange={setLanguage}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent>{UI_LANGUAGES.map((item)=><SelectItem key={item.code} value={item.code}>{item.label}</SelectItem>)}</SelectContent></Select></label>
           <label className="minutes-field">{c.targetLength}<Input name="minutes" type="number" min="1" max="60" defaultValue="6"/><span>{c.minutes}</span></label>
@@ -397,6 +399,7 @@ export default function App(){
   const saveScene=async(sceneId,payload)=>{setBusy(true);setError('');try{const project=await api(`/api/projects/${encodeURIComponent(current.id)}/scenes/${encodeURIComponent(sceneId)}`,{method:'PATCH',body:JSON.stringify(payload)});setCurrent(project);await refreshProjects();}catch(cause){setError(cause.message);}finally{setBusy(false);}};
   const updateProject=async(payload)=>{setBusy(true);setError('');try{const project=await api(`/api/projects/${encodeURIComponent(current.id)}`,{method:'PATCH',body:JSON.stringify(payload)});setCurrent(project);await refreshProjects();}catch(cause){setError(cause.message);}finally{setBusy(false);}};
   const changeRenderer=async(renderer)=>{if(!current||renderer===current.settings?.renderer)return;await updateProject({renderer});};
+  const changeFormat=async(format)=>{if(!current||format===current.settings?.format)return;await updateProject({format});};
   const run=async(body={})=>{setBusy(true);setError('');try{await api(`/api/projects/${encodeURIComponent(current.id)}/run`,{method:'POST',body:JSON.stringify(body)});await load(current.id);}catch(cause){setError(cause.message);try{await load(current.id);}catch{}}finally{setBusy(false);await refreshHealth().catch(()=>{});}};
   const runStage=async(sceneId,stage)=>run({sceneId,stage});
   const runBulk=async(stage,sceneIds)=>run({stage,sceneIds});
@@ -442,6 +445,7 @@ export default function App(){
               <div className="compact-progress"><strong>{approvedClips}/{current.scenes.length}</strong><small>{c.clipsApproved}</small></div>
               <div className="mode-switch light"><button className={current.settings?.workflowMode==='studio'?'active':''} disabled={busy||running} onClick={()=>updateProject({workflowMode:'studio'})}><SlidersHorizontal/>{c.studioMode}</button><button className={current.settings?.workflowMode==='auto'?'active':''} disabled={busy||running} onClick={()=>updateProject({workflowMode:'auto'})}><Bot/>{c.autoMode}</button></div>
               <label className="renderer-control"><span>{c.renderer}</span><Select value={current.settings?.renderer||config?.renderer||'simple'} onValueChange={changeRenderer} disabled={busy||running}><SelectTrigger aria-label={c.renderer}><SelectValue/></SelectTrigger><SelectContent><SelectItem value="whiteboard">{c.whiteboard}</SelectItem><SelectItem value="simple">{c.simple}</SelectItem></SelectContent></Select></label>
+              <label className="renderer-control"><span>{c.videoFormat}</span><Select value={current.settings?.format||'landscape'} onValueChange={changeFormat} disabled={busy||running}><SelectTrigger aria-label={c.videoFormat}><SelectValue/></SelectTrigger><SelectContent><SelectItem value="landscape">16:9</SelectItem><SelectItem value="short">9:16</SelectItem></SelectContent></Select></label>
               <Button size="lg" disabled={busy||running||current.settings?.workflowMode==='studio'&&approvedClips!==current.scenes.length} onClick={()=>run({stage:current.settings?.workflowMode==='studio'?'final':'all'})}>{busy||running?<LoaderCircle className="spin"/>:<Play/>}{busy||running?c.rendering:current.settings?.workflowMode==='studio'?c.assembleFinal:c.runPipeline}</Button>
             </div>
           </section>

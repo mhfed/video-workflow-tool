@@ -8,6 +8,7 @@ import { createProject, listProjects, loadProject, saveProject, projectDir } fro
 import { invalidateRenderedMedia, invalidateScene } from '../../../packages/core/src/invalidation.mjs';
 import { SUPPORTED_RENDERERS } from '../../../packages/core/src/validate-config.mjs';
 import { SUPPORTED_LANGUAGES } from '../../../packages/core/src/languages.mjs';
+import { SUPPORTED_VIDEO_FORMATS, videoFormatSettings } from '../../../packages/core/src/video-format.mjs';
 import { setReviewDecision, WORKFLOW_MODES } from '../../../packages/core/src/workflow.mjs';
 import { generateScriptOpenAI } from '../../../packages/providers/src/openai.mjs';
 import { generateScriptMock } from '../../../packages/providers/src/mock.mjs';
@@ -141,7 +142,7 @@ const server=http.createServer(async (req,res)=>{
       }
     }
     if(req.method==='GET' && url.pathname==='/api/projects') return json(res,200,listProjects(cfg));
-    if(req.method==='POST' && url.pathname==='/api/projects') { const b=await readBody(req); let sourceText=b.sourceText||'',sourceType=b.sourceType||'script',topic=''; const renderer=typeof b.renderer==='string'?b.renderer:cfg.renderer; const language=typeof b.language==='string'?b.language:cfg.contentLanguage; const workflowMode=WORKFLOW_MODES.has(b.workflowMode)?b.workflowMode:'studio'; if(!SUPPORTED_RENDERERS.has(renderer))return json(res,400,{error:'Unsupported video renderer.'}); if(!SUPPORTED_LANGUAGES.has(language))return json(res,400,{error:'Unsupported project language.'}); if(sourceType==='topic'){topic=String(b.topic||b.sourceText||'').trim();if(!topic)throw new Error('topic is required');sourceText=cfg.mockMode||cfg.textProvider==='mock'?generateScriptMock(topic,{language}):await generateScriptOpenAI(topic,cfg,{minutes:Number(b.minutes||cfg.scriptMinutes),language});} return json(res,201,createProject({title:b.title||topic,sourceText,sourceType,topic,workflowMode},{...cfg,renderer,contentLanguage:language})); }
+    if(req.method==='POST' && url.pathname==='/api/projects') { const b=await readBody(req); let sourceText=b.sourceText||'',sourceType=b.sourceType||'script',topic=''; const renderer=typeof b.renderer==='string'?b.renderer:cfg.renderer; const language=typeof b.language==='string'?b.language:cfg.contentLanguage; const format=typeof b.format==='string'?b.format:'landscape'; const workflowMode=WORKFLOW_MODES.has(b.workflowMode)?b.workflowMode:'studio'; if(!SUPPORTED_RENDERERS.has(renderer))return json(res,400,{error:'Unsupported video renderer.'}); if(!SUPPORTED_LANGUAGES.has(language))return json(res,400,{error:'Unsupported project language.'}); if(!SUPPORTED_VIDEO_FORMATS.has(format))return json(res,400,{error:'Unsupported video format.'}); if(sourceType==='topic'){topic=String(b.topic||b.sourceText||'').trim();if(!topic)throw new Error('topic is required');sourceText=cfg.mockMode||cfg.textProvider==='mock'?generateScriptMock(topic,{language}):await generateScriptOpenAI(topic,cfg,{minutes:Number(b.minutes||cfg.scriptMinutes),language});} return json(res,201,createProject({title:b.title||topic,sourceText,sourceType,topic,workflowMode,format},{...cfg,renderer,contentLanguage:language})); }
     if(parts[0]==='api'&&parts[1]==='projects'&&parts[2]) {
       const id=decodeURIComponent(parts[2]);
       if(req.method==='GET'&&parts.length===3) return json(res,200,loadProject(id,cfg));
@@ -156,6 +157,10 @@ const server=http.createServer(async (req,res)=>{
         if(typeof b.workflowMode==='string'){
           if(!WORKFLOW_MODES.has(b.workflowMode))return json(res,400,{error:'Unsupported workflow mode.'});
           p.settings.workflowMode=b.workflowMode;
+        }
+        if(typeof b.format==='string'){
+          if(!SUPPORTED_VIDEO_FORMATS.has(b.format))return json(res,400,{error:'Unsupported video format.'});
+          if(p.settings.format!==b.format){Object.assign(p.settings,videoFormatSettings(b.format,cfg));invalidateRenderedMedia(p);}
         }
         saveProject(p,cfg);
         return json(res,200,p);

@@ -439,6 +439,8 @@ video::cue { color: #fffdf8; background: rgba(22,21,18,.82); font-family: var(--
 .preview-toolbar strong { font: 500 15px var(--font-serif); }
 .preview-canvas { min-height: 0; display: grid; place-items: center; overflow: hidden; padding: clamp(12px,2vw,28px); background-color: #1d1c19; background-image: radial-gradient(#37352f .7px,transparent .7px); background-size: 14px 14px; }
 .workbench-video, .workbench-image { display: block; width: 100%; max-width: 900px; max-height: 100%; aspect-ratio: 16/9; object-fit: contain; background: #090909; border-radius: 3px; box-shadow: 0 16px 38px rgb(0 0 0 / 35%); }
+.preview-canvas.format-short .workbench-video, .preview-canvas.format-short .workbench-image { width: auto; height: 100%; max-width: 100%; aspect-ratio: 9/16; }
+.preview-canvas.format-short .workbench-placeholder { width: auto; height: 100%; max-width: 100%; aspect-ratio: 9/16; }
 .workbench-placeholder { width: min(100%,820px); min-height: 0; height: auto; aspect-ratio: 16/9; background-color: #25241f; background-image: linear-gradient(45deg,#292823 25%,transparent 25%,transparent 75%,#292823 75%),linear-gradient(45deg,#292823 25%,transparent 25%,transparent 75%,#292823 75%); border-color: #47443c; }
 .script-stage-preview { width: min(82%,760px); color: #f5efe3; }
 .script-stage-preview > span { display: block; height: 45px; color: #e05b35; font: 80px/.8 var(--font-serif); }
@@ -497,7 +499,7 @@ video::cue { color: #fffdf8; background: rgba(22,21,18,.82); font-family: var(--
 .new-project-form { display: grid; gap: 5px; margin-top: 10px; }
 .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .new-project-form [data-slot="select-trigger"] { width: 100%; text-transform: none; letter-spacing: 0; font-weight: 500; }
-.production-options { display: grid; grid-template-columns: minmax(220px,1fr) minmax(150px,.65fr) 150px; gap: 12px; align-items: start; }
+.production-options { display: grid; grid-template-columns: repeat(2,minmax(150px,1fr)) minmax(130px,.7fr) 130px; gap: 12px; align-items: start; }
 .mode-picker { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .mode-picker button { display: flex; gap: 12px; align-items: center; padding: 13px; color: #615b50; text-align: left; background: #f1ede4; border: 1px solid #d0c9bc; border-radius: 6px; }
 .mode-picker button.active { color: #28251f; background: #fff9e8; border-color: #d49836; box-shadow: inset 0 0 0 1px #edc36d; }

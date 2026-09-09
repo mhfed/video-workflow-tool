@@ -71,6 +71,9 @@ Topic all the way to final video:
 
 ```bash
 npm run cli -- create --title "Vì sao ta trì hoãn" --topic "Vì sao con người hay trì hoãn?" --minutes 6 --language vi
+
+# Vertical 9:16 output for Shorts, Reels, or TikTok
+npm run cli -- create --title "Trì hoãn trong 60 giây" --topic "Vì sao ta trì hoãn?" --minutes 1 --language vi --format short
 npm run cli -- run --project <project-id> --stage voice --scene scene-001
 npm run cli -- run --project <project-id> --stage visual --scene scene-001
 npm run cli -- run --project <project-id> --stage clip --scene scene-001

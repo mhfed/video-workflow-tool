@@ -1,7 +1,49 @@
 import { parseSrt } from './srt.mjs';
+
 const words = (s) => String(s).trim().split(/\s+/).filter(Boolean).length;
 export const estimateDurationSec = (text, wpm = 150) => Math.max(2, words(text) / (wpm / 60));
-function sentenceUnits(text) { const paragraphs = text.replace(/\r/g,'').split(/\n\s*\n/).map((x)=>x.trim()).filter(Boolean); const result = []; for (const p of paragraphs) { const pieces = p.match(/[^.!?。！？]+[.!?。！？]?/g) || [p]; for (const x of pieces.map((v)=>v.trim()).filter(Boolean)) result.push(x); } return result; }
-function promptFor(text) { return `Create one clean 16:9 landscape whiteboard-style illustration for this narration: ${JSON.stringify(text)}. Keep every important subject fully visible inside the central 76% safe area, leaving at least 12% empty margin on every edge. Nothing may touch or continue beyond the canvas boundary. Warm light beige paper background, dark hand-drawn ink lines, sparse red/orange/blue accents, strong visual hierarchy, generous whitespace, no captions, no labels, no readable text, no photorealism, no 3D.`; }
-export function planScriptScenes(text, cfg) { const units = sentenceUnits(text), scenes = []; let bucket = [], sec = 0; const flush = () => { if (!bucket.length) return; const sceneText = bucket.join(' ').trim(); const durationSec = Math.min(cfg.sceneMaxSec, Math.max(cfg.sceneMinSec, estimateDurationSec(sceneText, cfg.wordsPerMinute))); scenes.push({ text: sceneText, durationMs: Math.round(durationSec * 1000), visualPrompt: promptFor(sceneText) }); bucket = []; sec = 0; }; for (const unit of units) { const unitSec = estimateDurationSec(unit, cfg.wordsPerMinute); if (bucket.length && sec >= cfg.sceneMinSec && sec + unitSec > cfg.sceneTargetSec) flush(); bucket.push(unit); sec += unitSec; if (sec >= cfg.sceneMaxSec) flush(); } flush(); return scenes; }
-export function planSrtScenes(text, cfg) { const cues = parseSrt(text), scenes = []; let bucket = []; const flush = () => { if (!bucket.length) return; const startMs = bucket[0].startMs, endMs = bucket.at(-1).endMs, sceneText = bucket.map((c)=>c.text).join(' ').trim(); scenes.push({ text: sceneText, durationMs: endMs - startMs, sourceStartMs: startMs, sourceEndMs: endMs, visualPrompt: promptFor(sceneText) }); bucket = []; }; for (const cue of cues) { bucket.push(cue); const durationSec = (bucket.at(-1).endMs - bucket[0].startMs) / 1000; if (durationSec >= cfg.sceneTargetSec || durationSec >= cfg.sceneMaxSec) flush(); } flush(); return scenes; }
+
+function sentenceUnits(text) {
+  const paragraphs = text.replace(/\r/g,'').split(/\n\s*\n/).map((x)=>x.trim()).filter(Boolean);
+  const result = [];
+  for (const p of paragraphs) {
+    const pieces = p.match(/[^.!?。！？]+[.!?。！？]?/g) || [p];
+    for (const x of pieces.map((v)=>v.trim()).filter(Boolean)) result.push(x);
+  }
+  return result;
+}
+
+function promptFor(text, cfg={}) {
+  const frame=cfg.format==='short'?'9:16 vertical':'16:9 landscape';
+  return `Create one clean ${frame} whiteboard-style illustration for this narration: ${JSON.stringify(text)}. Keep every important subject fully visible inside the central 76% safe area, leaving at least 12% empty margin on every edge. Nothing may touch or continue beyond the canvas boundary. Warm light beige paper background, dark hand-drawn ink lines, sparse red/orange/blue accents, strong visual hierarchy, generous whitespace, no captions, no labels, no readable text, no photorealism, no 3D.`;
+}
+
+export function planScriptScenes(text, cfg) {
+  const units = sentenceUnits(text), scenes = []; let bucket = [], sec = 0;
+  const flush = () => {
+    if (!bucket.length) return;
+    const sceneText = bucket.join(' ').trim();
+    const durationSec = Math.min(cfg.sceneMaxSec, Math.max(cfg.sceneMinSec, estimateDurationSec(sceneText, cfg.wordsPerMinute)));
+    scenes.push({ text: sceneText, durationMs: Math.round(durationSec * 1000), visualPrompt: promptFor(sceneText,cfg) });
+    bucket = []; sec = 0;
+  };
+  for (const unit of units) {
+    const unitSec = estimateDurationSec(unit, cfg.wordsPerMinute);
+    if (bucket.length && sec >= cfg.sceneMinSec && sec + unitSec > cfg.sceneTargetSec) flush();
+    bucket.push(unit); sec += unitSec;
+    if (sec >= cfg.sceneMaxSec) flush();
+  }
+  flush(); return scenes;
+}
+
+export function planSrtScenes(text, cfg) {
+  const cues = parseSrt(text), scenes = []; let bucket = [];
+  const flush = () => {
+    if (!bucket.length) return;
+    const startMs = bucket[0].startMs, endMs = bucket.at(-1).endMs, sceneText = bucket.map((c)=>c.text).join(' ').trim();
+    scenes.push({ text: sceneText, durationMs: endMs - startMs, sourceStartMs: startMs, sourceEndMs: endMs, visualPrompt: promptFor(sceneText,cfg) });
+    bucket = [];
+  };
+  for (const cue of cues) { bucket.push(cue); const durationSec = (bucket.at(-1).endMs - bucket[0].startMs) / 1000; if (durationSec >= cfg.sceneTargetSec || durationSec >= cfg.sceneMaxSec) flush(); }
+  flush(); return scenes;
+}
