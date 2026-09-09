@@ -1,6 +1,7 @@
 import path from 'node:path';
 import { run } from '../../core/src/process.mjs';
 import { ensureDir, fileExists } from '../../core/src/utils.mjs';
+import { containVideoFilter } from '../../core/src/video-fit.mjs';
 
 const drawtextSupport = new Map();
 
@@ -23,8 +24,7 @@ async function supportsDrawtext(ffmpegBin) {
 export async function renderSimpleScene({ scene, imageFile, outputFile, durationSec, cfg }) {
   ensureDir(path.dirname(outputFile));
   if (imageFile && fileExists(imageFile)) {
-    const frames = Math.max(1, Math.round(durationSec * cfg.fps));
-    const vf = `scale=${cfg.width}:${cfg.height}:force_original_aspect_ratio=increase,crop=${cfg.width}:${cfg.height},zoompan=z='min(zoom+0.0004,1.06)':d=${frames}:s=${cfg.width}x${cfg.height}:fps=${cfg.fps},format=yuv420p`;
+    const vf = containVideoFilter(cfg.width,cfg.height);
     await run(cfg.ffmpegBin, ['-y','-loop','1','-i',imageFile,'-vf',vf,'-t',String(durationSec),'-r',String(cfg.fps),'-c:v','libx264','-pix_fmt','yuv420p',outputFile], { capture:true });
   } else {
     const args = ['-y','-f','lavfi','-i',`color=c=0xF5EBD7:s=${cfg.width}x${cfg.height}:r=${cfg.fps}`];

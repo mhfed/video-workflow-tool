@@ -8,6 +8,7 @@ import { languageInfo, normalizeLanguage } from '../../../packages/core/src/lang
 import { sha256, fileExists, ensureDir } from '../../../packages/core/src/utils.mjs';
 import { probeDuration } from '../../../packages/core/src/media.mjs';
 import { run } from '../../../packages/core/src/process.mjs';
+import { containVideoFilter } from '../../../packages/core/src/video-fit.mjs';
 import { generateImageOpenAI } from '../../../packages/providers/src/openai.mjs';
 import { synthesizeVoice, voiceCacheConfig } from '../../../packages/providers/src/voice.mjs';
 import { renderSimpleScene } from '../../../packages/renderers/src/simple.mjs';
@@ -15,6 +16,7 @@ import { renderWhiteboardScene, whiteboardHandSignature } from '../../../package
 
 function log(event, detail={}) { console.log(JSON.stringify({time:new Date().toISOString(),event,...detail})); }
 const effectiveProvider = (configured, cfg) => cfg.mockMode ? 'mock' : configured;
+const RENDER_CONTRACT='contain-v2';
 
 async function ensureVoice(scene, project, cfg, force=false) {
   const dir=ensureDir(sceneDir(cfg,project.id,scene.id));
@@ -45,7 +47,7 @@ async function ensureVideo(scene, project, cfg, imageFile, force=false) {
   const dir=ensureDir(sceneDir(cfg,project.id,scene.id));
   const file=path.join(dir,'video.mp4');
   const renderer = project.settings.renderer || cfg.renderer;
-  const key=sha256({renderer,durationMs:scene.durationMs,image:scene.cache.image,text:scene.text,width:cfg.width,height:cfg.height,fps:cfg.fps,hand:renderer==='whiteboard'?whiteboardHandSignature(cfg):null});
+  const key=sha256({renderer,renderContract:RENDER_CONTRACT,durationMs:scene.durationMs,image:scene.cache.image,text:scene.text,width:cfg.width,height:cfg.height,fps:cfg.fps,hand:renderer==='whiteboard'?whiteboardHandSignature(cfg):null});
   if (!force && scene.cache.video===key && fileExists(file)) return file;
   log('render:start',{scene:scene.id,renderer});
   const args={scene,imageFile,outputFile:file,durationSec:scene.durationMs/1000,cfg};
@@ -56,9 +58,9 @@ async function ensureVideo(scene, project, cfg, imageFile, force=false) {
 async function ensureClip(scene, project, cfg, videoFile, voiceFile, force=false) {
   const dir=ensureDir(sceneDir(cfg,project.id,scene.id));
   const file=path.join(dir,'clip.mp4');
-  const key=sha256({video:scene.cache.video,voice:scene.cache.voice,width:cfg.width,height:cfg.height,fps:cfg.fps});
+  const key=sha256({video:scene.cache.video,voice:scene.cache.voice,fit:RENDER_CONTRACT,width:cfg.width,height:cfg.height,fps:cfg.fps});
   if (!force && scene.cache.clip===key && fileExists(file)) return file;
-  const vf=`scale=${cfg.width}:${cfg.height}:force_original_aspect_ratio=increase,crop=${cfg.width}:${cfg.height},format=yuv420p`;
+  const vf=containVideoFilter(cfg.width,cfg.height);
   await run(cfg.ffmpegBin,['-y','-i',videoFile,'-i',voiceFile,'-map','0:v:0','-map','1:a:0','-vf',vf,'-r',String(cfg.fps),'-c:v','libx264','-preset','medium','-crf','18','-c:a','aac','-b:a','192k','-shortest','-movflags','+faststart',file],{capture:true});
   scene.cache.clip=key; scene.artifacts.clip=path.relative(projectDir(cfg,project.id),file); scene.status='ready'; saveProject(project,cfg); return file;
 }
