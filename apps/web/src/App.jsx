@@ -23,12 +23,12 @@ import {
   LoaderCircle,
   Maximize2,
   Mic2,
-  MoreHorizontal,
   PackageCheck,
   Play,
   Plus,
   RefreshCw,
   Save,
+  Search,
   Server,
   Settings2,
   ShieldCheck,
@@ -42,7 +42,6 @@ import { Button } from '@/components/ui/button';
 import { CardDescription } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
@@ -81,6 +80,33 @@ function EmptyState({onCreate,onDemo,c}){
       </div>)}
     </div>
   </div>;
+}
+
+function ApplicationNavigation({current,projects,drawer,onDrawer,onHome,onCreate,onSelect,onSettings,health,c}){
+  const [query,setQuery]=useState('');
+  useEffect(()=>{if(drawer!=='projects')setQuery('');},[drawer]);
+  useEffect(()=>{if(!drawer)return;const close=(event)=>{if(event.key==='Escape')onDrawer(null);};window.addEventListener('keydown',close);return()=>window.removeEventListener('keydown',close);},[drawer,onDrawer]);
+  const visible=projects.filter((project)=>project.title.toLowerCase().includes(query.trim().toLowerCase()));
+  const activity=projects.flatMap((project)=>(project.jobs||[]).map((job)=>({project,job}))).sort((a,b)=>String(b.job.createdAt||'').localeCompare(String(a.job.createdAt||''))).slice(0,30);
+  const navButton=(id,label,Icon,onClick,active=false,badge=null)=><Tooltip key={id}><TooltipTrigger asChild><button className={`nav-rail-button ${active?'active':''}`} aria-label={label} onClick={onClick}><Icon/><span>{label}</span>{badge!==null&&badge>0&&<b>{badge}</b>}</button></TooltipTrigger><TooltipContent side="right">{label}</TooltipContent></Tooltip>;
+  return <>
+    <aside className="app-nav-rail" aria-label={c.mainNavigation}>
+      <Tooltip><TooltipTrigger asChild><button className="nav-create" aria-label={c.newProduction} onClick={onCreate}><Plus/><span>{c.create}</span></button></TooltipTrigger><TooltipContent side="right">{c.newProduction}</TooltipContent></Tooltip>
+      <nav className="nav-stack">
+        {navButton('home',c.home,Grid2X2,onHome,!current&&!drawer)}
+        {navButton('projects',c.projectLibrary,Clapperboard,()=>onDrawer(drawer==='projects'?null:'projects'),drawer==='projects',projects.length)}
+        {navButton('activity',c.activityCenter,ListChecks,()=>onDrawer(drawer==='activity'?null:'activity'),drawer==='activity',activity.filter(({job})=>['queued','running','cancelling','failed'].includes(job.status)).length)}
+      </nav>
+      <div className="nav-rail-spacer"/>
+      <div className="nav-runtime" title={health?c.systemReady:c.connecting}><span className={`status-light ${health?'online':''}`}/><small>{health?'ON':'—'}</small></div>
+      {navButton('settings',c.settingsNav,Settings2,onSettings,false)}
+    </aside>
+    {drawer&&<><button className="nav-drawer-scrim" aria-label={c.closePanel} onClick={()=>onDrawer(null)}/><aside className={`nav-drawer ${drawer}`}>
+      <header><div><span>{drawer==='projects'?c.projectLibrary:c.activityCenter}</span><p>{drawer==='projects'?c.projectLibraryBody:c.activityCenterBody}</p></div><button aria-label={c.closePanel} onClick={()=>onDrawer(null)}><X/></button></header>
+      {drawer==='projects'?<><label className="nav-project-search"><Search/><Input value={query} onChange={(event)=>setQuery(event.target.value)} placeholder={c.searchProjects}/></label><div className="nav-project-list">{visible.length?visible.map((project)=><button key={project.id} className={project.id===current?.id?'active':''} onClick={()=>{onDrawer(null);onSelect(project.id);}}><span><Clapperboard/></span><div><strong>{project.title}</strong><small>{project.scenes.length} {c.scenes} · {statusLabel(project.status,c)}</small></div><i/></button>):<div className="nav-empty compact"><Search/><strong>{c.noProjectsFound}</strong><p>{c.noProjectsFoundBody}</p></div>}</div></>:<div className="nav-activity-list">{activity.length?activity.map(({project,job})=><button key={`${project.id}-${job.id}`} onClick={()=>{onDrawer(null);onSelect(project.id);}}><span className={`job-state ${job.status}`}>{job.progress?.percent||0}%</span><div><strong>{project.title}</strong><small>{c.jobTypes[job.type]||job.type} · {c.jobStates[job.status]||job.status}</small></div><i/></button>):<div className="nav-empty"><Activity/><strong>{c.noActivity}</strong><p>{c.noActivityBody}</p></div>}</div>}
+      <footer><span className={`status-light ${health?'online':''}`}/><div><strong>{health?c.systemReady:c.connecting}</strong><small>{health?.config?`${health.config.mockMode?'Mock':'Live'} · ${health.config.renderer}`:c.localRuntime}</small></div></footer>
+    </aside></>}
+  </>;
 }
 
 function StagePreview({project,scene,stage,c}){
@@ -441,6 +467,7 @@ export default function App(){
   const [error,setError]=useState('');
   const [dialogOpen,setDialogOpen]=useState(false);
   const [settingsOpen,setSettingsOpen]=useState(false);
+  const [navDrawer,setNavDrawer]=useState(null);
 
   const activeJob=[...(current?.jobs||[])].reverse().find((job)=>['queued','running','cancelling'].includes(job.status))||null;
   const running=!!activeJob||!!current&&health?.running?.includes(current.id);
@@ -496,21 +523,7 @@ export default function App(){
     </header>
 
     <div className={`workspace-grid ${current?'project-open':''}`}>
-      <aside className="project-rail">
-        <div className="rail-heading"><span>{c.productions}</span><Badge variant="outline">{projects.length}</Badge></div>
-        <Button className="new-project-button" onClick={()=>setDialogOpen(true)}><Plus/>{c.newProduction}</Button>
-        <ScrollArea className="project-scroll">
-          <div className="project-list">{projects.map((project)=><button key={project.id} className={`project-item ${project.id===current?.id?'active':''}`} onClick={()=>load(project.id)}>
-            <span className="project-thumb"><Clapperboard/></span>
-            <span className="project-copy"><strong>{project.title}</strong><small>{project.scenes.length} {c.scenes} · {statusLabel(project.status,c)}</small></span>
-            <MoreHorizontal className="project-more"/>
-          </button>)}</div>
-        </ScrollArea>
-        <button className="rail-footer" onClick={()=>setSettingsOpen(true)}>
-          <div><Settings2/><span><strong>{config?.mockMode?c.testMode:c.production}</strong><small>{config?.hasOpenAIKey?c.apiConfigured:c.openaiSettings}</small></span></div>
-          <div className="provider-line">{config?.imageModel||'image'}<br/>{config?.voiceProvider||'voice'}{config?.voiceProvider==='vivibe'&&config?.vivibeVoiceId?` · ${config.vivibeVoiceId.slice(0,8)}`:''}</div>
-        </button>
-      </aside>
+      <ApplicationNavigation current={current} projects={projects} drawer={navDrawer} onDrawer={setNavDrawer} onHome={()=>{setNavDrawer(null);setCurrent(null);}} onCreate={()=>{setNavDrawer(null);setDialogOpen(true);}} onSelect={load} onSettings={()=>{setNavDrawer(null);setSettingsOpen(true);}} health={health} c={c}/>
 
       <main className={`main-stage ${current?'director-shell-stage':''}`}>
         {error&&<div className="error-banner"><CircleDot/><span>{error}</span><button onClick={()=>setError('')}>{c.dismiss}</button></div>}
