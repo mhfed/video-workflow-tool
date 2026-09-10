@@ -33,6 +33,10 @@ Open `http://127.0.0.1:4173`. The default **Topic → auto script** input lets y
 
 Projects open in one **AI Directing Room**: a visual storyboard on the left, the best available scene preview in the center, an intent-aware Director on the right, and the cut timeline along the bottom. The Director always explains the smallest useful next action and previews which cached stages an instruction will affect before it is applied.
 
+Long work now runs through a persistent async queue with per-step progress, ETA, and cooperative cancellation. Every regeneration creates a versioned take, so older voice, visual, and clip options stay selectable. Editorial changes have undo/redo, and the rough-cut player can play cached scene clips in sequence without creating a new final export.
+
+The QA panel performs offline frame/audio checks and can add OpenAI vision plus transcription review when configured. It checks crop, safe area, unwanted text, visual continuity, silence, clipping, pacing, and pronunciation, then prepares a scoped repair proposal with request counts. Project Memory keeps recurring characters, palette, art direction, and pronunciation guidance consistent across new generations.
+
 Normal visual edits use a short, human-facing creative intent; CUTROOM compiles the technical generation prompt behind an Advanced section. Scenes can be inserted, split, duplicated, merged, moved, or removed without rerunning unrelated work. Existing completed projects infer readiness from their artifacts, so upgrading does not force old approvals to be repeated. See [`docs/CUTROOM_V2_PLAN.md`](docs/CUTROOM_V2_PLAN.md) for the product and engine roadmap.
 
 The interface and new video projects default to Vietnamese. In **Provider settings → Language**, you can switch the interface and independently choose Vietnamese or English as the default content language. Each project records its own language in `project.json`, and generated narration plus embedded subtitles follow that setting.
@@ -50,7 +54,7 @@ For handoff, review [`docs/REVIEW_CHECKLIST.md`](docs/REVIEW_CHECKLIST.md). The 
 
 ## Review control panel
 
-For each scene the UI can show the generated visual, narration audio, and rendered clip. Media endpoints support HTTP Range requests, so video/audio seek normally in the browser. A project-level lock prevents duplicate render runs, and failed runs persist their last error for review.
+For each scene the UI can show the generated visual, narration audio, rendered clip, and prior takes. Media endpoints support HTTP Range requests, so video/audio seek normally in the browser. A project-level queue serializes expensive work, and failed/cancelled jobs persist their events for review.
 
 Provider settings let text/images stay on OpenAI while narration uses OpenAI Speech, Vivibe/LucyAI, or the offline mock provider. Vivibe keys remain server-side in `.env`; the UI can fetch active voices through `getUserVoices` and save the selected Voice ID.
 
@@ -108,11 +112,12 @@ workspace/<project-id>/
 ├── script.md | source.srt
 ├── scenes/
 │   └── scene-001/
-│       ├── voice.mp3
-│       ├── visual.png
+│       ├── takes/
+│       │   ├── voice/<take-id>.mp3
+│       │   ├── visual/<take-id>.png
+│       │   ├── video/<take-id>.mp4
+│       │   └── clip/<take-id>.mp4
 │       ├── scene-001.annotation.json
-│       ├── video.mp4
-│       └── clip.mp4
 └── output/
     ├── concat.txt
     └── final.mp4

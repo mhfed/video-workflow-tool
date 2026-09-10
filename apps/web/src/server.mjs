@@ -11,11 +11,17 @@ import { SUPPORTED_RENDERERS } from '../../../packages/core/src/validate-config.
 import { SUPPORTED_LANGUAGES } from '../../../packages/core/src/languages.mjs';
 import { SUPPORTED_VIDEO_FORMATS, videoFormatSettings } from '../../../packages/core/src/video-format.mjs';
 import { setReviewDecision, WORKFLOW_MODES } from '../../../packages/core/src/workflow.mjs';
-import { generateScriptOpenAI } from '../../../packages/providers/src/openai.mjs';
+import { buildRoughCutManifest } from '../../../packages/core/src/rough-cut.mjs';
+import { buildRepairPlan } from '../../../packages/core/src/repair-plan.mjs';
+import { recordHistory, redoProject, undoProject } from '../../../packages/core/src/history.mjs';
+import { selectTake } from '../../../packages/core/src/takes.mjs';
+import { generateScriptOpenAI, planNarrativeBeatsOpenAI } from '../../../packages/providers/src/openai.mjs';
 import { generateScriptMock } from '../../../packages/providers/src/mock.mjs';
 import { listVivibeVoices } from '../../../packages/providers/src/vivibe.mjs';
 import { planSceneDirection } from '../../../packages/providers/src/director.mjs';
 import { runPipeline } from '../../worker/src/pipeline.mjs';
+import { ProjectJobQueue } from '../../worker/src/job-queue.mjs';
+import { runQualityChecks, runRepairActions } from '../../worker/src/quality.mjs';
 import { rendererNames, resolveRendererName } from '../../../packages/renderers/src/registry.mjs';
 import { rendererInputError } from './renderer-input.mjs';
 import { mediaTypeFor, serveMedia } from './media.mjs';
@@ -24,7 +30,8 @@ let cfg=config();
 const here=path.dirname(fileURLToPath(import.meta.url));
 const pub=path.resolve(here,'../dist');
 const envFile=path.resolve('.env');
-const running=new Set();
+const legacyRunning=new Set();
+const jobQueue=new ProjectJobQueue({getConfig:()=>cfg,runners:{render:runPipeline,quality:runQualityChecks,repair:runRepairActions}});
 const json=(res,status,data)=>{res.writeHead(status,{'content-type':'application/json; charset=utf-8'});res.end(JSON.stringify(data,null,2));};
 const readBody=(req)=>new Promise((resolve,reject)=>{let b='';req.on('data',d=>b+=d);req.on('end',()=>{try{resolve(b?JSON.parse(b):{});}catch(e){reject(e);}});req.on('error',reject);});
 const serve=(res,file,type)=>{const stream=fs.createReadStream(file);stream.on('error',()=>{if(!res.headersSent)res.writeHead(404);res.end();});res.writeHead(200,{'content-type':type});stream.pipe(res);};
@@ -33,6 +40,17 @@ const safeConfig=()=>({mockMode:cfg.mockMode,renderer:cfg.renderer,rendererNames
 const safeSettings=()=>({hasOpenAIKey:!!cfg.openaiApiKey,hasVivibeKey:!!cfg.vivibeApiKey,rendererNames,uiLanguage:cfg.uiLanguage,contentLanguage:cfg.contentLanguage,enableOpenAI:!cfg.mockMode&&[cfg.textProvider,cfg.imageProvider].every(value=>value==='openai'),voiceProvider:cfg.voiceProvider,renderer:cfg.renderer,baseUrl:cfg.openaiBaseUrl,textModel:cfg.openaiTextModel,imageModel:cfg.openaiImageModel,imageSize:cfg.openaiImageSize,imageQuality:cfg.openaiImageQuality,ttsModel:cfg.openaiTtsModel,ttsVoice:cfg.openaiTtsVoice,ttsInstructions:cfg.openaiTtsInstructions,vivibeBaseUrl:cfg.vivibeBaseUrl,vivibeVoiceId:cfg.vivibeVoiceId,vivibeSpeed:cfg.vivibeSpeed});
 const isLoopback=(address='')=>address==='127.0.0.1'||address==='::1'||address.startsWith('::ffff:127.');
 const settingString=(body,key,{fallback='',max=500}={})=>typeof body[key]==='string'?body[key].replace(/[\r\n]+/g,' ').trim().slice(0,max):fallback;
+const projectBusy=(id)=>legacyRunning.has(id)||jobQueue.activeProjectIds().includes(id);
+const activeIds=()=>[...new Set([...legacyRunning,...jobQueue.activeProjectIds()])];
+
+function projectMemory(value={}){
+  return {
+    characters:Array.isArray(value.characters)?value.characters.map((item)=>String(item).trim()).filter(Boolean).slice(0,30):[],
+    palette:Array.isArray(value.palette)?value.palette.map((item)=>String(item).trim()).filter(Boolean).slice(0,12):[],
+    artDirection:typeof value.artDirection==='string'?value.artDirection.trim().slice(0,3000):'',
+    pronunciations:Array.isArray(value.pronunciations)?value.pronunciations.map((item)=>String(item).trim()).filter(Boolean).slice(0,50):[]
+  };
+}
 
 function settingsUpdates(body) {
   const updates={};
@@ -98,12 +116,12 @@ function settingsUpdates(body) {
 const server=http.createServer(async (req,res)=>{
   try {
     const url=new URL(req.url,`http://${req.headers.host}`); const parts=url.pathname.split('/').filter(Boolean);
-    if(req.method==='GET'&&url.pathname==='/api/health') return json(res,200,{ok:true,running:[...running],config:safeConfig()});
+    if(req.method==='GET'&&url.pathname==='/api/health') return json(res,200,{ok:true,running:activeIds(),config:safeConfig()});
     if(url.pathname==='/api/settings') {
       if(!isLoopback(req.socket.remoteAddress))return json(res,403,{error:'Settings are only available from this machine.'});
       if(req.method==='GET')return json(res,200,safeSettings());
       if(req.method==='PATCH'){
-        if(running.size)return json(res,409,{error:'Wait for the active render to finish before changing settings.'});
+        if(activeIds().length)return json(res,409,{error:'Wait for the active job to finish before changing settings.'});
         const updates=settingsUpdates(await readBody(req));
         updateEnvFile(envFile,updates);
         for(const [key,value] of Object.entries(updates))process.env[key]=value;
@@ -146,14 +164,53 @@ const server=http.createServer(async (req,res)=>{
       }
     }
     if(req.method==='GET' && url.pathname==='/api/projects') return json(res,200,listProjects(cfg));
-    if(req.method==='POST' && url.pathname==='/api/projects') { const b=await readBody(req); let sourceText=b.sourceText||'',sourceType=b.sourceType||'script',topic=''; const renderer=typeof b.renderer==='string'?b.renderer:cfg.renderer; const language=typeof b.language==='string'?b.language:cfg.contentLanguage; const format=typeof b.format==='string'?b.format:'landscape'; const workflowMode=WORKFLOW_MODES.has(b.workflowMode)?b.workflowMode:'studio'; if(!SUPPORTED_RENDERERS.has(renderer))return json(res,400,{error:'Unsupported video renderer.'}); if(!SUPPORTED_LANGUAGES.has(language))return json(res,400,{error:'Unsupported project language.'}); if(!SUPPORTED_VIDEO_FORMATS.has(format))return json(res,400,{error:'Unsupported video format.'}); if(sourceType==='topic'){topic=String(b.topic||b.sourceText||'').trim();if(!topic)throw new Error('topic is required');sourceText=cfg.mockMode||cfg.textProvider==='mock'?generateScriptMock(topic,{language}):await generateScriptOpenAI(topic,cfg,{minutes:Number(b.minutes||cfg.scriptMinutes),language});} return json(res,201,createProject({title:b.title||topic,sourceText,sourceType,topic,workflowMode,format},{...cfg,renderer,contentLanguage:language})); }
+    if(req.method==='POST' && url.pathname==='/api/projects') {
+      const b=await readBody(req);let sourceText=b.sourceText||'',sourceType=b.sourceType||'script',topic='',plannedScenes=null;
+      const renderer=typeof b.renderer==='string'?b.renderer:cfg.renderer,language=typeof b.language==='string'?b.language:cfg.contentLanguage,format=typeof b.format==='string'?b.format:'landscape',workflowMode=WORKFLOW_MODES.has(b.workflowMode)?b.workflowMode:'studio';
+      if(!SUPPORTED_RENDERERS.has(renderer))return json(res,400,{error:'Unsupported video renderer.'});
+      if(!SUPPORTED_LANGUAGES.has(language))return json(res,400,{error:'Unsupported project language.'});
+      if(!SUPPORTED_VIDEO_FORMATS.has(format))return json(res,400,{error:'Unsupported video format.'});
+      if(sourceType==='topic'){topic=String(b.topic||b.sourceText||'').trim();if(!topic)throw new Error('topic is required');sourceText=cfg.mockMode||cfg.textProvider==='mock'?generateScriptMock(topic,{language}):await generateScriptOpenAI(topic,cfg,{minutes:Number(b.minutes||cfg.scriptMinutes),language});}
+      if(sourceType!=='srt'&&!cfg.mockMode&&cfg.textProvider==='openai'){
+        try{plannedScenes=await planNarrativeBeatsOpenAI(sourceText,{...cfg,contentLanguage:language},{language,format});}
+        catch(error){console.warn(`Semantic planner fallback: ${error.message}`);}
+      }
+      return json(res,201,createProject({title:b.title||topic,sourceText,sourceType,topic,workflowMode,format,plannedScenes},{...cfg,renderer,contentLanguage:language}));
+    }
     if(parts[0]==='api'&&parts[1]==='projects'&&parts[2]) {
       const id=decodeURIComponent(parts[2]);
       if(req.method==='GET'&&parts.length===3) return json(res,200,loadProject(id,cfg));
+      if(req.method==='GET'&&parts[3]==='jobs'&&parts.length===4)return json(res,200,{items:loadProject(id,cfg).jobs||[]});
+      if(req.method==='POST'&&parts[3]==='jobs'&&parts.length===4){
+        const b=await readBody(req),type=b.type||'render',request=b.request||Object.fromEntries(Object.entries(b).filter(([key])=>key!=='type'));
+        const job=jobQueue.enqueue(id,type,request);return json(res,202,{job,project:loadProject(id,cfg)});
+      }
+      if(req.method==='POST'&&parts[3]==='jobs'&&parts[4]&&parts[5]==='cancel'){
+        const job=jobQueue.cancel(id,decodeURIComponent(parts[4]));return json(res,200,{job,project:loadProject(id,cfg)});
+      }
+      if(req.method==='GET'&&parts[3]==='rough-cut'&&parts.length===4)return json(res,200,buildRoughCutManifest(loadProject(id,cfg)));
+      if(req.method==='GET'&&parts[3]==='quality'&&parts[4]==='repair-plan')return json(res,200,buildRepairPlan(loadProject(id,cfg)));
+      if(req.method==='POST'&&parts[3]==='quality'&&parts[4]==='repair'){
+        const b=await readBody(req),plan=buildRepairPlan(loadProject(id,cfg)),selected=Array.isArray(b.actions)?b.actions:plan.actions;
+        const job=jobQueue.enqueue(id,'repair',{actions:selected});return json(res,202,{job,plan,project:loadProject(id,cfg)});
+      }
+      if(req.method==='POST'&&parts[3]==='history'&&['undo','redo'].includes(parts[4])){
+        if(projectBusy(id))return json(res,409,{error:'Wait for the active job before changing project history.'});
+        const p=loadProject(id,cfg),changed=parts[4]==='undo'?undoProject(p):redoProject(p);
+        if(!changed)return json(res,409,{error:`Nothing to ${parts[4]}.`});
+        saveProject(p,cfg);return json(res,200,p);
+      }
+      if(req.method==='POST'&&parts[3]==='scenes'&&parts[4]&&parts[5]==='takes'&&parts[6]&&parts[7]&&parts[8]==='select'){
+        if(projectBusy(id))return json(res,409,{error:'Wait for the active job before selecting a take.'});
+        const p=loadProject(id,cfg),s=p.scenes.find((scene)=>scene.id===decodeURIComponent(parts[4]));if(!s)return json(res,404,{error:'scene not found'});
+        recordHistory(p,`Select ${parts[6]} take for ${s.id}`);selectTake(p,s,decodeURIComponent(parts[6]),decodeURIComponent(parts[7]));saveProject(p,cfg);return json(res,200,p);
+      }
       if(req.method==='PATCH'&&parts.length===3) {
-        if(running.has(id))return json(res,409,{error:'Wait for this project render to finish before changing its renderer.'});
+        if(projectBusy(id))return json(res,409,{error:'Wait for this project job to finish before changing it.'});
         const p=loadProject(id,cfg); p.settings||={};
         const b=await readBody(req);
+        recordHistory(p,'Update project settings');
+        if(typeof b.title==='string'&&b.title.trim())p.title=b.title.trim().slice(0,160);
         if(typeof b.renderer==='string'){
           if(!SUPPORTED_RENDERERS.has(b.renderer))return json(res,400,{error:'Unsupported video renderer.'});
           if(p.settings.renderer!==b.renderer){p.settings.renderer=b.renderer;invalidateRenderedMedia(p);}
@@ -164,7 +221,11 @@ const server=http.createServer(async (req,res)=>{
         }
         if(typeof b.format==='string'){
           if(!SUPPORTED_VIDEO_FORMATS.has(b.format))return json(res,400,{error:'Unsupported video format.'});
-          if(p.settings.format!==b.format){Object.assign(p.settings,videoFormatSettings(b.format,cfg));invalidateRenderedMedia(p);}
+          if(p.settings.format!==b.format){Object.assign(p.settings,videoFormatSettings(b.format,cfg));for(const scene of p.scenes){const prompt=visualPromptFor(scene.text,{...cfg,format:b.format,memory:p.memory},scene.visualIntent);const promptChanged=prompt!==scene.visualPrompt;scene.visualPrompt=prompt;invalidateScene(p,scene,{promptChanged});}}
+        }
+        if(b.memory&&typeof b.memory==='object'){
+          p.memory=projectMemory(b.memory);
+          for(const scene of p.scenes){const prompt=visualPromptFor(scene.text,{...cfg,format:p.settings?.format,memory:p.memory},scene.visualIntent);const promptChanged=prompt!==scene.visualPrompt;scene.visualPrompt=prompt;invalidateScene(p,scene,{promptChanged});}
         }
         saveProject(p,cfg);
         return json(res,200,p);
@@ -175,13 +236,13 @@ const server=http.createServer(async (req,res)=>{
         return json(res,200,await planSceneDirection({instruction:b.instruction,scene:s,project:p,cfg}));
       }
       if(req.method==='POST'&&parts[3]==='scenes'&&parts.length===4) {
-        if(running.has(id))return json(res,409,{error:'Wait for this project render to finish before changing scene structure.'});
-        const b=await readBody(req),p=loadProject(id,cfg);const scene=insertScene(p,b,cfg);saveProject(p,cfg);
+        if(projectBusy(id))return json(res,409,{error:'Wait for this project job to finish before changing scene structure.'});
+        const b=await readBody(req),p=loadProject(id,cfg);recordHistory(p,'Add scene');const scene=insertScene(p,b,cfg);saveProject(p,cfg);
         return json(res,201,{project:p,selectedSceneId:scene.id});
       }
       if(req.method==='POST'&&parts[3]==='scenes'&&parts[4]&&parts[5]==='actions') {
-        if(running.has(id))return json(res,409,{error:'Wait for this project render to finish before changing scene structure.'});
-        const b=await readBody(req),p=loadProject(id,cfg),sceneId=decodeURIComponent(parts[4]);let selectedSceneId=sceneId;
+        if(projectBusy(id))return json(res,409,{error:'Wait for this project job to finish before changing scene structure.'});
+        const b=await readBody(req),p=loadProject(id,cfg),sceneId=decodeURIComponent(parts[4]);let selectedSceneId=sceneId;recordHistory(p,`${b.action||'Edit'} ${sceneId}`);
         if(b.action==='duplicate')selectedSceneId=duplicateScene(p,sceneId,cfg).id;
         else if(b.action==='split')selectedSceneId=splitScene(p,sceneId,cfg,{at:Number.isInteger(b.at)?b.at:null}).second.id;
         else if(b.action==='merge-next')selectedSceneId=mergeSceneWithNext(p,sceneId,cfg).id;
@@ -191,28 +252,28 @@ const server=http.createServer(async (req,res)=>{
         saveProject(p,cfg);return json(res,200,{project:p,selectedSceneId});
       }
       if(req.method==='PATCH'&&parts[3]==='scenes'&&parts[4]) {
-        if(running.has(id))return json(res,409,{error:'Wait for this project render to finish before editing a scene.'});
+        if(projectBusy(id))return json(res,409,{error:'Wait for this project job to finish before editing a scene.'});
         const b=await readBody(req); const p=loadProject(id,cfg); const s=p.scenes.find(x=>x.id===parts[4]);
         if(!s) return json(res,404,{error:'scene not found'});
         const rendererError=rendererInputError(b); if(rendererError)return json(res,400,{error:rendererError});
         const nextText=typeof b.text==='string'?b.text:s.text;const nextIntent=typeof b.visualIntent==='string'?b.visualIntent:s.visualIntent||s.text;const intentChanged=nextIntent!==s.visualIntent;
         let nextPrompt=typeof b.visualPrompt==='string'?b.visualPrompt:s.visualPrompt;
-        if(typeof b.visualIntent==='string'||nextText!==s.text)nextPrompt=visualPromptFor(nextText,{...cfg,format:p.settings?.format},nextIntent);
+        if(typeof b.visualIntent==='string'||nextText!==s.text)nextPrompt=visualPromptFor(nextText,{...cfg,format:p.settings?.format,memory:p.memory},nextIntent);
         const nextRenderer=typeof b.renderer==='string'?b.renderer:s.renderer;
-        const textChanged=nextText!==s.text,promptChanged=intentChanged||nextPrompt!==s.visualPrompt&&typeof b.visualPrompt==='string',rendererChanged=typeof b.renderer==='string'&&nextRenderer!==resolveRendererName(s,p,cfg);s.text=nextText;s.visualIntent=nextIntent;s.visualPrompt=nextPrompt;
+        const textChanged=nextText!==s.text,promptChanged=intentChanged||nextPrompt!==s.visualPrompt&&typeof b.visualPrompt==='string',rendererChanged=typeof b.renderer==='string'&&nextRenderer!==resolveRendererName(s,p,cfg);recordHistory(p,`Edit ${s.id}`);s.text=nextText;s.visualIntent=nextIntent;s.visualPrompt=nextPrompt;
         if(typeof b.renderer==='string')s.renderer=nextRenderer;
         invalidateScene(p,s,{textChanged,promptChanged,rendererChanged}); saveProject(p,cfg); return json(res,200,p);
       }
       if(req.method==='POST'&&parts[3]==='scenes'&&parts[4]&&parts[5]==='review') {
-        if(running.has(id))return json(res,409,{error:'Wait for this project render to finish before reviewing a scene.'});
+        if(projectBusy(id))return json(res,409,{error:'Wait for this project job to finish before reviewing a scene.'});
         const b=await readBody(req); const p=loadProject(id,cfg); const s=p.scenes.find(x=>x.id===parts[4]);
         if(!s)return json(res,404,{error:'scene not found'});
         const reviewable=b.stage==='script'||b.stage==='voice'&&!!s.cache?.voice||b.stage==='visual'&&!!s.cache?.image||b.stage==='clip'&&!!s.artifacts?.clip;
         if(b.decision==='approved'&&!reviewable)return json(res,409,{error:`Generate ${b.stage} before approving it.`});
-        setReviewDecision(p,s,b.stage,b.decision); saveProject(p,cfg); return json(res,200,p);
+        recordHistory(p,`${b.decision} ${b.stage} for ${s.id}`);setReviewDecision(p,s,b.stage,b.decision); saveProject(p,cfg); return json(res,200,p);
       }
       if(req.method==='POST'&&parts[3]==='review'&&parts.length===4) {
-        if(running.has(id))return json(res,409,{error:'Wait for this project render to finish before reviewing scenes.'});
+        if(projectBusy(id))return json(res,409,{error:'Wait for this project job to finish before reviewing scenes.'});
         const b=await readBody(req); const p=loadProject(id,cfg); const ids=Array.isArray(b.sceneIds)?[...new Set(b.sceneIds)]:[];
         const scenes=p.scenes.filter((scene)=>ids.includes(scene.id));
         if(!ids.length||scenes.length!==ids.length)return json(res,400,{error:'Choose one or more valid scenes.'});
@@ -220,15 +281,15 @@ const server=http.createServer(async (req,res)=>{
           const reviewable=b.stage==='script'||b.stage==='voice'&&!!s.cache?.voice||b.stage==='visual'&&!!s.cache?.image||b.stage==='clip'&&!!s.artifacts?.clip;
           if(b.decision==='approved'&&!reviewable)return json(res,409,{error:`Generate ${b.stage} for ${s.id} before approving it.`});
         }
-        for(const s of scenes)setReviewDecision(p,s,b.stage,b.decision);
+        recordHistory(p,`${b.decision} ${b.stage} for ${scenes.length} scenes`);for(const s of scenes)setReviewDecision(p,s,b.stage,b.decision);
         saveProject(p,cfg); return json(res,200,p);
       }
       if(req.method==='POST'&&parts[3]==='run') {
-        if(running.has(id)) return json(res,409,{error:'This project is already running'});
-        const b=await readBody(req); running.add(id);
+        if(projectBusy(id)) return json(res,409,{error:'This project is already running'});
+        const b=await readBody(req); legacyRunning.add(id);
         try { const result=await runPipeline(id,{force:!!b.force,sceneId:b.sceneId||null,sceneIds:Array.isArray(b.sceneIds)?b.sceneIds:null,stage:b.stage||'all'}); return json(res,200,{project:result.project,final:result.final}); }
         catch(e){ try{const p=loadProject(id,cfg);p.status='error';p.error={message:e.message,at:new Date().toISOString()};saveProject(p,cfg);}catch{} throw e; }
-        finally { running.delete(id); }
+        finally { legacyRunning.delete(id); }
       }
     }
     if(req.method==='GET') {
@@ -239,4 +300,4 @@ const server=http.createServer(async (req,res)=>{
     res.writeHead(404).end('Not found');
   } catch(e) { json(res,500,{error:e.message,stack:process.env.NODE_ENV==='development'?e.stack:undefined}); }
 });
-server.listen(cfg.webPort,cfg.webHost,()=>console.log(`Video Workflow Tool: http://${cfg.webHost}:${cfg.webPort}`));
+server.listen(cfg.webPort,cfg.webHost,()=>{console.log(`Video Workflow Tool: http://${cfg.webHost}:${cfg.webPort}`);jobQueue.start();});

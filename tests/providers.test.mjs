@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { generateScriptOpenAI, generateImageOpenAI, synthesizeSpeechOpenAI } from '../packages/providers/src/openai.mjs';
+import { generateScriptOpenAI, generateImageOpenAI, inspectVisualOpenAI, planNarrativeBeatsOpenAI, synthesizeSpeechOpenAI, transcribeAudioOpenAI } from '../packages/providers/src/openai.mjs';
 import { listVivibeVoices, synthesizeSpeechVivibe } from '../packages/providers/src/vivibe.mjs';
 
 const cfg = {
@@ -16,7 +16,9 @@ const cfg = {
   openaiImageQuality: 'medium',
   openaiTtsModel: 'gpt-4o-mini-tts',
   openaiTtsVoice: 'marin',
-  openaiTtsInstructions: 'Narrate naturally.'
+  openaiTtsInstructions: 'Narrate naturally.',
+  openaiTranscribeModel:'gpt-4o-mini-transcribe',
+  contentLanguage:'vi',sceneMinSec:2,sceneMaxSec:12,wordsPerMinute:150
 };
 
 test('OpenAI script provider uses Responses API and returns narration text', async () => {
@@ -72,6 +74,27 @@ test('OpenAI speech provider sends configured TTS request and writes audio bytes
     assert.equal(request.body.response_format, 'mp3');
     assert.equal(fs.readFileSync(out, 'utf8'), 'mp3-bytes');
   } finally { globalThis.fetch = oldFetch; }
+});
+
+test('OpenAI semantic planner preserves narration and returns creative beats',async()=>{
+  const oldFetch=globalThis.fetch;let request;
+  globalThis.fetch=async(url,init)=>{request={url,body:JSON.parse(init.body)};return new Response(JSON.stringify({output_text:JSON.stringify({beats:[{text:'Hook first.','visualIntent':'A hook','narrativeRole':'hook'},{text:'Then explain.','visualIntent':'An explanation','narrativeRole':'explanation'}]})}),{status:200});};
+  try{const beats=await planNarrativeBeatsOpenAI('Hook first. Then explain.',cfg,{language:'en'});assert.equal(beats.length,2);assert.equal(beats[0].narrativeRole,'hook');assert.equal(request.url,'https://api.openai.com/v1/responses');}
+  finally{globalThis.fetch=oldFetch;}
+});
+
+test('OpenAI visual QA sends a base64 image through Responses',async()=>{
+  const oldFetch=globalThis.fetch;let request;const dir=fs.mkdtempSync(path.join(os.tmpdir(),'vwt-vision-')),image=path.join(dir,'visual.png');fs.writeFileSync(image,'png');
+  globalThis.fetch=async(url,init)=>{request=JSON.parse(init.body);return new Response(JSON.stringify({output_text:JSON.stringify({safeArea:{status:'pass',note:'clear'},crop:{status:'pass',note:'clear'},unwantedText:{status:'pass',note:'none'},styleDrift:{status:'pass',note:'consistent'}})}),{status:200});};
+  try{const result=await inspectVisualOpenAI(image,{scene:{text:'hello',visualIntent:'person'},project:{memory:{},settings:{format:'landscape'}}},cfg);assert.equal(result.safeArea.status,'pass');assert.match(request.input[0].content[1].image_url,/^data:image\/png;base64,/);}
+  finally{globalThis.fetch=oldFetch;}
+});
+
+test('OpenAI transcription uploads extension-bearing audio multipart data',async()=>{
+  const oldFetch=globalThis.fetch;let request;const dir=fs.mkdtempSync(path.join(os.tmpdir(),'vwt-transcribe-')),audio=path.join(dir,'voice.mp3');fs.writeFileSync(audio,'mp3');
+  globalThis.fetch=async(url,init)=>{request={url,model:init.body.get('model'),file:init.body.get('file')};return new Response(JSON.stringify({text:'Hello world'}),{status:200});};
+  try{const text=await transcribeAudioOpenAI(audio,cfg,{language:'en'});assert.equal(text,'Hello world');assert.equal(request.model,'gpt-4o-mini-transcribe');assert.equal(request.file.name,'voice.mp3');}
+  finally{globalThis.fetch=oldFetch;}
 });
 
 test('Vivibe lists active user voices through JSON-RPC',async()=>{

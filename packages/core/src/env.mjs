@@ -37,6 +37,7 @@ export function config() {
     openaiTtsModel: env.OPENAI_TTS_MODEL || 'gpt-4o-mini-tts',
     openaiTtsVoice: env.OPENAI_TTS_VOICE || 'marin',
     openaiTtsInstructions: env.OPENAI_TTS_INSTRUCTIONS || 'Speak clearly, naturally, and conversationally for a YouTube explainer.',
+    openaiTranscribeModel: env.OPENAI_TRANSCRIBE_MODEL || 'gpt-4o-mini-transcribe',
     vivibeApiKey: env.VIVIBE_API_KEY || '',
     vivibeBaseUrl: (env.VIVIBE_BASE_URL || 'https://api.lucylab.io/json-rpc').replace(/\/$/, ''),
     vivibeVoiceId: env.VIVIBE_VOICE_ID || '',

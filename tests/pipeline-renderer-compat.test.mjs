@@ -23,7 +23,7 @@ process.env.WHITEBOARD_ENGINE_DIR=engine;
 process.env.WHITEBOARD_AUTO_INSTALL='0';
 
 const {config}=await import('../packages/core/src/env.mjs');
-const {createProject,projectDir,saveProject,sceneDir}=await import('../packages/core/src/project.mjs');
+const {createProject,loadProject,projectDir,saveProject,sceneDir}=await import('../packages/core/src/project.mjs');
 const {run}=await import('../packages/core/src/process.mjs');
 const {sha256}=await import('../packages/core/src/utils.mjs');
 const {runPipeline}=await import('../apps/worker/src/pipeline.mjs');
@@ -62,6 +62,11 @@ test('legacy simple project runs voice, render, clip, and final assembly',async(
   assert.ok(fs.existsSync(path.join(projectDir(cfg,project.id),result.project.scenes[0].artifacts.voice)));
   assert.ok(fs.existsSync(path.join(projectDir(cfg,project.id),result.project.scenes[0].artifacts.video)));
   assert.ok(fs.existsSync(path.join(projectDir(cfg,project.id),result.project.scenes[0].artifacts.clip)));
+  assert.ok(result.project.scenes[0].takes.voice.length>=1);
+  assert.ok(result.project.scenes[0].takes.clip.length>=1);
+  const before=result.project.scenes[0].takes.voice.length;
+  await runPipeline(project.id,{sceneId:'scene-001',stage:'voice',force:true});
+  assert.equal(loadProject(project.id,cfg).scenes[0].takes.voice.length,before+1);
 });
 
 test('legacy whiteboard project runs annotation, render, voice mux, and final assembly',async()=>{

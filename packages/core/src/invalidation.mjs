@@ -12,10 +12,12 @@ export function invalidateScene(project, scene, { textChanged=false, promptChang
   if (!textChanged && !promptChanged && !rendererChanged) return project;
   scene.cache ||= {};
   scene.artifacts ||= {};
+  scene.selectedTakes ||= {};
 
   if (textChanged) {
     drop(scene.cache,'voice');
     drop(scene.artifacts,'voice');
+    drop(scene.selectedTakes,'voice');
     scene.review ||= {};
     scene.review.script='pending';
     scene.review.voice='stale';
@@ -23,12 +25,14 @@ export function invalidateScene(project, scene, { textChanged=false, promptChang
   if (promptChanged) {
     drop(scene.cache,'image');
     drop(scene.artifacts,'visual');
+    drop(scene.selectedTakes,'visual');
     scene.review ||= {};
     scene.review.visual='stale';
   }
   if (textChanged || promptChanged || rendererChanged) {
     for (const key of ['video','clip']) drop(scene.cache,key);
     for (const key of ['video','clip']) drop(scene.artifacts,key);
+    for (const key of ['video','clip']) drop(scene.selectedTakes,key);
     scene.status=rendererChanged&&!textChanged&&!promptChanged?(scene.artifacts.visual?'visual-ready':scene.artifacts.voice?'voice-ready':'planned'):'planned';
     scene.review ||= {};
     scene.review.clip='stale';
@@ -41,8 +45,10 @@ export function invalidateRenderedMedia(project) {
   for (const scene of project.scenes || []) {
     scene.cache ||= {};
     scene.artifacts ||= {};
+    scene.selectedTakes ||= {};
     for (const key of ['video','clip']) drop(scene.cache,key);
     for (const key of ['video','clip']) drop(scene.artifacts,key);
+    for (const key of ['video','clip']) drop(scene.selectedTakes,key);
     scene.status=scene.artifacts.visual?'visual-ready':scene.artifacts.voice?'voice-ready':'planned';
     scene.review ||= {};
     scene.review.clip='stale';

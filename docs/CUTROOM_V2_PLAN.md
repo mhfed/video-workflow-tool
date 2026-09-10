@@ -118,30 +118,42 @@ The server validates the proposal. The UI shows impact and requires an explicit 
 - [x] Impact preview before a Director edit is applied.
 - [x] Responsive desktop/tablet/mobile layouts.
 
-### Phase 2 — control engine
+### Phase 2 — control engine (implemented)
 
-- [ ] Persistent async job queue.
-- [ ] Per-step progress events and estimated remaining work.
-- [ ] Cooperative cancel for provider calls and subprocess trees.
-- [ ] Versioned voice, visual, and clip takes with an active selection.
-- [ ] Project patch log with undo/redo.
-- [ ] Rough-cut manifest playback without requiring a new final export.
+- [x] Persistent async job queue.
+- [x] Per-step progress events and estimated remaining work.
+- [x] Cooperative cancel for provider calls and subprocess trees.
+- [x] Versioned voice, visual, and clip takes with an active selection.
+- [x] Project patch log with undo/redo.
+- [x] Rough-cut manifest playback without requiring a new final export.
 
-### Phase 3 — autonomous quality
+### Phase 3 — autonomous quality (implemented)
 
-- [ ] Vision checks for safe areas, crop, unwanted text, and style drift.
-- [ ] Audio checks for silence, clipping, pacing, and pronunciation flags.
-- [ ] Project memory for recurring characters, palette, and art direction.
-- [ ] Batch repair proposals with scope and cost preview.
-- [ ] Semantic scene planning based on narrative beats instead of punctuation alone.
+- [x] Vision checks for safe areas, crop, unwanted text, and style drift.
+- [x] Audio checks for silence, clipping, pacing, and pronunciation flags.
+- [x] Project memory for recurring characters, palette, and art direction.
+- [x] Batch repair proposals with scope and cost preview.
+- [x] Semantic scene planning based on narrative beats instead of punctuation alone.
 
-## Acceptance criteria for Phase 1
+## v6 control contract
+
+- Jobs live in `project.json` and are resumed from `queued` state after a server restart. Render, QA, and repair use the same queue.
+- Progress is stored as events with completed/total work, percentage, current scene/stage, and an elapsed-rate ETA.
+- Cancellation propagates through OpenAI/Vivibe HTTP requests and process groups started for FFmpeg, ffprobe, Git, Python, and the external renderer.
+- Generated scene media is immutable under `scenes/<scene-id>/takes/<kind>/`; `selectedTakes` controls which voice, visual, render, or clip is active.
+- Human mutations create bounded snapshots in `history.undo`; generation jobs do not pollute editorial undo history.
+- QA remains useful offline for dimensions, silence, level, clipping, and pacing. OpenAI vision/transcription add semantic safe-area, unwanted-text, style, and pronunciation review when configured.
+- Repair plans are proposals. They show affected scenes and request counts before the owner starts a repair job.
+
+## Acceptance criteria for CUTROOM v2
 
 - The first screen inside a project shows a useful preview and the next recommended action.
 - A user can restructure a project without editing JSON or rerunning unrelated scenes.
 - A user never needs to edit the compiled image prompt for a normal visual change.
 - Every disabled generation action has an adjacent explanation of its prerequisite.
 - Director instructions show affected stages before applying state changes.
+- Jobs survive a server restart, expose progress/ETA, and can be cancelled without leaving a renderer process behind.
+- Every generated scene artifact remains available as a take; changing the active take invalidates only its dependents.
+- Rough cut, QA, scoped repair, project memory, and undo/redo work from the directing room without editing JSON.
 - Existing v3 projects continue to load and render.
 - `npm test`, `npm run web:build`, and `npm run smoke` pass.
-

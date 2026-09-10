@@ -5,15 +5,15 @@ import { synthesizeSpeechVivibe } from './vivibe.mjs';
 const adapters={
   mock:{
     cache:()=>({}),
-    synthesize:({text,outputFile,cfg,durationSec})=>synthesizeSpeechMock(text,outputFile,cfg,durationSec)
+    synthesize:({text,outputFile,cfg,durationSec,signal})=>synthesizeSpeechMock(text,outputFile,cfg,durationSec,{signal})
   },
   openai:{
     cache:(cfg)=>({model:cfg.openaiTtsModel,voice:cfg.openaiTtsVoice,instructions:cfg.openaiTtsInstructions}),
-    synthesize:({text,outputFile,cfg})=>synthesizeSpeechOpenAI(text,outputFile,cfg)
+    synthesize:({text,outputFile,cfg,signal})=>synthesizeSpeechOpenAI(text,outputFile,cfg,{signal})
   },
   vivibe:{
     cache:(cfg)=>({baseUrl:cfg.vivibeBaseUrl,voiceId:cfg.vivibeVoiceId,speed:cfg.vivibeSpeed}),
-    synthesize:({text,outputFile,cfg})=>synthesizeSpeechVivibe(text,outputFile,cfg)
+    synthesize:({text,outputFile,cfg,signal})=>synthesizeSpeechVivibe(text,outputFile,cfg,{signal})
   }
 };
 
@@ -25,8 +25,8 @@ export function voiceCacheConfig(provider,cfg) {
   return adapter.cache(cfg);
 }
 
-export async function synthesizeVoice({provider,text,outputFile,cfg,durationSec}) {
+export async function synthesizeVoice({provider,text,outputFile,cfg,durationSec,signal}) {
   const adapter=adapters[provider];
   if(!adapter)throw new Error(`Unsupported VOICE_PROVIDER=${provider}`);
-  return adapter.synthesize({text,outputFile,cfg,durationSec});
+  return adapter.synthesize({text,outputFile,cfg,durationSec,signal});
 }

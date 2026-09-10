@@ -442,7 +442,8 @@ export default function App(){
   const [dialogOpen,setDialogOpen]=useState(false);
   const [settingsOpen,setSettingsOpen]=useState(false);
 
-  const running=!!current&&health?.running?.includes(current.id);
+  const activeJob=[...(current?.jobs||[])].reverse().find((job)=>['queued','running','cancelling'].includes(job.status))||null;
+  const running=!!activeJob||!!current&&health?.running?.includes(current.id);
   const config=health?.config;
   const c=copyFor(config?.uiLanguage||'vi');
   const refreshHealth=async()=>setHealth(await api('/api/health'));
@@ -450,6 +451,12 @@ export default function App(){
   const load=async(id)=>{const project=await api(`/api/projects/${encodeURIComponent(id)}`);setCurrent(project);await Promise.all([refreshProjects(),refreshHealth()]);};
 
   useEffect(()=>{Promise.all([refreshProjects(),refreshHealth()]).catch((cause)=>setError(cause.message));},[]);
+  useEffect(()=>{
+    if(!current?.id||!activeJob)return;
+    let stopped=false;
+    const tick=async()=>{try{const project=await api(`/api/projects/${encodeURIComponent(current.id)}`);if(!stopped){setCurrent(project);setProjects((items)=>items.map((item)=>item.id===project.id?project:item));}}catch(cause){if(!stopped)setError(cause.message);}};
+    const timer=setInterval(tick,700);tick();return()=>{stopped=true;clearInterval(timer);};
+  },[current?.id,activeJob?.id,activeJob?.status]);
 
   const createProject=async(payload)=>{
     setBusy(true);setError('');
@@ -461,7 +468,8 @@ export default function App(){
   const updateProject=async(payload)=>{setBusy(true);setError('');try{const project=await api(`/api/projects/${encodeURIComponent(current.id)}`,{method:'PATCH',body:JSON.stringify(payload)});setCurrent(project);await refreshProjects();return project;}catch(cause){setError(cause.message);return null;}finally{setBusy(false);}};
   const changeRenderer=async(renderer)=>{if(!current||renderer===current.settings?.renderer)return;await updateProject({renderer});};
   const changeFormat=async(format)=>{if(!current||format===current.settings?.format)return;await updateProject({format});};
-  const run=async(body={})=>{setBusy(true);setError('');try{await api(`/api/projects/${encodeURIComponent(current.id)}/run`,{method:'POST',body:JSON.stringify(body)});await load(current.id);return true;}catch(cause){setError(cause.message);try{await load(current.id);}catch{}return false;}finally{setBusy(false);await refreshHealth().catch(()=>{});}};
+  const enqueueJob=async(type,request={})=>{setBusy(true);setError('');try{const result=await api(`/api/projects/${encodeURIComponent(current.id)}/jobs`,{method:'POST',body:JSON.stringify({type,request})});setCurrent(result.project);await refreshProjects();return result;}catch(cause){setError(cause.message);return null;}finally{setBusy(false);}};
+  const run=async(body={})=>!!await enqueueJob('render',body);
   const runStage=async(sceneId,stage)=>run({sceneId,stage});
   const runBulk=async(stage,sceneIds)=>run({stage,sceneIds});
   const reviewStage=async(sceneId,stage,decision)=>{setBusy(true);setError('');try{const project=await api(`/api/projects/${encodeURIComponent(current.id)}/scenes/${encodeURIComponent(sceneId)}/review`,{method:'POST',body:JSON.stringify({stage,decision})});setCurrent(project);await refreshProjects();return project;}catch(cause){setError(cause.message);return null;}finally{setBusy(false);}};
@@ -469,7 +477,13 @@ export default function App(){
   const editSceneStructure=async(sceneId,payload)=>{setBusy(true);setError('');try{const result=await api(`/api/projects/${encodeURIComponent(current.id)}/scenes/${encodeURIComponent(sceneId)}/actions`,{method:'POST',body:JSON.stringify(payload)});setCurrent(result.project);await refreshProjects();return result;}catch(cause){setError(cause.message);return null;}finally{setBusy(false);}};
   const insertNewScene=async(afterSceneId)=>{setBusy(true);setError('');try{const result=await api(`/api/projects/${encodeURIComponent(current.id)}/scenes`,{method:'POST',body:JSON.stringify({afterSceneId,text:c.language==='en'?'A new scene.':'Một phân cảnh mới.'})});setCurrent(result.project);await refreshProjects();return result;}catch(cause){setError(cause.message);return null;}finally{setBusy(false);}};
   const planDirection=async(sceneId,instruction)=>{setError('');try{return await api(`/api/projects/${encodeURIComponent(current.id)}/director`,{method:'POST',body:JSON.stringify({sceneId,instruction})});}catch(cause){setError(cause.message);throw cause;}};
-  const createRoughCut=async()=>{setBusy(true);setError('');const id=current.id;try{if(current.settings?.workflowMode!=='auto')await api(`/api/projects/${encodeURIComponent(id)}`,{method:'PATCH',body:JSON.stringify({workflowMode:'auto'})});await api(`/api/projects/${encodeURIComponent(id)}/run`,{method:'POST',body:JSON.stringify({stage:'all'})});await load(id);return true;}catch(cause){setError(cause.message);try{await load(id);}catch{}return false;}finally{setBusy(false);await refreshHealth().catch(()=>{});}};
+  const loadRoughCut=async()=>api(`/api/projects/${encodeURIComponent(current.id)}/rough-cut`);
+  const cancelJob=async(jobId)=>{setError('');try{const result=await api(`/api/projects/${encodeURIComponent(current.id)}/jobs/${encodeURIComponent(jobId)}/cancel`,{method:'POST'});setCurrent(result.project);return result;}catch(cause){setError(cause.message);return null;}};
+  const historyAction=async(action)=>{setBusy(true);setError('');try{const project=await api(`/api/projects/${encodeURIComponent(current.id)}/history/${action}`,{method:'POST'});setCurrent(project);await refreshProjects();return project;}catch(cause){setError(cause.message);return null;}finally{setBusy(false);}};
+  const selectSceneTake=async(sceneId,kind,takeId)=>{setBusy(true);setError('');try{const project=await api(`/api/projects/${encodeURIComponent(current.id)}/scenes/${encodeURIComponent(sceneId)}/takes/${encodeURIComponent(kind)}/${encodeURIComponent(takeId)}/select`,{method:'POST'});setCurrent(project);await refreshProjects();return project;}catch(cause){setError(cause.message);return null;}finally{setBusy(false);}};
+  const runQuality=async(sceneIds=null)=>!!await enqueueJob('quality',sceneIds?{sceneIds}:{});
+  const getRepairPlan=async()=>api(`/api/projects/${encodeURIComponent(current.id)}/quality/repair-plan`);
+  const applyRepairs=async(actions)=>{setBusy(true);setError('');try{const result=await api(`/api/projects/${encodeURIComponent(current.id)}/quality/repair`,{method:'POST',body:JSON.stringify({actions})});setCurrent(result.project);return result;}catch(cause){setError(cause.message);return null;}finally{setBusy(false);}};
   return <div className="app-shell">
     <header className="app-header">
       <button className="brand" onClick={()=>setCurrent(null)}><BrandMark/><span><strong>CUTROOM</strong><small>{c.brandSubtitle}</small></span></button>
@@ -502,7 +516,7 @@ export default function App(){
         {error&&<div className="error-banner"><CircleDot/><span>{error}</span><button onClick={()=>setError('')}>{c.dismiss}</button></div>}
         {!current?<EmptyState onCreate={()=>setDialogOpen(true)} onDemo={createDemo} c={c}/>:<>
           {current.error&&<div className="project-error"><strong>{c.lastRunStopped}</strong><span>{current.error.message}</span></div>}
-          <DirectorWorkspace key={current.id} project={current} running={busy||running} onSave={saveScene} onRunStage={runStage} onReview={reviewStage} onRunAll={run} onRoughCut={createRoughCut} onUpdateProject={updateProject} onSceneAction={editSceneStructure} onInsertScene={insertNewScene} onDirectorPlan={planDirection} rendererNames={config?.rendererNames||[]} c={c}/>
+          <DirectorWorkspace key={current.id} project={current} running={busy||running} activeJob={activeJob} onCancelJob={cancelJob} onUndo={()=>historyAction('undo')} onRedo={()=>historyAction('redo')} onSelectTake={selectSceneTake} onRunQuality={runQuality} onGetRepairPlan={getRepairPlan} onApplyRepairs={applyRepairs} onSave={saveScene} onRunStage={runStage} onReview={reviewStage} onRunAll={run} onLoadRoughCut={loadRoughCut} onUpdateProject={updateProject} onSceneAction={editSceneStructure} onInsertScene={insertNewScene} onDirectorPlan={planDirection} rendererNames={config?.rendererNames||[]} c={c}/>
         </>}
       </main>
     </div>

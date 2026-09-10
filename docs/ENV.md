@@ -27,11 +27,12 @@ OPENAI_IMAGE_SIZE=1536x1024
 OPENAI_IMAGE_QUALITY=medium
 OPENAI_TTS_MODEL=gpt-4o-mini-tts
 OPENAI_TTS_VOICE=marin
+OPENAI_TRANSCRIBE_MODEL=gpt-4o-mini-transcribe
 WHITEBOARD_AUTO_INSTALL=1
 WHITEBOARD_PYTHON=
 ```
 
-`1536x1024` is the supported landscape GPT Image API size. The final media step crops renderer output to the configured 16:9 video frame, and generated visual prompts keep important subjects inside a centered 16:9 safe area.
+`1536x1024` is the configured landscape image size. The final media step contains renderer output inside the configured 16:9 video frame, and generated visual prompts keep important subjects inside a centered safe area.
 
 Then set only:
 
@@ -53,6 +54,7 @@ SCENE_MAX_SEC=18
 - `SCRIPT_TARGET_MINUTES`: default length when creating from a topic.
 - `OPENAI_TTS_VOICE`: narration voice.
 - `OPENAI_TTS_INSTRUCTIONS`: delivery/style of narration.
+- `OPENAI_TRANSCRIBE_MODEL`: speech-to-text model used by pronunciation QA.
 - scene timing values: how frequently visuals change.
 - `WHITEBOARD_PYTHON`: normally leave blank. Setup reads the exact `ENV_PY` reported by upstream `prepare_env.py`; use this only if you deliberately maintain the environment yourself.
 

@@ -12,22 +12,24 @@ export function projectDir(cfg, id) { return path.join(cfg.workspaceDir, id); }
 export function projectFile(cfg, id) { return path.join(projectDir(cfg, id), 'project.json'); }
 export function sceneDir(cfg, id, sceneId) { return path.join(projectDir(cfg, id), 'scenes', sceneId); }
 
-export function createProject({ title, sourceText, sourceType = 'script', topic = '', workflowMode = 'studio', format = 'landscape' }, cfg) {
+export function createProject({ title, sourceText, sourceType = 'script', topic = '', workflowMode = 'studio', format = 'landscape', plannedScenes = null }, cfg) {
   if (!title?.trim()) throw new Error('title is required');
   if (!sourceText?.trim()) throw new Error('source text is required');
   const id = `${slugify(title)}-${crypto.randomBytes(3).toString('hex')}`;
   const planCfg={...cfg,format};
-  const planned = sourceType === 'srt' ? planSrtScenes(sourceText, planCfg) : planScriptScenes(sourceText, planCfg);
+  const memory={characters:[],palette:[],artDirection:'',pronunciations:[]};
+  const planned = Array.isArray(plannedScenes)&&plannedScenes.length?plannedScenes:sourceType === 'srt' ? planSrtScenes(sourceText, planCfg) : planScriptScenes(sourceText, planCfg);
   if (!planned.length) throw new Error('No scenes were generated');
   let cursor = 0;
   const scenes = planned.map((s, i) => {
     const durationMs = s.durationMs;
-    const item = { id: `scene-${String(i + 1).padStart(3,'0')}`, index: i, text: s.text, visualIntent: s.visualIntent||s.text, startMs: cursor, endMs: cursor + durationMs, durationMs, sourceStartMs: s.sourceStartMs ?? null, sourceEndMs: s.sourceEndMs ?? null, visualPrompt: s.visualPrompt, status: 'planned', review: {script:'pending',voice:'pending',visual:'pending',clip:'pending'}, cache: {}, artifacts: {} };
+    const intent=s.visualIntent||s.text;
+    const item = { id: `scene-${String(i + 1).padStart(3,'0')}`, index: i, text: s.text, visualIntent:intent, narrativeRole:s.narrativeRole||null, startMs: cursor, endMs: cursor + durationMs, durationMs, sourceStartMs: s.sourceStartMs ?? null, sourceEndMs: s.sourceEndMs ?? null, visualPrompt: s.visualPrompt||visualPromptFor(s.text,{...planCfg,memory},intent), status: 'planned', review: {script:'pending',voice:'pending',visual:'pending',clip:'pending'}, cache: {}, artifacts: {}, takes:{}, selectedTakes:{} };
     cursor += durationMs;
     return item;
   });
   const language=normalizeLanguage(cfg.contentLanguage);
-  const project = { version: 4, id, title: title.trim(), createdAt: nowIso(), updatedAt: nowIso(), source: { type: sourceType, text: sourceText, topic: topic || null }, settings: { renderer: cfg.renderer, workflowMode, ...videoFormatSettings(format,cfg), fps: cfg.fps, language, captions: true, captionLanguage: language }, scenes, artifacts: {}, status: 'planned' };
+  const project = { version: 6, id, title: title.trim(), createdAt: nowIso(), updatedAt: nowIso(), source: { type: sourceType, text: sourceText, topic: topic || null }, settings: { renderer: cfg.renderer, workflowMode, ...videoFormatSettings(format,cfg), fps: cfg.fps, language, captions: true, captionLanguage: language }, memory, scenes, artifacts: {}, jobs:[], history:{undo:[],redo:[]}, quality:{status:'unchecked'}, status: 'planned' };
   normalizeWorkflow(project);
   ensureDir(projectDir(cfg,id)); ensureDir(path.join(projectDir(cfg,id),'scenes'));
   fs.writeFileSync(path.join(projectDir(cfg,id), sourceType === 'srt' ? 'source.srt' : 'script.md'), sourceText);
@@ -56,7 +58,7 @@ function sceneDuration(text,cfg) {
 function newScene(project,{text,visualIntent,renderer},cfg) {
   const narration=String(text||'Cảnh mới').trim();
   const intent=String(visualIntent||narration).trim();
-  return {id:nextSceneId(project),index:0,text:narration,visualIntent:intent,startMs:0,endMs:0,durationMs:sceneDuration(narration,cfg),sourceStartMs:null,sourceEndMs:null,visualPrompt:visualPromptFor(narration,{...cfg,format:project.settings?.format},intent),...(renderer?{renderer}:{}),status:'planned',review:{script:'pending',voice:'pending',visual:'pending',clip:'pending'},cache:{},artifacts:{}};
+  return {id:nextSceneId(project),index:0,text:narration,visualIntent:intent,startMs:0,endMs:0,durationMs:sceneDuration(narration,cfg),sourceStartMs:null,sourceEndMs:null,visualPrompt:visualPromptFor(narration,{...cfg,format:project.settings?.format,memory:project.memory},intent),...(renderer?{renderer}:{}),status:'planned',review:{script:'pending',voice:'pending',visual:'pending',clip:'pending'},cache:{},artifacts:{},takes:{},selectedTakes:{}};
 }
 
 function finishStructureChange(project) {
@@ -110,7 +112,7 @@ export function splitScene(project,sceneId,cfg,{at=null}={}) {
   const intentWasNarration=originalIntent===originalText;
   const firstIntent=intentWasNarration?firstText:`${originalIntent} — nhịp 1`;
   const secondIntent=intentWasNarration?secondText:`${originalIntent} — nhịp 2`;
-  source.text=firstText;source.visualIntent=firstIntent;source.durationMs=sceneDuration(firstText,cfg);source.visualPrompt=visualPromptFor(firstText,{...cfg,format:project.settings?.format},firstIntent);
+  source.text=firstText;source.visualIntent=firstIntent;source.durationMs=sceneDuration(firstText,cfg);source.visualPrompt=visualPromptFor(firstText,{...cfg,format:project.settings?.format,memory:project.memory},firstIntent);
   invalidateScene(project,source,{textChanged:true,promptChanged:true});
   const second=newScene(project,{text:secondText,visualIntent:secondIntent,renderer:source.renderer},cfg);
   project.scenes.splice(index+1,0,second);
@@ -126,7 +128,7 @@ export function mergeSceneWithNext(project,sceneId,cfg) {
   scene.text=`${scene.text} ${next.text}`.trim();
   scene.visualIntent=`${scene.visualIntent||scene.text} ${next.visualIntent||next.text}`.trim();
   scene.durationMs=sceneDuration(scene.text,cfg);
-  scene.visualPrompt=visualPromptFor(scene.text,{...cfg,format:project.settings?.format},scene.visualIntent);
+  scene.visualPrompt=visualPromptFor(scene.text,{...cfg,format:project.settings?.format,memory:project.memory},scene.visualIntent);
   invalidateScene(project,scene,{textChanged:true,promptChanged:true});
   project.scenes.splice(index+1,1);
   finishStructureChange(project);

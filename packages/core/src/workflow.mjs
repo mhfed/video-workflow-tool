@@ -1,17 +1,34 @@
+import { normalizeTakes } from './takes.mjs';
+
 export const WORKFLOW_MODES = new Set(['auto','studio']);
 export const REVIEW_STAGES = ['script','voice','visual','clip'];
 export const REVIEW_DECISIONS = new Set(['pending','approved','changes-requested','stale']);
 
+function normalizeMemory(memory={}) {
+  return {
+    characters:Array.isArray(memory.characters)?memory.characters.map(String).filter(Boolean).slice(0,30):[],
+    palette:Array.isArray(memory.palette)?memory.palette.map(String).filter(Boolean).slice(0,12):[],
+    artDirection:typeof memory.artDirection==='string'?memory.artDirection:'',
+    pronunciations:Array.isArray(memory.pronunciations)?memory.pronunciations.map(String).filter(Boolean).slice(0,50):[]
+  };
+}
+
 export function normalizeWorkflow(project) {
-  project.version=Math.max(Number(project.version)||1,4);
+  project.version=Math.max(Number(project.version)||1,6);
   project.settings ||= {};
   if (!WORKFLOW_MODES.has(project.settings.workflowMode)) project.settings.workflowMode='studio';
+  project.memory=normalizeMemory(project.memory);
+  project.jobs=Array.isArray(project.jobs)?project.jobs:[];
+  project.history ||= {undo:[],redo:[]};
+  project.history.undo=Array.isArray(project.history.undo)?project.history.undo:[];
+  project.history.redo=Array.isArray(project.history.redo)?project.history.redo:[];
   for (const scene of project.scenes || []) {
     if(typeof scene.visualIntent!=='string'||!scene.visualIntent.trim())scene.visualIntent=scene.text||'';
     scene.review ||= {};
     for (const stage of REVIEW_STAGES) {
       if (!REVIEW_DECISIONS.has(scene.review[stage])) scene.review[stage]='pending';
     }
+    normalizeTakes(scene);
   }
   return project;
 }
