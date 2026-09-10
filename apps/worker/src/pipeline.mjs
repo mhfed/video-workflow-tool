@@ -12,8 +12,7 @@ import { containVideoFilter } from '../../../packages/core/src/video-fit.mjs';
 import { markArtifactForReview, normalizeWorkflow, requireApproved } from '../../../packages/core/src/workflow.mjs';
 import { generateImageOpenAI } from '../../../packages/providers/src/openai.mjs';
 import { synthesizeVoice, voiceCacheConfig } from '../../../packages/providers/src/voice.mjs';
-import { renderSimpleScene } from '../../../packages/renderers/src/simple.mjs';
-import { renderWhiteboardScene, whiteboardHandSignature } from '../../../packages/renderers/src/whiteboard.mjs';
+import { getRenderer } from '../../../packages/renderers/src/registry.mjs';
 
 function log(event, detail={}) { console.log(JSON.stringify({time:new Date().toISOString(),event,...detail})); }
 const effectiveProvider = (configured, cfg) => cfg.mockMode ? 'mock' : configured;
@@ -48,11 +47,12 @@ async function ensureVideo(scene, project, cfg, imageFile, force=false) {
   const dir=ensureDir(sceneDir(cfg,project.id,scene.id));
   const file=path.join(dir,'video.mp4');
   const renderer = project.settings.renderer || cfg.renderer;
-  const key=sha256({renderer,renderContract:RENDER_CONTRACT,durationMs:scene.durationMs,image:scene.cache.image,text:scene.text,width:cfg.width,height:cfg.height,fps:cfg.fps,hand:renderer==='whiteboard'?whiteboardHandSignature(cfg):null});
+  const adapter=getRenderer(renderer);
+  const key=sha256({renderer,renderContract:RENDER_CONTRACT,durationMs:scene.durationMs,image:scene.cache.image,text:scene.text,width:cfg.width,height:cfg.height,fps:cfg.fps,hand:adapter.cacheSignature(cfg)});
   if (!force && scene.cache.video===key && fileExists(file)) return file;
   log('render:start',{scene:scene.id,renderer});
   const args={scene,imageFile,outputFile:file,durationSec:scene.durationMs/1000,cfg};
-  if (renderer==='whiteboard') await renderWhiteboardScene(args); else if (renderer==='simple') await renderSimpleScene(args); else throw new Error(`Unsupported VIDEO_RENDERER=${renderer}`);
+  await adapter.render(args);
   scene.cache.video=key; scene.artifacts.video=path.relative(projectDir(cfg,project.id),file); scene.status='rendered'; saveProject(project,cfg); log('render:done',{scene:scene.id}); return file;
 }
 

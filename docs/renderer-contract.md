@@ -22,6 +22,11 @@ type RenderScene = (input: RenderSceneInput) => Promise<string>
 
 The returned string is the rendered scene video path.
 
+`packages/renderers/src/registry.mjs` is the compatibility registry used by the
+pipeline. Its `simple` and `whiteboard` entries delegate directly to the existing
+renderer functions; the registry does not own orchestration, approvals, or media
+generation.
+
 ## `simple` renderer
 
 Implementation: `packages/renderers/src/simple.mjs`.
