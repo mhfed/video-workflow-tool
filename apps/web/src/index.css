@@ -806,8 +806,8 @@ video::cue { color: #fffdf8; background: rgba(22,21,18,.82); font-family: var(--
 .director-project-actions [data-slot="select-trigger"] { width: 142px; height: 36px; color: #4e4941; background: #ece7dc; border-color: #d0c8ba; font-size: 10px; }
 .director-project-actions [data-slot="button"] { height: 36px; white-space: nowrap; border-radius: 5px; }
 
-.director-grid { min-height: 0; display: grid; grid-template-columns: 278px minmax(420px,1fr) 330px; overflow: hidden; }
-.director-storyboard { min-width: 0; display: grid; grid-template-rows: 60px minmax(0,1fr) 43px; background: #ece8de; border-right: 1px solid #bfb8ab; }
+.director-grid { min-height: 0; display: grid; grid-template-columns: 278px minmax(420px,1fr) 330px; grid-template-rows: minmax(0,1fr); overflow: hidden; }
+.director-storyboard { min-width: 0; min-height: 0; display: grid; grid-template-rows: 60px minmax(0,1fr) 43px; overflow: hidden; background: #ece8de; border-right: 1px solid #bfb8ab; }
 .director-storyboard > header { display: flex; align-items: center; justify-content: space-between; padding: 0 13px 0 17px; border-bottom: 1px solid #cbc4b7; }
 .director-storyboard > header div { display: grid; gap: 2px; }
 .director-storyboard > header span { color: #cb4f2b; font-size: 8px; font-weight: 850; letter-spacing: .16em; text-transform: uppercase; }
