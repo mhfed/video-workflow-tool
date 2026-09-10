@@ -1,0 +1,74 @@
+<template>
+  <div id="root" data-composition-id="04-thu-thach-7-ngay" data-duration="7.2" data-width="1080" data-height="1920">
+    <style>
+      @font-face { font-family: "Barlow"; src: url("assets/fonts/be-vietnam-pro-400.woff2") format("woff2"); font-weight: 400; }
+      @font-face { font-family: "Barlow"; src: url("assets/fonts/be-vietnam-pro-700.woff2") format("woff2"); font-weight: 700; }
+      @font-face { font-family: "Barlow"; src: url("assets/fonts/be-vietnam-pro-900.woff2") format("woff2"); font-weight: 900; }
+      @font-face { font-family: "IBM Plex Mono"; src: url("assets/fonts/be-vietnam-pro-500.woff2") format("woff2"); font-weight: 500; }
+      #root { position: relative; width: 1080px; height: 1920px; overflow: hidden; container-type: size; color: #111111; }
+      #f04-ground { position: absolute; inset: 0; background: #E85D26; }
+      #f04-ghost { position: absolute; top: 30px; right: -90px; font: 900 580px/.8 "Barlow", sans-serif; letter-spacing: -.08em; color: rgba(17,17,17,.08); }
+      #f04-index { position: absolute; top: 86px; left: 72px; right: 72px; display: flex; justify-content: space-between; font: 500 19px/1 "IBM Plex Mono", monospace; letter-spacing: .14em; text-transform: uppercase; }
+      #f04-stage { position: absolute; top: 180px; left: 72px; right: 72px; height: 1330px; }
+      #f04-hero { position: absolute; top: 0; left: 0; width: 936px; height: 445px; display: flex; align-items: flex-end; border-bottom: 2px solid rgba(17,17,17,.25); overflow: hidden; }
+      #f04-seven { min-width: 420px; font: 900 430px/.76 "Barlow", sans-serif; letter-spacing: -.09em; font-variant-numeric: tabular-nums; }
+      #f04-day { padding-bottom: 50px; font: 900 104px/.86 "Barlow", sans-serif; letter-spacing: -.055em; text-transform: uppercase; }
+      #f04-clip-card { position: absolute; top: 570px; left: 0; width: 936px; height: 205px; border-top: 2px solid #111111; border-bottom: 2px solid #111111; display: grid; grid-template-columns: 1fr 1fr; }
+      #f04-clip-card > div { padding: 28px 32px; }
+      #f04-clip-card > div + div { border-left: 2px solid #111111; }
+      .f04-small { font: 500 18px/1 "IBM Plex Mono", monospace; letter-spacing: .14em; text-transform: uppercase; opacity: .58; }
+      .f04-big { margin-top: 18px; font: 900 78px/.92 "Barlow", sans-serif; letter-spacing: -.055em; text-transform: uppercase; white-space: nowrap; }
+      #f04-progress { position: absolute; top: 840px; left: 0; width: 936px; }
+      #f04-days { display: grid; grid-template-columns: repeat(7, 1fr); gap: 10px; }
+      .f04-daybox { height: 120px; border: 2px solid #111111; display: grid; place-items: center; font: 900 42px/1 "Barlow", sans-serif; position: relative; overflow: hidden; }
+      .f04-daybox span { position: relative; z-index: 2; }
+      .f04-daybox.filled span { color: #E85D26; }
+      #f04-rail { margin-top: 34px; height: 2px; background: rgba(17,17,17,.28); position: relative; }
+      #f04-fill { position: absolute; inset: 0; width: 100%; background: #111111; transform-origin: left center; }
+      #f04-actions { margin-top: 72px; display: flex; justify-content: space-between; align-items: center; font: 900 92px/.9 "Barlow", sans-serif; letter-spacing: -.055em; text-transform: uppercase; }
+      #f04-actions i { display: block; width: 210px; height: 2px; background: #111111; }
+      #f04-footer { position: absolute; left: 0; right: 0; top: 1315px; font: 500 18px/1 "IBM Plex Mono", monospace; letter-spacing: .14em; text-transform: uppercase; display: flex; justify-content: space-between; opacity: .58; }
+    </style>
+
+    <div id="f04-ground" class="clip" data-start="0" data-duration="7.2" data-track-index="0"><div id="f04-ghost">7</div></div>
+    <div id="f04-content" class="clip" data-start="0" data-duration="7.2" data-track-index="1">
+      <div id="f04-index"><span>THỬ THÁCH</span><span>04 / 05</span></div>
+      <div id="f04-stage">
+        <div id="f04-hero"><div id="f04-seven">1</div><div id="f04-day">NGÀY<br>LIÊN TỤC</div></div>
+        <div id="f04-clip-card">
+          <div><div class="f04-small">CHỌN</div><div class="f04-big">1 ĐOẠN</div></div>
+          <div><div class="f04-small">THỜI LƯỢNG</div><div class="f04-big">30 GIÂY</div></div>
+        </div>
+        <div id="f04-progress">
+          <div id="f04-days"><div class="f04-daybox"><span>1</span></div><div class="f04-daybox"><span>2</span></div><div class="f04-daybox"><span>3</span></div><div class="f04-daybox"><span>4</span></div><div class="f04-daybox"><span>5</span></div><div class="f04-daybox"><span>6</span></div><div class="f04-daybox"><span>7</span></div></div>
+          <div id="f04-rail"><div id="f04-fill"></div></div>
+          <div id="f04-actions"><span id="f04-listen">NGHE</span><i></i><span id="f04-speak">NÓI LẠI</span></div>
+        </div>
+        <div id="f04-footer"><span>MỘT ĐOẠN DUY NHẤT</span><span>LẶP MỖI NGÀY</span></div>
+      </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <script>
+      const tl = gsap.timeline({ paused: true });
+      tl.fromTo("#f04-index", { opacity: 0 }, { opacity: 1, duration: .3, ease: "power2.out" }, 0);
+      tl.fromTo("#f04-hero", { y: -80, opacity: 0 }, { y: 0, opacity: 1, duration: .5, ease: "power3.out" }, .08);
+      const count = { value: 1 };
+      tl.to(count, { value: 7, duration: 1.22, ease: "power3.out", onUpdate: () => { document.getElementById("f04-seven").textContent = Math.round(count.value); gsap.set("#f04-seven", { scale: .72 + (count.value / 7) * .28, transformOrigin: "left bottom" }); } }, .22);
+      tl.fromTo("#f04-day", { x: 80, opacity: 0 }, { x: 0, opacity: 1, duration: .48, ease: "power3.out" }, .78);
+      tl.fromTo("#f04-clip-card", { x: -1080, opacity: 0 }, { x: -110, opacity: .22, duration: .15, ease: "power3.in" }, 1.70);
+      tl.to("#f04-clip-card", { x: -35, opacity: .82, duration: .12, ease: "none" }, 1.85);
+      tl.to("#f04-clip-card", { x: 0, opacity: 1, duration: .42, ease: "power4.out" }, 1.971);
+      tl.fromTo("#f04-progress", { y: 90, opacity: 0 }, { y: 0, opacity: 1, duration: .48, ease: "power3.out" }, 3.48);
+      tl.fromTo("#f04-fill", { scaleX: 0 }, { scaleX: 1, duration: 1.58, ease: "power3.out" }, 3.62);
+      document.querySelectorAll(".f04-daybox").forEach((box, i) => {
+        tl.fromTo(box, { backgroundColor: "rgba(17,17,17,0)" }, { backgroundColor: "#111111", color: "#E85D26", duration: .18, ease: "none" }, 3.68 + i * .22);
+      });
+      tl.fromTo("#f04-listen", { x: -100, opacity: 0 }, { x: 0, opacity: 1, duration: .4, ease: "power3.out" }, 5.35);
+      tl.fromTo("#f04-speak", { x: 100, opacity: 0 }, { x: 0, opacity: 1, duration: .4, ease: "power3.out" }, 5.62);
+      tl.fromTo("#f04-actions i", { scaleX: 0 }, { scaleX: 1, duration: .45, ease: "power3.out" }, 5.78);
+      tl.fromTo("#f04-footer", { opacity: 0 }, { opacity: .58, duration: .35, ease: "power2.out" }, 5.82);
+      window.__timelines["04-thu-thach-7-ngay"] = tl;
+    </script>
+  </div>
+</template>

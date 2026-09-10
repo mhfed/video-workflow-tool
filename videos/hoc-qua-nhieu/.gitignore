@@ -1,0 +1,7 @@
+node_modules/
+.hyperframes/
+.media/
+public/*.aiff
+public/*.mp3
+renders/
+snapshots/

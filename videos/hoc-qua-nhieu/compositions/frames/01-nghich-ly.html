@@ -1,0 +1,62 @@
+<template>
+  <div id="root" data-composition-id="01-nghich-ly" data-duration="4.75" data-width="1080" data-height="1920">
+    <style>
+      @font-face { font-family: "Barlow"; src: url("assets/fonts/be-vietnam-pro-400.woff2") format("woff2"); font-weight: 400; }
+      @font-face { font-family: "Barlow"; src: url("assets/fonts/be-vietnam-pro-700.woff2") format("woff2"); font-weight: 700; }
+      @font-face { font-family: "Barlow"; src: url("assets/fonts/be-vietnam-pro-900.woff2") format("woff2"); font-weight: 900; }
+      @font-face { font-family: "IBM Plex Mono"; src: url("assets/fonts/be-vietnam-pro-500.woff2") format("woff2"); font-weight: 500; }
+      #root { position: relative; width: 1080px; height: 1920px; overflow: hidden; container-type: size; color: #F0ECE5; }
+      #f01-ground { position: absolute; inset: 0; background: #111111; overflow: hidden; }
+      #f01-grid { position: absolute; inset: 0; opacity: .42; background-image: linear-gradient(rgba(240,236,229,.07) 1px, transparent 1px), linear-gradient(90deg, rgba(240,236,229,.07) 1px, transparent 1px); background-size: 90px 90px; }
+      #f01-ghost { position: absolute; top: 510px; left: -60px; font: 900 270px/.82 "Barlow", sans-serif; letter-spacing: -.065em; color: rgba(240,236,229,.07); white-space: nowrap; }
+      #f01-chrome { position: absolute; top: 92px; left: 72px; right: 72px; display: flex; justify-content: space-between; align-items: center; font: 500 20px/1 "IBM Plex Mono", monospace; letter-spacing: .14em; color: #E85D26; text-transform: uppercase; }
+      #f01-rule { position: absolute; top: 145px; left: 72px; width: 936px; height: 2px; background: #E85D26; transform-origin: left center; }
+      #f01-stage { position: absolute; top: 250px; left: 72px; right: 72px; height: 1240px; }
+      #f01-premise { position: absolute; top: 90px; left: 0; width: 900px; display: flex; flex-wrap: wrap; gap: 0 24px; font: 700 94px/.98 "Barlow", sans-serif; letter-spacing: -.045em; }
+      .f01-word { display: block; }
+      #f01-stuck { position: absolute; top: 420px; left: 0; width: 900px; font: 900 138px/1.02 "Barlow", sans-serif; letter-spacing: -.055em; text-transform: lowercase; }
+      #f01-stuck span { display: block; }
+      #f01-hit { position: absolute; top: 770px; left: -18px; width: 972px; color: #E85D26; font: 900 170px/1.3 "Barlow", sans-serif; letter-spacing: -.065em; text-transform: uppercase; }
+      #f01-hit span { display: block; white-space: nowrap; }
+      #f01-spark { position: absolute; top: 920px; right: 36px; width: 160px; height: 160px; }
+      #f01-spark i { position: absolute; top: 79px; left: 12px; width: 136px; height: 2px; background: #E85D26; transform-origin: center; }
+      #f01-spark i:nth-child(2) { transform: rotate(45deg); }
+      #f01-spark i:nth-child(3) { transform: rotate(90deg); }
+      #f01-spark i:nth-child(4) { transform: rotate(135deg); }
+      #f01-bottom { position: absolute; left: 72px; right: 72px; top: 1510px; height: 1px; background: #282826; }
+    </style>
+
+    <div id="f01-ground" class="clip" data-start="0" data-duration="4.75" data-track-index="0">
+      <div id="f01-grid"></div>
+      <div id="f01-ghost">không giỏi</div>
+    </div>
+    <div id="f01-chrome-clip" class="clip" data-start="0" data-duration="4.75" data-track-index="1">
+      <div id="f01-chrome"><span>VÌ SAO?</span><span>01 / 05</span></div>
+      <div id="f01-rule"></div>
+      <div id="f01-bottom"></div>
+    </div>
+    <div id="f01-content" class="clip" data-start="0" data-duration="4.75" data-track-index="2">
+      <div id="f01-stage">
+        <div id="f01-premise"><span class="f01-word">BẠN</span><span class="f01-word">HỌC</span><span class="f01-word">TIẾNG ANH</span></div>
+        <div id="f01-stuck"><span>MÃI</span><span>KHÔNG GIỎI</span></div>
+        <div id="f01-hit"><span>QUÁ</span><span>NHIỀU</span></div>
+        <div id="f01-spark" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+      </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <script>
+      const tl = gsap.timeline({ paused: true });
+      tl.fromTo("#f01-rule", { scaleX: 0 }, { scaleX: 1, duration: .55, ease: "power3.out" }, 0);
+      tl.fromTo("#f01-chrome", { opacity: 0 }, { opacity: 1, duration: .35, ease: "power2.out" }, .08);
+      tl.fromTo(".f01-word", { y: 80, opacity: 0 }, { y: 0, opacity: 1, duration: .55, stagger: .22, ease: "power3.out" }, .12);
+      tl.fromTo("#f01-stuck", { scale: 1.32, filter: "blur(12px)", opacity: 0 }, { scale: 1, filter: "blur(0px)", opacity: 1, duration: .48, ease: "power4.out" }, 1.55);
+      tl.fromTo("#f01-ghost", { x: -90, opacity: 0 }, { x: 0, opacity: 1, duration: .7, ease: "power3.out" }, 1.62);
+      tl.fromTo("#f01-premise", { x: 0 }, { x: -120, duration: .42, ease: "power3.in" }, 3.15);
+      tl.fromTo("#f01-stuck", { x: 0 }, { x: -170, opacity: .28, duration: .42, ease: "power3.in" }, 3.15);
+      tl.fromTo("#f01-hit", { x: 820, scale: 1.15, filter: "blur(16px)", opacity: 0 }, { x: 0, scale: 1, filter: "blur(0px)", opacity: 1, duration: .48, ease: "expo.out" }, 3.18);
+      tl.fromTo("#f01-spark", { scale: .15, opacity: 0, rotation: -20 }, { scale: 1, opacity: 1, rotation: 0, duration: .28, ease: "power4.out" }, 3.55);
+      window.__timelines["01-nghich-ly"] = tl;
+    </script>
+  </div>
+</template>

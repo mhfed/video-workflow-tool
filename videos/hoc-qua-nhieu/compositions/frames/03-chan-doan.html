@@ -1,0 +1,67 @@
+<template>
+  <div id="root" data-composition-id="03-chan-doan" data-duration="5.25" data-width="1080" data-height="1920">
+    <style>
+      @font-face { font-family: "Barlow"; src: url("assets/fonts/be-vietnam-pro-400.woff2") format("woff2"); font-weight: 400; }
+      @font-face { font-family: "Barlow"; src: url("assets/fonts/be-vietnam-pro-700.woff2") format("woff2"); font-weight: 700; }
+      @font-face { font-family: "Barlow"; src: url("assets/fonts/be-vietnam-pro-900.woff2") format("woff2"); font-weight: 900; }
+      @font-face { font-family: "IBM Plex Mono"; src: url("assets/fonts/be-vietnam-pro-500.woff2") format("woff2"); font-weight: 500; }
+      #root { position: relative; width: 1080px; height: 1920px; overflow: hidden; container-type: size; color: #F0ECE5; }
+      #f03-ground { position: absolute; inset: 0; background: #111111; }
+      #f03-divider { position: absolute; top: 0; left: 720px; width: 1px; height: 1600px; background: #282826; }
+      #f03-index { position: absolute; top: 88px; left: 72px; right: 72px; display: flex; justify-content: space-between; font: 500 19px/1 "IBM Plex Mono", monospace; letter-spacing: .14em; color: #888880; text-transform: uppercase; }
+      #f03-stage { position: absolute; top: 230px; left: 72px; right: 72px; height: 1280px; }
+      #f03-old { position: absolute; top: 30px; left: 0; width: 860px; transform-origin: left top; }
+      #f03-lead { font: 700 72px/1 "Barlow", sans-serif; letter-spacing: -.035em; }
+      #f03-no { display: inline-block; color: #E85D26; font-weight: 900; }
+      #f03-stack { margin-top: 56px; width: 760px; }
+      .f03-layer { display: block; height: 118px; padding: 12px 20px; border-top: 1px solid #505048; font: 900 104px/.9 "Barlow", sans-serif; letter-spacing: -.055em; color: #505048; }
+      .f03-layer:nth-child(2) { color: #888880; margin-left: 38px; }
+      .f03-layer:nth-child(3) { color: #F0ECE5; margin-left: 76px; }
+      #f03-slash { position: absolute; top: 50px; left: 232px; width: 355px; height: 18px; background: #E85D26; transform-origin: left center; }
+      #f03-new { position: absolute; top: 610px; left: 0; width: 936px; }
+      #f03-prefix { font: 700 76px/1 "Barlow", sans-serif; letter-spacing: -.035em; color: #888880; }
+      #f03-repeat { margin-top: 24px; display: flex; flex-direction: column; font: 900 148px/.82 "Barlow", sans-serif; letter-spacing: -.065em; text-transform: uppercase; }
+      #f03-repeat span { display: block; opacity: 0; }
+      #f03-repeat span:nth-child(2), #f03-repeat span:nth-child(3) { color: #E85D26; }
+      #f03-loop { position: absolute; top: 945px; right: 14px; width: 180px; height: 180px; border: 6px solid #E85D26; border-right-color: transparent; border-radius: 50%; }
+      #f03-loop::after { content: ""; position: absolute; top: 14px; right: -12px; width: 0; height: 0; border-top: 18px solid transparent; border-bottom: 18px solid transparent; border-left: 28px solid #E85D26; }
+      #f03-foot { position: absolute; top: 1510px; left: 72px; right: 72px; height: 1px; background: #282826; }
+    </style>
+
+    <div id="f03-ground" class="clip" data-start="0" data-duration="5.25" data-track-index="0"><div id="f03-divider"></div></div>
+    <div id="f03-content" class="clip" data-start="0" data-duration="5.25" data-track-index="1">
+      <div id="f03-index"><span>CHẨN ĐOÁN</span><span>03 / 05</span></div>
+      <div id="f03-stage">
+        <div id="f03-old">
+          <div id="f03-lead">BẠN <span id="f03-no">KHÔNG THIẾU</span></div>
+          <div id="f03-stack"><span class="f03-layer">kiến thức</span><span class="f03-layer">kiến thức</span><span class="f03-layer">kiến thức</span></div>
+          <div id="f03-slash"></div>
+        </div>
+        <div id="f03-new">
+          <div id="f03-prefix">BẠN CHỈ</div>
+          <div id="f03-repeat"><span>CHƯA</span><span>LẶP LẠI</span><span>ĐỦ LÂU</span></div>
+          <div id="f03-loop"></div>
+        </div>
+      </div>
+      <div id="f03-foot"></div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <script>
+      const tl = gsap.timeline({ paused: true });
+      tl.fromTo("#f03-index", { opacity: 0 }, { opacity: 1, duration: .3, ease: "power2.out" }, 0);
+      tl.fromTo("#f03-lead", { y: 60, opacity: 0 }, { y: 0, opacity: 1, duration: .5, ease: "power3.out" }, .08);
+      tl.fromTo(".f03-layer", { x: -160, opacity: 0 }, { x: 0, opacity: 1, duration: .48, stagger: .16, ease: "power3.out" }, .55);
+      tl.fromTo("#f03-slash", { scaleX: 0, rotation: -11 }, { scaleX: 1, rotation: -11, duration: .46, ease: "power4.out" }, 1.62);
+      tl.to("#f03-old", { scale: .54, x: 420, y: -20, opacity: .58, duration: .7, ease: "power3.inOut" }, 2.15);
+      tl.fromTo("#f03-prefix", { y: 55, opacity: 0 }, { y: 0, opacity: 1, duration: .36, ease: "power3.out" }, 2.72);
+      const words = ["#f03-repeat span:nth-child(1)", "#f03-repeat span:nth-child(2)", "#f03-repeat span:nth-child(3)"];
+      const starts = [3.28, 3.45, 3.60];
+      const offsets = [78, 55, 42];
+      const durations = [.19, .16, .13];
+      words.forEach((selector, i) => { tl.set(selector, { opacity: 1, y: offsets[i] }, starts[i]); tl.to(selector, { y: 0, duration: durations[i], ease: "power4.out" }, starts[i]); });
+      tl.fromTo("#f03-loop", { scale: .55, opacity: 0, rotation: -90 }, { scale: 1, opacity: 1, rotation: 0, duration: .48, ease: "power3.out" }, 3.82);
+      window.__timelines["03-chan-doan"] = tl;
+    </script>
+  </div>
+</template>
