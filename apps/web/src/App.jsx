@@ -324,7 +324,7 @@ function SettingsDialog({open,onOpenChange,onSaved,c}){
           <div className="settings-section">
             <div className="settings-section-title"><Clapperboard/><span><strong>{c.defaultRenderer}</strong><small>{c.appliedNew}</small></span></div>
             <div className="renderer-setting">
-              <label>{c.renderStyle}<Select value={form.renderer} onValueChange={(value)=>update('renderer',value)}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent>{rendererOptions(settings.rendererNames||[],c)}</SelectContent></Select></label>
+              <label>{c.renderStyle}<Select value={form.renderer} onValueChange={(value)=>update('renderer',value)}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent>{rendererOptions(form.rendererNames||[],c)}</SelectContent></Select></label>
               <p><strong>{form.renderer==='whiteboard'?'Draw-on animation':'Fast image motion'}</strong><span>{form.renderer==='whiteboard'?'Uses the external whiteboard engine and generated scene illustration.':'Uses FFmpeg for a subtle zoom and remains the offline fallback.'}</span></p>
             </div>
           </div>
