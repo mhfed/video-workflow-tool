@@ -24,6 +24,7 @@ import {
   Maximize2,
   Mic2,
   MoreHorizontal,
+  PackageCheck,
   Play,
   Plus,
   RefreshCw,
@@ -100,6 +101,67 @@ const stageLabel=(stage,c)=>({script:c.scriptStage,voice:c.voiceStage,visual:c.v
 const StageIcon=({stage})=>stage==='script'?<FileText/>:stage==='voice'?<AudioLines/>:stage==='visual'?<ImageIcon/>:<Clapperboard/>;
 const canGenerateStage=(scene,stage)=>stage==='voice'||stage==='visual'?scene.review?.script==='approved':stage==='clip'?scene.review?.voice==='approved'&&scene.review?.visual==='approved':false;
 const reviewRank=(decision)=>({'changes-requested':0,stale:1,pending:2,approved:9}[decision]??3);
+
+const HUMAN_STAGES=[
+  {id:'script',number:'01',label:'Nội dung',hint:'Viết và chia cảnh'},
+  {id:'visual',number:'02',label:'Hình ảnh',hint:'Minh hoạ từng cảnh'},
+  {id:'voice',number:'03',label:'Giọng đọc',hint:'Nghe và chỉnh nhịp'},
+  {id:'clip',number:'04',label:'Dựng video',hint:'Ghép hình với tiếng'},
+  {id:'publish',number:'05',label:'Xuất bản',hint:'Xem và xuất bản cuối'},
+];
+
+function HumanWorkspace({project,running,onSave,onRunStage,onReview,onRunAll,rendererNames,c}){
+  const [mode,setMode]=useState('manual');
+  const [stage,setStage]=useState('script');
+  const [selectedId,setSelectedId]=useState(project.scenes[0]?.id);
+  const [text,setText]=useState(project.scenes[0]?.text||'');
+  const [prompt,setPrompt]=useState(project.scenes[0]?.visualPrompt||'');
+  const scene=project.scenes.find((item)=>item.id===selectedId)||project.scenes[0];
+  const sceneIndex=project.scenes.findIndex((item)=>item.id===scene?.id);
+  useEffect(()=>{setText(scene?.text||'');setPrompt(scene?.visualPrompt||'');},[scene?.id,scene?.text,scene?.visualPrompt]);
+  if(!scene)return null;
+  const dirty=text!==scene.text||prompt!==scene.visualPrompt;
+  const activeStage=stage==='publish'?'clip':stage;
+  const ready=stageArtifactReady(scene,activeStage);
+  const decision=scene.review?.[activeStage]||'pending';
+  const approved=project.scenes.filter((item)=>item.review?.[activeStage]==='approved').length;
+  const go=(index)=>setSelectedId(project.scenes[Math.max(0,Math.min(project.scenes.length-1,index))].id);
+  const selectStage=(next)=>{setStage(next);if(next!=='publish'){const pending=project.scenes.find((item)=>item.review?.[next]!=='approved');if(pending)setSelectedId(pending.id);}};
+  const save=()=>onSave(scene.id,{text,visualPrompt:prompt});
+  const approve=async()=>{await onReview(scene.id,activeStage,'approved');const next=project.scenes.slice(sceneIndex+1).find((item)=>item.review?.[activeStage]!=='approved');if(next)setSelectedId(next.id);};
+
+  return <section className="human-workspace">
+    <nav className="human-mode" aria-label="Cách làm việc">
+      <button className={mode==='manual'?'active':''} onClick={()=>setMode('manual')}><SlidersHorizontal/><span><strong>Làm thủ công</strong><small>Chủ động từng bước</small></span></button>
+      <button className={mode==='auto'?'active':''} onClick={()=>setMode('auto')}><WandSparkles/><span><strong>Chạy tự động</strong><small>Tạo nhanh bản nháp</small></span></button>
+    </nav>
+
+    {mode==='auto'?<div className="auto-room">
+      <div className="auto-orbit"><Bot/><span/></div>
+      <div><p>AUTOPILOT</p><h2>Tạo một bản nháp,<br/>rồi quay lại tinh chỉnh.</h2><span>Hệ thống sẽ lần lượt tạo giọng đọc, hình ảnh và dựng video. Mọi scene vẫn có thể chỉnh riêng sau khi hoàn tất.</span></div>
+      <div className="auto-summary">{HUMAN_STAGES.slice(0,4).map((item)=><div key={item.id}><span>{item.number}</span><strong>{item.label}</strong><CheckCircle2/></div>)}</div>
+      <Button size="lg" disabled={running} onClick={()=>onRunAll({stage:'all'})}>{running?<LoaderCircle className="spin"/>:<Play/>}{running?'Đang tạo bản nháp…':'Tạo bản nháp hoàn chỉnh'}</Button>
+    </div>:<>
+      <nav className="human-sections" aria-label="Các bước làm video">
+        {HUMAN_STAGES.map((item)=>{const itemStage=item.id==='publish'?'clip':item.id;const count=project.scenes.filter((sceneItem)=>sceneItem.review?.[itemStage]==='approved').length;return <button key={item.id} className={stage===item.id?'active':''} onClick={()=>selectStage(item.id)}><span>{item.number}</span><div><strong>{item.label}</strong><small>{item.hint}</small></div><em>{count}/{project.scenes.length}</em></button>;})}
+      </nav>
+
+      {stage==='publish'?<div className="publish-room">
+        <div className="publish-copy"><span className="section-kicker"><PackageCheck/> BẢN HOÀN CHỈNH</span><h2>{project.artifacts?.final?'Video đã sẵn sàng.':'Sẵn sàng ghép video?'}</h2><p>{project.artifacts?.final?'Xem lại bản mới nhất hoặc dựng lại sau khi bạn thay đổi một scene.':'Duyệt các scene đã hoàn tất, sau đó ghép thành một video duy nhất.'}</p><div className="publish-stat"><strong>{project.scenes.filter((item)=>item.review?.clip==='approved').length}</strong><span>trên {project.scenes.length} scene<br/>đã sẵn sàng</span></div><Button size="lg" disabled={running||project.scenes.some((item)=>item.review?.clip!=='approved')} onClick={()=>onRunAll({stage:'final'})}>{running?<LoaderCircle className="spin"/>:<Clapperboard/>}Ghép video cuối</Button></div>
+        <div className="publish-preview">{project.artifacts?.final?<video controls preload="metadata" src={`/media/${encodeURIComponent(project.id)}/final?v=${encodeURIComponent(project.updatedAt||'current')}`}/>:<div><Film/><span>Video cuối sẽ xuất hiện tại đây</span></div>}</div>
+      </div>:<div className="human-editor">
+        <aside className="human-scene-list"><header><div><span>SCENES</span><strong>{stageLabel(activeStage,c)}</strong></div><Badge variant="outline">{approved}/{project.scenes.length}</Badge></header><div>{project.scenes.map((item,index)=>{const itemDecision=item.review?.[activeStage]||'pending';return <button key={item.id} className={item.id===scene.id?'active':''} onClick={()=>setSelectedId(item.id)}><span>{String(index+1).padStart(2,'0')}</span><div><strong>{item.text.split(/[.!?]/)[0]}</strong><small>{(item.durationMs/1000).toFixed(1)} giây</small></div><i className={itemDecision}>{itemDecision==='approved'?<Check/>:itemDecision==='changes-requested'?<X/>:itemDecision==='stale'?<AlertTriangle/>:null}</i></button>;})}</div></aside>
+        <main className="human-canvas"><header><div><small>SCENE {String(sceneIndex+1).padStart(2,'0')}</small><strong>{stageLabel(activeStage,c)}</strong></div><Badge variant={badgeVariant(scene.status)}>{c.review[decision]}</Badge></header><div className={`human-preview format-${project.settings?.format||'landscape'}`}><StagePreview project={project} scene={scene} stage={activeStage} c={c}/></div><footer><button disabled={sceneIndex===0} onClick={()=>go(sceneIndex-1)}><ArrowLeft/> Cảnh trước</button><span>{sceneIndex+1} / {project.scenes.length}</span><button disabled={sceneIndex===project.scenes.length-1} onClick={()=>go(sceneIndex+1)}>Cảnh sau <ArrowRight/></button></footer></main>
+        <aside className="human-inspector"><header><span>ĐANG CHỈNH</span><strong>{stageLabel(activeStage,c)}</strong></header><div className="human-inspector-body">
+          {activeStage==='script'&&<label><span>Lời thoại</span><small>{text.length} ký tự</small><Textarea value={text} onChange={(event)=>setText(event.target.value)} rows={14}/></label>}
+          {activeStage==='visual'&&<label><span>Mô tả hình ảnh</span><small>Viết điều bạn muốn nhìn thấy</small><Textarea value={prompt} onChange={(event)=>setPrompt(event.target.value)} rows={14}/></label>}
+          {activeStage==='voice'&&<div className="human-note"><Mic2/><strong>Nghe giọng đọc</strong><p>Kiểm tra cách đọc và nhịp của scene trong khung bên cạnh.</p></div>}
+          {activeStage==='clip'&&<><div className="human-note"><Film/><strong>Xem bản dựng</strong><p>Kiểm tra hình và tiếng trước khi đưa scene vào video cuối.</p></div><label><span>Kiểu chuyển động</span><Select value={scene.renderer||project.settings?.renderer} onValueChange={(renderer)=>onSave(scene.id,{text,visualPrompt:prompt,renderer})} disabled={running}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent>{rendererOptions(rendererNames,c)}</SelectContent></Select></label></>}
+        </div><footer>{dirty&&<Button variant="outline" disabled={running} onClick={save}><Save/>Lưu thay đổi</Button>}{activeStage!=='script'&&<Button variant="outline" disabled={running||!canGenerateStage(scene,activeStage)} onClick={()=>onRunStage(scene.id,activeStage)}><RefreshCw/>{ready?'Tạo lại':'Tạo ngay'}</Button>}<Button disabled={running||dirty||!ready||decision==='approved'} onClick={approve}><Check/>Duyệt & tiếp</Button></footer></aside>
+      </div>}
+    </>}
+  </section>;
+}
 
 function ProjectOverview({project,running,onOpenScene,onBulkRun,onBulkReview,c}){
   const [filter,setFilter]=useState('all');
@@ -378,8 +440,6 @@ export default function App(){
   const [error,setError]=useState('');
   const [dialogOpen,setDialogOpen]=useState(false);
   const [settingsOpen,setSettingsOpen]=useState(false);
-  const [projectView,setProjectView]=useState('overview');
-  const [workbenchFocus,setWorkbenchFocus]=useState({sceneId:null,stage:'script'});
 
   const running=!!current&&health?.running?.includes(current.id);
   const config=health?.config;
@@ -388,7 +448,7 @@ export default function App(){
 
   const refreshHealth=async()=>setHealth(await api('/api/health'));
   const refreshProjects=async()=>setProjects(await api('/api/projects'));
-  const load=async(id)=>{const project=await api(`/api/projects/${encodeURIComponent(id)}`);setCurrent(project);setProjectView('overview');await Promise.all([refreshProjects(),refreshHealth()]);};
+  const load=async(id)=>{const project=await api(`/api/projects/${encodeURIComponent(id)}`);setCurrent(project);await Promise.all([refreshProjects(),refreshHealth()]);};
 
   useEffect(()=>{Promise.all([refreshProjects(),refreshHealth()]).catch((cause)=>setError(cause.message));},[]);
 
@@ -407,8 +467,6 @@ export default function App(){
   const runBulk=async(stage,sceneIds)=>run({stage,sceneIds});
   const reviewStage=async(sceneId,stage,decision)=>{setBusy(true);setError('');try{const project=await api(`/api/projects/${encodeURIComponent(current.id)}/scenes/${encodeURIComponent(sceneId)}/review`,{method:'POST',body:JSON.stringify({stage,decision})});setCurrent(project);await refreshProjects();}catch(cause){setError(cause.message);}finally{setBusy(false);}};
   const reviewBulk=async(stage,sceneIds,decision)=>{setBusy(true);setError('');try{const project=await api(`/api/projects/${encodeURIComponent(current.id)}/review`,{method:'POST',body:JSON.stringify({stage,sceneIds,decision})});setCurrent(project);await refreshProjects();}catch(cause){setError(cause.message);}finally{setBusy(false);}};
-  const openWorkbench=(sceneId,stage='script')=>{setWorkbenchFocus({sceneId,stage});setProjectView('workbench');};
-
   return <div className="app-shell">
     <header className="app-header">
       <button className="brand" onClick={()=>setCurrent(null)}><BrandMark/><span><strong>CUTROOM</strong><small>{c.brandSubtitle}</small></span></button>
@@ -441,18 +499,14 @@ export default function App(){
         {error&&<div className="error-banner"><CircleDot/><span>{error}</span><button onClick={()=>setError('')}>{c.dismiss}</button></div>}
         {!current?<EmptyState onCreate={()=>setDialogOpen(true)} onDemo={createDemo} c={c}/>:<>
           <section className="project-header compact-header">
-            <div><div className="eyebrow">{c.production} / {current.id.slice(-6).toUpperCase()}</div><h1>{current.title}</h1></div>
+            <div><div className="eyebrow">CHAPTER / {current.id.slice(-6).toUpperCase()}</div><h1>{current.title}</h1><p className="chapter-subtitle">{current.scenes.length} scene · Chỉnh từng phần, chỉ tạo lại phần đã thay đổi</p></div>
             <div className="project-actions">
-              <div className="project-view-tabs"><button className={projectView==='overview'?'active':''} onClick={()=>setProjectView('overview')}><Grid2X2/>{c.overview}</button><button className={projectView==='workbench'?'active':''} onClick={()=>openWorkbench(workbenchFocus.sceneId||current.scenes[0].id,workbenchFocus.stage)}><SlidersHorizontal/>{c.workbench}</button></div>
-              <div className="compact-progress"><strong>{approvedClips}/{current.scenes.length}</strong><small>{c.clipsApproved}</small></div>
-              <div className="mode-switch light"><button className={current.settings?.workflowMode==='studio'?'active':''} disabled={busy||running} onClick={()=>updateProject({workflowMode:'studio'})}><SlidersHorizontal/>{c.studioMode}</button><button className={current.settings?.workflowMode==='auto'?'active':''} disabled={busy||running} onClick={()=>updateProject({workflowMode:'auto'})}><Bot/>{c.autoMode}</button></div>
               <label className="renderer-control"><span>{c.renderer}</span><Select value={current.settings?.renderer||config?.renderer||'simple'} onValueChange={changeRenderer} disabled={busy||running}><SelectTrigger aria-label={c.renderer}><SelectValue/></SelectTrigger><SelectContent>{rendererOptions(config?.rendererNames||[],c)}</SelectContent></Select></label>
               <label className="renderer-control"><span>{c.videoFormat}</span><Select value={current.settings?.format||'landscape'} onValueChange={changeFormat} disabled={busy||running}><SelectTrigger aria-label={c.videoFormat}><SelectValue/></SelectTrigger><SelectContent><SelectItem value="landscape">16:9</SelectItem><SelectItem value="short">9:16</SelectItem></SelectContent></Select></label>
-              <Button size="lg" disabled={busy||running||current.settings?.workflowMode==='studio'&&approvedClips!==current.scenes.length} onClick={()=>run({stage:current.settings?.workflowMode==='studio'?'final':'all'})}>{busy||running?<LoaderCircle className="spin"/>:<Play/>}{busy||running?c.rendering:current.settings?.workflowMode==='studio'?c.assembleFinal:c.runPipeline}</Button>
             </div>
           </section>
           {current.error&&<div className="project-error"><strong>{c.lastRunStopped}</strong><span>{current.error.message}</span></div>}
-          {projectView==='overview'?<ProjectOverview project={current} running={busy||running} onOpenScene={openWorkbench} onBulkRun={runBulk} onBulkReview={reviewBulk} c={c}/>:<Workbench key={`${current.id}:${workbenchFocus.sceneId}:${workbenchFocus.stage}`} project={current} initialSceneId={workbenchFocus.sceneId} initialStage={workbenchFocus.stage} running={busy||running} onSave={saveScene} onRunStage={runStage} onReview={reviewStage} rendererNames={config?.rendererNames||[]} c={c}/>}
+          <HumanWorkspace key={current.id} project={current} running={busy||running} onSave={saveScene} onRunStage={runStage} onReview={reviewStage} onRunAll={run} rendererNames={config?.rendererNames||[]} c={c}/>
         </>}
       </main>
     </div>
