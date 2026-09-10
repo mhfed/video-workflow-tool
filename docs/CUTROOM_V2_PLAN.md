@@ -135,6 +135,45 @@ The server validates the proposal. The UI shows impact and requires an explicit 
 - [x] Batch repair proposals with scope and cost preview.
 - [x] Semantic scene planning based on narrative beats instead of punctuation alone.
 
+### Phase 4 — professional operator pass
+
+This phase turns the directing room into a keyboard-first production console without changing the canonical `project.json` contract.
+
+#### Workspace ergonomics
+
+- [x] Collapsible storyboard and Director inspector.
+- [x] Pointer- and keyboard-resizable desktop panels with bounded widths.
+- [x] Preview-only focus mode.
+- [x] Persist the owner's layout locally per browser.
+- [x] Raise the minimum UI type and target sizes for dense controls.
+
+#### Fast control surface
+
+- [x] Global command palette for projects, scenes, generation, QA, export, focus, and settings.
+- [x] Keyboard workflow: J/K, 1–4, Space, A, R, F, and Cmd/Ctrl+S.
+- [x] Project Action Inbox derived from review, quality, and dependency state, with per-action ETA and request-cost hints.
+- [ ] Show dependency impact, cache state, ETA, and request cost before work starts.
+
+#### AI direction
+
+- [ ] Accept project-wide Director instructions and return a validated proposal before mutation.
+- [ ] Compile accepted project direction into project memory and regenerate only affected scenes.
+- [ ] Compare takes side by side and preserve the owner's explicit selection as preference context.
+
+#### Engine hardening
+
+- [ ] Retry a failed stage without replaying completed stages.
+- [ ] Resume queued/running work after restart with checkpoint context.
+- [ ] Separate provider and FFmpeg concurrency limits.
+- [ ] Generate and cache lightweight preview proxies, thumbnails, and audio waveforms.
+- [ ] Expose dependency/cache diagnostics without provider-specific fields in project state.
+
+#### Frontend maintainability
+
+- [ ] Remove legacy workspace components and styles.
+- [ ] Split navigation, command palette, dialogs, workspace state, and tokens into focused modules.
+- [ ] Standardize loading, empty, error, disabled, and running states.
+
 ## v6 control contract
 
 - Jobs live in `project.json` and are resumed from `queued` state after a server restart. Render, QA, and repair use the same queue.

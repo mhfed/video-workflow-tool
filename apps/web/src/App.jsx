@@ -1,41 +1,32 @@
 import { useEffect, useState } from 'react';
 import {
   Activity,
-  AlertTriangle,
   AudioLines,
-  ArrowLeft,
   ArrowRight,
   BrainCircuit,
   Bot,
-  Check,
   CheckCircle2,
   CircleDot,
   Clapperboard,
+  Command,
   Eye,
   EyeOff,
   Film,
   FileText,
-  Grid2X2,
+  Gauge,
   Image as ImageIcon,
   KeyRound,
-  Layers3,
-  ListChecks,
   LoaderCircle,
-  Maximize2,
   Mic2,
-  PackageCheck,
   Play,
   Plus,
   RefreshCw,
   Save,
-  Search,
   Server,
   Settings2,
   ShieldCheck,
   SlidersHorizontal,
   Sparkles,
-  WandSparkles,
-  X,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -48,6 +39,8 @@ import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { copyFor, UI_LANGUAGES } from './i18n';
+import ApplicationNavigation from './ApplicationNavigation';
+import CommandPalette from './CommandPalette';
 import DirectorWorkspace from './DirectorWorkspace';
 
 const api=async(url,options={})=>{
@@ -57,8 +50,6 @@ const api=async(url,options={})=>{
   return body;
 };
 
-const statusLabel=(status,c)=>c.status[status]||status||c.status.draft;
-const badgeVariant=(status)=>status==='complete'?'default':status==='error'?'destructive':'secondary';
 const rendererOptions=(names,c)=>names.map((name)=><SelectItem key={name} value={name}>{c[name]||name}</SelectItem>);
 
 function BrandMark(){
@@ -80,225 +71,6 @@ function EmptyState({onCreate,onDemo,c}){
       </div>)}
     </div>
   </div>;
-}
-
-function ApplicationNavigation({current,projects,drawer,onDrawer,onHome,onCreate,onSelect,onSettings,health,c}){
-  const [query,setQuery]=useState('');
-  useEffect(()=>{if(drawer!=='projects')setQuery('');},[drawer]);
-  useEffect(()=>{if(!drawer)return;const close=(event)=>{if(event.key==='Escape')onDrawer(null);};window.addEventListener('keydown',close);return()=>window.removeEventListener('keydown',close);},[drawer,onDrawer]);
-  const visible=projects.filter((project)=>project.title.toLowerCase().includes(query.trim().toLowerCase()));
-  const activity=projects.flatMap((project)=>(project.jobs||[]).map((job)=>({project,job}))).sort((a,b)=>String(b.job.createdAt||'').localeCompare(String(a.job.createdAt||''))).slice(0,30);
-  const navButton=(id,label,Icon,onClick,active=false,badge=null)=><Tooltip key={id}><TooltipTrigger asChild><button className={`nav-rail-button ${active?'active':''}`} aria-label={label} onClick={onClick}><Icon/><span>{label}</span>{badge!==null&&badge>0&&<b>{badge}</b>}</button></TooltipTrigger><TooltipContent side="right">{label}</TooltipContent></Tooltip>;
-  return <>
-    <aside className="app-nav-rail" aria-label={c.mainNavigation}>
-      <Tooltip><TooltipTrigger asChild><button className="nav-create" aria-label={c.newProduction} onClick={onCreate}><Plus/><span>{c.create}</span></button></TooltipTrigger><TooltipContent side="right">{c.newProduction}</TooltipContent></Tooltip>
-      <nav className="nav-stack">
-        {navButton('home',c.home,Grid2X2,onHome,!current&&!drawer)}
-        {navButton('projects',c.projectLibrary,Clapperboard,()=>onDrawer(drawer==='projects'?null:'projects'),drawer==='projects',projects.length)}
-        {navButton('activity',c.activityCenter,ListChecks,()=>onDrawer(drawer==='activity'?null:'activity'),drawer==='activity',activity.filter(({job})=>['queued','running','cancelling','failed'].includes(job.status)).length)}
-      </nav>
-      <div className="nav-rail-spacer"/>
-      <div className="nav-runtime" title={health?c.systemReady:c.connecting}><span className={`status-light ${health?'online':''}`}/><small>{health?'ON':'—'}</small></div>
-      {navButton('settings',c.settingsNav,Settings2,onSettings,false)}
-    </aside>
-    {drawer&&<><button className="nav-drawer-scrim" aria-label={c.closePanel} onClick={()=>onDrawer(null)}/><aside className={`nav-drawer ${drawer}`}>
-      <header><div><span>{drawer==='projects'?c.projectLibrary:c.activityCenter}</span><p>{drawer==='projects'?c.projectLibraryBody:c.activityCenterBody}</p></div><button aria-label={c.closePanel} onClick={()=>onDrawer(null)}><X/></button></header>
-      {drawer==='projects'?<><label className="nav-project-search"><Search/><Input value={query} onChange={(event)=>setQuery(event.target.value)} placeholder={c.searchProjects}/></label><div className="nav-project-list">{visible.length?visible.map((project)=><button key={project.id} className={project.id===current?.id?'active':''} onClick={()=>{onDrawer(null);onSelect(project.id);}}><span><Clapperboard/></span><div><strong>{project.title}</strong><small>{project.scenes.length} {c.scenes} · {statusLabel(project.status,c)}</small></div><i/></button>):<div className="nav-empty compact"><Search/><strong>{c.noProjectsFound}</strong><p>{c.noProjectsFoundBody}</p></div>}</div></>:<div className="nav-activity-list">{activity.length?activity.map(({project,job})=><button key={`${project.id}-${job.id}`} onClick={()=>{onDrawer(null);onSelect(project.id);}}><span className={`job-state ${job.status}`}>{job.progress?.percent||0}%</span><div><strong>{project.title}</strong><small>{c.jobTypes[job.type]||job.type} · {c.jobStates[job.status]||job.status}</small></div><i/></button>):<div className="nav-empty"><Activity/><strong>{c.noActivity}</strong><p>{c.noActivityBody}</p></div>}</div>}
-      <footer><span className={`status-light ${health?'online':''}`}/><div><strong>{health?c.systemReady:c.connecting}</strong><small>{health?.config?`${health.config.mockMode?'Mock':'Live'} · ${health.config.renderer}`:c.localRuntime}</small></div></footer>
-    </aside></>}
-  </>;
-}
-
-function StagePreview({project,scene,stage,c}){
-  const version=encodeURIComponent(project.updatedAt||'current');
-  const media=(kind)=>`/media/${encodeURIComponent(project.id)}/scenes/${encodeURIComponent(scene.id)}/${kind}?v=${version}`;
-  if(stage==='clip'&&scene.artifacts?.clip)return <video className="workbench-video" controls preload="metadata" src={media('clip')}/>;
-  if(stage==='visual'&&scene.artifacts?.visual)return <img className="workbench-image" src={media('visual')} alt={`${c.visual} ${scene.id}`}/>;
-  if(stage==='voice'&&scene.artifacts?.voice)return <div className="voice-stage-preview"><Mic2/><strong>{c.narration}</strong><p>{scene.text}</p><audio controls preload="metadata" src={media('voice')}/></div>;
-  if(stage==='script')return <div className="script-stage-preview"><span>“</span><p>{scene.text}</p><small>{scene.text.length} {c.chars} · {(scene.durationMs/1000).toFixed(1)} {c.seconds}</small></div>;
-  return <div className="artifact-placeholder workbench-placeholder">
-    <div className="frame-corners"><span/><span/><span/><span/></div>
-    {stage==='voice'?<Mic2/>:stage==='clip'?<Film/>:<ImageIcon/>}<span>{stage==='visual'&&scene.cache?.image?c.mockVisualReady:c.awaitingStage}</span>
-  </div>;
-}
-
-const stageArtifactReady=(scene,stage)=>stage==='script'||stage==='voice'&&!!scene.cache?.voice||stage==='visual'&&!!scene.cache?.image||stage==='clip'&&!!scene.artifacts?.clip;
-const WORKBENCH_STAGES=['script','voice','visual','clip'];
-const stageLabel=(stage,c)=>({script:c.scriptStage,voice:c.voiceStage,visual:c.visualStage,clip:c.clipStage}[stage]);
-const StageIcon=({stage})=>stage==='script'?<FileText/>:stage==='voice'?<AudioLines/>:stage==='visual'?<ImageIcon/>:<Clapperboard/>;
-const canGenerateStage=(scene,stage)=>stage==='voice'||stage==='visual'?scene.review?.script==='approved':stage==='clip'?scene.review?.voice==='approved'&&scene.review?.visual==='approved':false;
-const reviewRank=(decision)=>({'changes-requested':0,stale:1,pending:2,approved:9}[decision]??3);
-
-const HUMAN_STAGES=[
-  {id:'script',number:'01',label:'Nội dung',hint:'Viết và chia cảnh'},
-  {id:'visual',number:'02',label:'Hình ảnh',hint:'Minh hoạ từng cảnh'},
-  {id:'voice',number:'03',label:'Giọng đọc',hint:'Nghe và chỉnh nhịp'},
-  {id:'clip',number:'04',label:'Dựng video',hint:'Ghép hình với tiếng'},
-  {id:'publish',number:'05',label:'Xuất bản',hint:'Xem và xuất bản cuối'},
-];
-
-function HumanWorkspace({project,running,onSave,onRunStage,onReview,onRunAll,rendererNames,c}){
-  const [mode,setMode]=useState('manual');
-  const [stage,setStage]=useState('script');
-  const [selectedId,setSelectedId]=useState(project.scenes[0]?.id);
-  const [text,setText]=useState(project.scenes[0]?.text||'');
-  const [prompt,setPrompt]=useState(project.scenes[0]?.visualPrompt||'');
-  const scene=project.scenes.find((item)=>item.id===selectedId)||project.scenes[0];
-  const sceneIndex=project.scenes.findIndex((item)=>item.id===scene?.id);
-  useEffect(()=>{setText(scene?.text||'');setPrompt(scene?.visualPrompt||'');},[scene?.id,scene?.text,scene?.visualPrompt]);
-  if(!scene)return null;
-  const dirty=text!==scene.text||prompt!==scene.visualPrompt;
-  const activeStage=stage==='publish'?'clip':stage;
-  const ready=stageArtifactReady(scene,activeStage);
-  const decision=scene.review?.[activeStage]||'pending';
-  const approved=project.scenes.filter((item)=>item.review?.[activeStage]==='approved').length;
-  const go=(index)=>setSelectedId(project.scenes[Math.max(0,Math.min(project.scenes.length-1,index))].id);
-  const selectStage=(next)=>{setStage(next);if(next!=='publish'){const pending=project.scenes.find((item)=>item.review?.[next]!=='approved');if(pending)setSelectedId(pending.id);}};
-  const save=()=>onSave(scene.id,{text,visualPrompt:prompt});
-  const approve=async()=>{await onReview(scene.id,activeStage,'approved');const next=project.scenes.slice(sceneIndex+1).find((item)=>item.review?.[activeStage]!=='approved');if(next)setSelectedId(next.id);};
-
-  return <section className="human-workspace">
-    <nav className="human-mode" aria-label="Cách làm việc">
-      <button className={mode==='manual'?'active':''} onClick={()=>setMode('manual')}><SlidersHorizontal/><span><strong>Làm thủ công</strong><small>Chủ động từng bước</small></span></button>
-      <button className={mode==='auto'?'active':''} onClick={()=>setMode('auto')}><WandSparkles/><span><strong>Chạy tự động</strong><small>Tạo nhanh bản nháp</small></span></button>
-    </nav>
-
-    {mode==='auto'?<div className="auto-room">
-      <div className="auto-orbit"><Bot/><span/></div>
-      <div><p>AUTOPILOT</p><h2>Tạo một bản nháp,<br/>rồi quay lại tinh chỉnh.</h2><span>Hệ thống sẽ lần lượt tạo giọng đọc, hình ảnh và dựng video. Mọi scene vẫn có thể chỉnh riêng sau khi hoàn tất.</span></div>
-      <div className="auto-summary">{HUMAN_STAGES.slice(0,4).map((item)=><div key={item.id}><span>{item.number}</span><strong>{item.label}</strong><CheckCircle2/></div>)}</div>
-      <Button size="lg" disabled={running} onClick={()=>onRunAll({stage:'all'})}>{running?<LoaderCircle className="spin"/>:<Play/>}{running?'Đang tạo bản nháp…':'Tạo bản nháp hoàn chỉnh'}</Button>
-    </div>:<>
-      <nav className="human-sections" aria-label="Các bước làm video">
-        {HUMAN_STAGES.map((item)=>{const itemStage=item.id==='publish'?'clip':item.id;const count=project.scenes.filter((sceneItem)=>sceneItem.review?.[itemStage]==='approved').length;return <button key={item.id} className={stage===item.id?'active':''} onClick={()=>selectStage(item.id)}><span>{item.number}</span><div><strong>{item.label}</strong><small>{item.hint}</small></div><em>{count}/{project.scenes.length}</em></button>;})}
-      </nav>
-
-      {stage==='publish'?<div className="publish-room">
-        <div className="publish-copy"><span className="section-kicker"><PackageCheck/> BẢN HOÀN CHỈNH</span><h2>{project.artifacts?.final?'Video đã sẵn sàng.':'Sẵn sàng ghép video?'}</h2><p>{project.artifacts?.final?'Xem lại bản mới nhất hoặc dựng lại sau khi bạn thay đổi một scene.':'Duyệt các scene đã hoàn tất, sau đó ghép thành một video duy nhất.'}</p><div className="publish-stat"><strong>{project.scenes.filter((item)=>item.review?.clip==='approved').length}</strong><span>trên {project.scenes.length} scene<br/>đã sẵn sàng</span></div><Button size="lg" disabled={running||project.scenes.some((item)=>item.review?.clip!=='approved')} onClick={()=>onRunAll({stage:'final'})}>{running?<LoaderCircle className="spin"/>:<Clapperboard/>}Ghép video cuối</Button></div>
-        <div className="publish-preview">{project.artifacts?.final?<video controls preload="metadata" src={`/media/${encodeURIComponent(project.id)}/final?v=${encodeURIComponent(project.updatedAt||'current')}`}/>:<div><Film/><span>Video cuối sẽ xuất hiện tại đây</span></div>}</div>
-      </div>:<div className="human-editor">
-        <aside className="human-scene-list"><header><div><span>SCENES</span><strong>{stageLabel(activeStage,c)}</strong></div><Badge variant="outline">{approved}/{project.scenes.length}</Badge></header><div>{project.scenes.map((item,index)=>{const itemDecision=item.review?.[activeStage]||'pending';return <button key={item.id} className={item.id===scene.id?'active':''} onClick={()=>setSelectedId(item.id)}><span>{String(index+1).padStart(2,'0')}</span><div><strong>{item.text.split(/[.!?]/)[0]}</strong><small>{(item.durationMs/1000).toFixed(1)} giây</small></div><i className={itemDecision}>{itemDecision==='approved'?<Check/>:itemDecision==='changes-requested'?<X/>:itemDecision==='stale'?<AlertTriangle/>:null}</i></button>;})}</div></aside>
-        <main className="human-canvas"><header><div><small>SCENE {String(sceneIndex+1).padStart(2,'0')}</small><strong>{stageLabel(activeStage,c)}</strong></div><Badge variant={badgeVariant(scene.status)}>{c.review[decision]}</Badge></header><div className={`human-preview format-${project.settings?.format||'landscape'}`}><StagePreview project={project} scene={scene} stage={activeStage} c={c}/></div><footer><button disabled={sceneIndex===0} onClick={()=>go(sceneIndex-1)}><ArrowLeft/> Cảnh trước</button><span>{sceneIndex+1} / {project.scenes.length}</span><button disabled={sceneIndex===project.scenes.length-1} onClick={()=>go(sceneIndex+1)}>Cảnh sau <ArrowRight/></button></footer></main>
-        <aside className="human-inspector"><header><span>ĐANG CHỈNH</span><strong>{stageLabel(activeStage,c)}</strong></header><div className="human-inspector-body">
-          {activeStage==='script'&&<label><span>Lời thoại</span><small>{text.length} ký tự</small><Textarea value={text} onChange={(event)=>setText(event.target.value)} rows={14}/></label>}
-          {activeStage==='visual'&&<label><span>Mô tả hình ảnh</span><small>Viết điều bạn muốn nhìn thấy</small><Textarea value={prompt} onChange={(event)=>setPrompt(event.target.value)} rows={14}/></label>}
-          {activeStage==='voice'&&<div className="human-note"><Mic2/><strong>Nghe giọng đọc</strong><p>Kiểm tra cách đọc và nhịp của scene trong khung bên cạnh.</p></div>}
-          {activeStage==='clip'&&<><div className="human-note"><Film/><strong>Xem bản dựng</strong><p>Kiểm tra hình và tiếng trước khi đưa scene vào video cuối.</p></div><label><span>Kiểu chuyển động</span><Select value={scene.renderer||project.settings?.renderer} onValueChange={(renderer)=>onSave(scene.id,{text,visualPrompt:prompt,renderer})} disabled={running}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent>{rendererOptions(rendererNames,c)}</SelectContent></Select></label></>}
-        </div><footer>{dirty&&<Button variant="outline" disabled={running} onClick={save}><Save/>Lưu thay đổi</Button>}{activeStage!=='script'&&<Button variant="outline" disabled={running||!canGenerateStage(scene,activeStage)} onClick={()=>onRunStage(scene.id,activeStage)}><RefreshCw/>{ready?'Tạo lại':'Tạo ngay'}</Button>}<Button disabled={running||dirty||!ready||decision==='approved'} onClick={approve}><Check/>Duyệt & tiếp</Button></footer></aside>
-      </div>}
-    </>}
-  </section>;
-}
-
-function ProjectOverview({project,running,onOpenScene,onBulkRun,onBulkReview,c}){
-  const [filter,setFilter]=useState('all');
-  const [bulkOpen,setBulkOpen]=useState(false);
-  const [finalOpen,setFinalOpen]=useState(false);
-  const stats=WORKBENCH_STAGES.map((stage)=>({stage,approved:project.scenes.filter((scene)=>scene.review?.[stage]==='approved').length}));
-  const counts={pending:0,stale:0,'changes-requested':0};
-  for(const scene of project.scenes)for(const stage of WORKBENCH_STAGES){const decision=scene.review?.[stage]||'pending';if(counts[decision]!==undefined)counts[decision]++;}
-  const visibleScenes=filter==='all'?project.scenes:project.scenes.filter((scene)=>WORKBENCH_STAGES.some((stage)=>(scene.review?.[stage]||'pending')===filter));
-  const attention=project.scenes.flatMap((scene)=>WORKBENCH_STAGES.map((stage)=>({scene,stage,decision:scene.review?.[stage]||'pending'}))).filter((item)=>item.decision==='changes-requested'||item.decision==='stale');
-  const next=[...attention].sort((a,b)=>reviewRank(a.decision)-reviewRank(b.decision))[0]||project.scenes.flatMap((scene)=>WORKBENCH_STAGES.map((stage)=>({scene,stage,decision:scene.review?.[stage]||'pending'}))).find((item)=>item.decision!=='approved');
-  const version=encodeURIComponent(project.updatedAt||'current');
-  return <section className="project-overview">
-    <div className="overview-progress">{stats.map(({stage,approved})=><Tooltip key={stage}><TooltipTrigger asChild><button aria-label={`${stageLabel(stage,c)}: ${approved}/${project.scenes.length}`} onClick={()=>onOpenScene(project.scenes.find((scene)=>scene.review?.[stage]!=='approved')?.id||project.scenes[0].id,stage)}><span className="stage-glyph"><StageIcon stage={stage}/></span><div><strong>{approved}<em>/{project.scenes.length}</em></strong><small>{stageLabel(stage,c)}</small></div><i><b style={{width:`${approved/project.scenes.length*100}%`}}/></i></button></TooltipTrigger><TooltipContent>{stageLabel(stage,c)} · {approved}/{project.scenes.length} {c.approvedLower}</TooltipContent></Tooltip>)}</div>
-    <div className="overview-board">
-      <div className="overview-toolbar"><strong>{c.scenes}</strong><div className="filter-chips"><button className={filter==='all'?'active':''} onClick={()=>setFilter('all')}>{project.scenes.length}</button><button className={filter==='changes-requested'?'active changes-requested':''} onClick={()=>setFilter('changes-requested')}><CircleDot/>{counts['changes-requested']}</button><button className={filter==='stale'?'active stale':''} onClick={()=>setFilter('stale')}><AlertTriangle/>{counts.stale}</button><button className={filter==='pending'?'active pending':''} onClick={()=>setFilter('pending')}><span/>{counts.pending}</button></div><div className="overview-tools">
-        <div className="bulk-menu"><Tooltip><TooltipTrigger asChild><button className={bulkOpen?'active':''} onClick={()=>setBulkOpen((value)=>!value)} aria-label={c.bulkActions}><Layers3/></button></TooltipTrigger><TooltipContent>{c.bulkActions}</TooltipContent></Tooltip>{bulkOpen&&<div className="bulk-popover"><div><Layers3/><strong>{c.bulkActions}</strong><button onClick={()=>setBulkOpen(false)}><X/></button></div>{WORKBENCH_STAGES.map((stage)=>{const generateIds=project.scenes.filter((scene)=>stage!=='script'&&canGenerateStage(scene,stage)&&scene.review?.[stage]!=='approved').map((scene)=>scene.id);const approveIds=project.scenes.filter((scene)=>stageArtifactReady(scene,stage)&&scene.review?.[stage]!=='approved').map((scene)=>scene.id);return <section key={stage}><span><StageIcon stage={stage}/>{stageLabel(stage,c)}</span>{stage!=='script'&&<button disabled={running||!generateIds.length} onClick={()=>{setBulkOpen(false);onBulkRun(stage,generateIds);}}><RefreshCw/><b>{generateIds.length}</b></button>}<button disabled={running||!approveIds.length} onClick={()=>{setBulkOpen(false);onBulkReview(stage,approveIds,'approved');}}><Check/><b>{approveIds.length}</b></button></section>;})}</div>}</div>
-        <Tooltip><TooltipTrigger asChild><button disabled={!project.artifacts?.final} onClick={()=>setFinalOpen(true)} aria-label={c.previewFinal}><Maximize2/></button></TooltipTrigger><TooltipContent>{c.previewFinal}</TooltipContent></Tooltip>
-        {next&&<button className="continue-work" onClick={()=>onOpenScene(next.scene.id,next.stage)}><Sparkles/><span>{c.continueWork}</span><ArrowRight/></button>}
-      </div></div>
-      <div className="scene-matrix">
-        <div className="matrix-head"><span>{c.sceneNavigator}</span>{WORKBENCH_STAGES.map((stage)=><Tooltip key={stage}><TooltipTrigger asChild><strong aria-label={stageLabel(stage,c)}><StageIcon stage={stage}/></strong></TooltipTrigger><TooltipContent>{stageLabel(stage,c)}</TooltipContent></Tooltip>)}</div>
-        <div className="matrix-body">{visibleScenes.map((scene)=><div className="matrix-row" key={scene.id}>
-          {(()=>{const index=project.scenes.findIndex((item)=>item.id===scene.id);return <button className="matrix-scene" onClick={()=>onOpenScene(scene.id,'script')}><b>{String(index+1).padStart(2,'0')}</b><span>{scene.text.split(/[.!?]/)[0]}</span><small>{(scene.durationMs/1000).toFixed(1)}s</small></button>;})()}
-          {WORKBENCH_STAGES.map((stage)=>{const decision=scene.review?.[stage]||'pending';return <button key={stage} className={`matrix-cell ${decision}`} onClick={()=>onOpenScene(scene.id,stage)} title={`${scene.id} · ${stageLabel(stage,c)} · ${c.review[decision]}`}>{decision==='approved'?<Check/>:decision==='changes-requested'?<X/>:decision==='stale'?<AlertTriangle/>:<span/>}</button>;})}
-        </div>)}</div>
-      </div>
-    </div>
-    <Dialog open={finalOpen} onOpenChange={setFinalOpen}><DialogContent className="final-preview-dialog"><DialogHeader><DialogTitle>{c.finalFilm}</DialogTitle><DialogDescription>{project.title}</DialogDescription></DialogHeader>{project.artifacts?.final&&<video controls autoPlay preload="metadata" src={`/media/${encodeURIComponent(project.id)}/final?v=${version}`}/>}</DialogContent></Dialog>
-  </section>;
-}
-
-function Workbench({project,initialSceneId,initialStage,running,onSave,onRunStage,onReview,rendererNames,c}){
-  const [selectedId,setSelectedId]=useState(initialSceneId||project.scenes[0]?.id);
-  const [stage,setStage]=useState(initialStage||'script');
-  const [viewMode,setViewMode]=useState('scene');
-  const sceneIndex=Math.max(0,project.scenes.findIndex((item)=>item.id===selectedId));
-  const scene=project.scenes[sceneIndex]||project.scenes[0];
-  const [text,setText]=useState(scene.text);
-  const [prompt,setPrompt]=useState(scene.visualPrompt);
-  useEffect(()=>{if(!project.scenes.some((item)=>item.id===selectedId))setSelectedId(project.scenes[0]?.id);},[project.id,project.scenes,selectedId]);
-  useEffect(()=>{setText(scene.text);setPrompt(scene.visualPrompt);},[scene.id,scene.text,scene.visualPrompt]);
-  const dirty=text!==scene.text||prompt!==scene.visualPrompt;
-  const decision=scene.review?.[stage]||'pending';
-  const ready=stageArtifactReady(scene,stage);
-  const upstreamApproved=stage==='script'||canGenerateStage(scene,stage);
-  const go=(offset)=>setSelectedId(project.scenes[Math.min(project.scenes.length-1,Math.max(0,sceneIndex+offset))].id);
-  const smartNext=(approvedCurrent=false)=>{
-    const candidates=[];
-    for(const [itemIndex,item] of project.scenes.entries())for(const [stageIndex,itemStage] of WORKBENCH_STAGES.entries()){
-      const itemDecision=approvedCurrent&&item.id===scene.id&&itemStage===stage?'approved':item.review?.[itemStage]||'pending';
-      if(itemDecision!=='approved')candidates.push({item,itemStage,itemIndex,stageIndex,rank:reviewRank(itemDecision)});
-    }
-    const filtered=viewMode==='stage'?candidates.filter((item)=>item.itemStage===stage):candidates;
-    filtered.sort((a,b)=>a.rank-b.rank||(viewMode==='stage'?a.itemIndex-b.itemIndex:a.itemIndex-b.itemIndex||a.stageIndex-b.stageIndex));
-    const next=filtered[0];if(next){setSelectedId(next.item.id);setStage(next.itemStage);}
-  };
-  const approveAndNext=async()=>{await onReview(scene.id,stage,'approved');smartNext(true);};
-
-  useEffect(()=>{
-    const handle=(event)=>{
-      if(['INPUT','TEXTAREA','BUTTON'].includes(event.target?.tagName))return;
-      if(event.key==='ArrowDown')go(1);
-      if(event.key==='ArrowUp')go(-1);
-      if(/^[1-4]$/.test(event.key))setStage(WORKBENCH_STAGES[Number(event.key)-1]);
-    };
-    window.addEventListener('keydown',handle);return()=>window.removeEventListener('keydown',handle);
-  },[sceneIndex,project.scenes.length]);
-
-  return <section className="workbench">
-    <aside className={`scene-navigator view-${viewMode}`}>
-      <div className="workbench-pane-head"><span>{c.sceneNavigator}</span><Badge variant="outline">{project.scenes.length}</Badge></div>
-      <div className="review-view-toggle"><button className={viewMode==='scene'?'active':''} onClick={()=>setViewMode('scene')}><ListChecks/>{c.byScene}</button><button className={viewMode==='stage'?'active':''} onClick={()=>setViewMode('stage')}><Layers3/>{c.byStage}</button></div>
-      <button className="smart-next" onClick={()=>smartNext()}><Sparkles/>{c.nextTask}<ArrowRight/></button>
-      <div className="scene-nav-list">{project.scenes.map((item,index)=><button key={item.id} className={item.id===scene.id?'active':''} onClick={()=>setSelectedId(item.id)}>
-        <span className="scene-nav-number">{String(index+1).padStart(2,'0')}</span>
-        <span className="scene-nav-copy"><strong>{item.text.split(/[.!?]/)[0]}</strong><small>{(item.durationMs/1000).toFixed(1)} {c.seconds}</small></span>
-        <span className="scene-nav-dots">{WORKBENCH_STAGES.map((itemStage)=><i key={itemStage} className={`${item.review?.[itemStage]||'pending'} ${itemStage===stage?'current-stage':''}`} title={`${stageLabel(itemStage,c)}: ${c.review[item.review?.[itemStage]||'pending']}`}/>)}</span>
-      </button>)}</div>
-    </aside>
-
-    <div className="preview-deck">
-      <div className="preview-toolbar"><div><span>{scene.id}</span><strong>{stageLabel(stage,c)}</strong></div><Badge variant={badgeVariant(scene.status)}>{statusLabel(scene.status,c)}</Badge></div>
-      <div className={`preview-canvas format-${project.settings?.format||'landscape'}`}><StagePreview project={project} scene={scene} stage={stage} c={c}/></div>
-      <div className="scene-pager"><button disabled={sceneIndex===0} onClick={()=>go(-1)}><ArrowLeft/>{c.previousScene}</button><span>{sceneIndex+1} / {project.scenes.length}</span><button disabled={sceneIndex===project.scenes.length-1} onClick={()=>go(1)}>{c.nextScene}<ArrowRight/></button></div>
-    </div>
-
-    <aside className="scene-inspector">
-      <div className="workbench-pane-head"><span>{c.inspector}</span><small>{stageLabel(stage,c)}</small></div>
-      <div className="inspector-body">
-        <label className="scene-renderer"><span>{c.renderer}</span><small>{c.sceneRendererHint}</small><Select value={scene.renderer||project.settings?.renderer} onValueChange={(renderer)=>onSave(scene.id,{text,visualPrompt:prompt,renderer})} disabled={running}><SelectTrigger aria-label={c.renderer}><SelectValue/></SelectTrigger><SelectContent>{rendererOptions(rendererNames,c)}</SelectContent></Select></label>
-        {stage==='script'&&<label><span>{c.narration}</span><small>{text.length} {c.chars}</small><Textarea value={text} onChange={(event)=>setText(event.target.value)} rows={12}/></label>}
-        {stage==='visual'&&<label><span>{c.visualDirection}</span><small>{c.imagePrompt}</small><Textarea value={prompt} onChange={(event)=>setPrompt(event.target.value)} rows={14}/></label>}
-        {stage==='voice'&&<div className="inspector-note"><Mic2/><strong>{c.voiceStage}</strong><p>{c.voiceInspectorBody}</p><small>{(scene.durationMs/1000).toFixed(1)} {c.seconds}</small></div>}
-        {stage==='clip'&&<div className="inspector-note"><Film/><strong>{c.clipStage}</strong><p>{c.clipInspectorBody}</p><small>{scene.artifacts?.clip||c.awaitingStage}</small></div>}
-      </div>
-      <div className="inspector-actions"><Button variant="outline" disabled={!dirty||running} onClick={()=>onSave(scene.id,{text,visualPrompt:prompt})}><Save/>{c.saveEdit}</Button></div>
-    </aside>
-
-    <footer className="stage-dock">
-      <div className="stage-tabs">{WORKBENCH_STAGES.map((itemStage)=>{const itemDecision=scene.review?.[itemStage]||'pending';return <Tooltip key={itemStage}><TooltipTrigger asChild><button aria-label={stageLabel(itemStage,c)} className={`${stage===itemStage?'active':''} ${itemDecision}`} onClick={()=>setStage(itemStage)}><span className="stage-tab-icon"><StageIcon stage={itemStage}/></span><strong>{stageLabel(itemStage,c)}</strong><i/></button></TooltipTrigger><TooltipContent>{c.review[itemDecision]}</TooltipContent></Tooltip>;})}</div>
-      <div className="stage-primary">
-        {project.settings?.workflowMode==='auto'?<Button disabled={running} onClick={async()=>{if(dirty)await onSave(scene.id,{text,visualPrompt:prompt});await onRunStage(scene.id,'all');}}>{running?<LoaderCircle className="spin"/>:<WandSparkles/>}{c.renderScene}</Button>:<>
-          {stage!=='script'&&<Button variant="outline" disabled={running||!upstreamApproved} onClick={()=>onRunStage(scene.id,stage)}><RefreshCw/>{ready?c.regenerate:c.generate}</Button>}
-          {ready&&decision!=='changes-requested'&&<Button variant="ghost" disabled={running} onClick={()=>onReview(scene.id,stage,'changes-requested')}><X/>{c.requestChanges}</Button>}
-          <Button disabled={running||dirty||!ready||decision==='approved'} onClick={approveAndNext}><Check/>{sceneIndex<project.scenes.length-1?c.approveNext:c.approve}</Button>
-        </>}
-      </div>
-    </footer>
-  </section>;
 }
 
 function NewProjectDialog({open,onOpenChange,onCreate,busy,defaultRenderer='simple',rendererNames,defaultLanguage='vi',c}){
@@ -468,6 +240,9 @@ export default function App(){
   const [dialogOpen,setDialogOpen]=useState(false);
   const [settingsOpen,setSettingsOpen]=useState(false);
   const [navDrawer,setNavDrawer]=useState(null);
+  const [paletteOpen,setPaletteOpen]=useState(false);
+  const [workspaceContext,setWorkspaceContext]=useState(null);
+  const [workspaceCommand,setWorkspaceCommand]=useState(null);
 
   const activeJob=[...(current?.jobs||[])].reverse().find((job)=>['queued','running','cancelling'].includes(job.status))||null;
   const running=!!activeJob||!!current&&health?.running?.includes(current.id);
@@ -478,6 +253,7 @@ export default function App(){
   const load=async(id)=>{const project=await api(`/api/projects/${encodeURIComponent(id)}`);setCurrent(project);await Promise.all([refreshProjects(),refreshHealth()]);};
 
   useEffect(()=>{Promise.all([refreshProjects(),refreshHealth()]).catch((cause)=>setError(cause.message));},[]);
+  useEffect(()=>{const openPalette=(event)=>{if((event.metaKey||event.ctrlKey)&&event.key.toLowerCase()==='k'){event.preventDefault();setPaletteOpen((value)=>!value);}};window.addEventListener('keydown',openPalette);return()=>window.removeEventListener('keydown',openPalette);},[]);
   useEffect(()=>{
     if(!current?.id||!activeJob)return;
     let stopped=false;
@@ -511,6 +287,16 @@ export default function App(){
   const runQuality=async(sceneIds=null)=>!!await enqueueJob('quality',sceneIds?{sceneIds}:{});
   const getRepairPlan=async()=>api(`/api/projects/${encodeURIComponent(current.id)}/quality/repair-plan`);
   const applyRepairs=async(actions)=>{setBusy(true);setError('');try{const result=await api(`/api/projects/${encodeURIComponent(current.id)}/quality/repair`,{method:'POST',body:JSON.stringify({actions})});setCurrent(result.project);return result;}catch(cause){setError(cause.message);return null;}finally{setBusy(false);}};
+  const commandSceneId=workspaceContext?.sceneId||current?.scenes?.[0]?.id;
+  const sendWorkspaceCommand=(type,payload={})=>setWorkspaceCommand({type,...payload,id:Date.now()});
+  const paletteItems=[
+    {id:'new',group:c.commandGroups.navigation,label:c.newProduction,meta:c.commandNewBody,icon:Plus,run:()=>setDialogOpen(true)},
+    {id:'settings',group:c.commandGroups.navigation,label:c.settingsNav,meta:c.providerSettings,icon:Settings2,run:()=>setSettingsOpen(true)},
+    ...projects.map((project)=>({id:`project-${project.id}`,group:c.commandGroups.projects,label:project.title,meta:`${project.scenes.length} ${c.scenes}`,icon:Clapperboard,run:()=>load(project.id)})),
+    ...(current?.scenes||[]).map((scene,index)=>({id:`scene-${scene.id}`,group:c.commandGroups.scenes,label:`${c.sceneLabel} ${String(index+1).padStart(2,'0')} · ${scene.text.split(/[.!?]/)[0]}`,meta:`${(scene.durationMs/1000).toFixed(1)} ${c.seconds}`,icon:FileText,run:()=>sendWorkspaceCommand('scene',{sceneId:scene.id})})),
+    ...(current&&commandSceneId?[['voice',AudioLines],['visual',ImageIcon],['clip',Film]].map(([stage,icon])=>({id:`regenerate-${stage}`,group:c.commandGroups.actions,label:`${c.regenerate} ${c[`${stage}Stage`].toLowerCase()}`,meta:c.commandCurrentScene,icon,run:()=>runStage(commandSceneId,stage)})) : []),
+    ...(current&&commandSceneId?[{id:'quality-scene',group:c.commandGroups.actions,label:c.checkScene,meta:c.commandCurrentScene,icon:Gauge,run:()=>runQuality([commandSceneId])},{id:'focus-preview',group:c.commandGroups.actions,label:c.focusPreview,meta:c.commandCurrentScene,icon:Eye,shortcut:'F',run:()=>sendWorkspaceCommand('focus')},{id:'export-final',group:c.commandGroups.actions,label:c.exportFinal,meta:current.title,icon:Clapperboard,run:()=>run({stage:'final'})}] : []),
+  ];
   return <div className="app-shell">
     <header className="app-header">
       <button className="brand" onClick={()=>setCurrent(null)}><BrandMark/><span><strong>CUTROOM</strong><small>{c.brandSubtitle}</small></span></button>
@@ -519,6 +305,7 @@ export default function App(){
         <span className={`status-light ${health?'online':''}`}/>
         <div><strong>{health?c.systemReady:c.connecting}</strong><small>{config?`${config.mockMode?'Mock':'Live'} · ${config.renderer}`:c.localRuntime}</small></div>
       </div>
+      <button className="command-trigger" onClick={()=>setPaletteOpen(true)}><Command/><span>{c.quickActions}</span><kbd>⌘ K</kbd></button>
       <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onClick={()=>Promise.all([refreshProjects(),refreshHealth()])}><RefreshCw/></Button></TooltipTrigger><TooltipContent>{c.refreshWorkspace}</TooltipContent></Tooltip>
     </header>
 
@@ -529,11 +316,12 @@ export default function App(){
         {error&&<div className="error-banner"><CircleDot/><span>{error}</span><button onClick={()=>setError('')}>{c.dismiss}</button></div>}
         {!current?<EmptyState onCreate={()=>setDialogOpen(true)} onDemo={createDemo} c={c}/>:<>
           {current.error&&<div className="project-error"><strong>{c.lastRunStopped}</strong><span>{current.error.message}</span></div>}
-          <DirectorWorkspace key={current.id} project={current} running={busy||running} activeJob={activeJob} onCancelJob={cancelJob} onUndo={()=>historyAction('undo')} onRedo={()=>historyAction('redo')} onSelectTake={selectSceneTake} onRunQuality={runQuality} onGetRepairPlan={getRepairPlan} onApplyRepairs={applyRepairs} onSave={saveScene} onRunStage={runStage} onReview={reviewStage} onRunAll={run} onLoadRoughCut={loadRoughCut} onUpdateProject={updateProject} onSceneAction={editSceneStructure} onInsertScene={insertNewScene} onDirectorPlan={planDirection} rendererNames={config?.rendererNames||[]} c={c}/>
+          <DirectorWorkspace key={current.id} project={current} running={busy||running} keyboardLocked={paletteOpen||dialogOpen||settingsOpen||!!navDrawer} activeJob={activeJob} command={workspaceCommand} onContextChange={setWorkspaceContext} onCancelJob={cancelJob} onUndo={()=>historyAction('undo')} onRedo={()=>historyAction('redo')} onSelectTake={selectSceneTake} onRunQuality={runQuality} onGetRepairPlan={getRepairPlan} onApplyRepairs={applyRepairs} onSave={saveScene} onRunStage={runStage} onReview={reviewStage} onRunAll={run} onLoadRoughCut={loadRoughCut} onUpdateProject={updateProject} onSceneAction={editSceneStructure} onInsertScene={insertNewScene} onDirectorPlan={planDirection} rendererNames={config?.rendererNames||[]} c={c}/>
         </>}
       </main>
     </div>
     <NewProjectDialog open={dialogOpen} onOpenChange={setDialogOpen} onCreate={createProject} busy={busy} defaultRenderer={config?.renderer||'simple'} rendererNames={config?.rendererNames||[]} defaultLanguage={config?.contentLanguage||'vi'} c={c}/>
     <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} onSaved={refreshHealth} c={c}/>
+    <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} items={paletteItems} c={c}/>
   </div>;
 }
