@@ -8,7 +8,7 @@ Representative shape:
 
 ```json
 {
-  "version": 1,
+  "version": 4,
   "id": "why-habits-work-a1b2c3",
   "title": "Why habits work",
   "createdAt": "2026-09-09T00:00:00.000Z",
@@ -43,6 +43,7 @@ Representative shape:
   "id": "scene-001",
   "index": 0,
   "text": "Narration text for this scene.",
+  "visualIntent": "A learner freezes during a real conversation.",
   "startMs": 0,
   "endMs": 7421,
   "durationMs": 7421,
@@ -74,6 +75,16 @@ Representative shape:
 
 `renderer` is optional at scene level. When absent, legacy projects continue to
 use `settings.renderer`, followed by the runtime `VIDEO_RENDERER` default.
+
+`visualIntent` is the owner-facing description of what the scene should show.
+`visualPrompt` is compiled from narration, visual intent, format, and the shared
+art direction. The normal UI edits `visualIntent` and keeps the compiled prompt
+under Advanced production details. Legacy projects infer visual intent from
+their narration until the owner changes it.
+
+Scene IDs remain stable when a scene is moved. Structural operations update the
+ordered `scenes` array, indexes, and timeline while invalidating only the final
+assembly or the directly changed scene dependencies.
 
 `settings.workflowMode` is `auto` or `studio`. Review decisions are independent from the technical `status` and can be `pending`, `approved`, `changes-requested`, or `stale`.
 

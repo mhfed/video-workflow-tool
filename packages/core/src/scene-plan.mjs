@@ -13,9 +13,10 @@ function sentenceUnits(text) {
   return result;
 }
 
-function promptFor(text, cfg={}) {
+export function visualPromptFor(text, cfg={}, visualIntent=text) {
   const frame=cfg.format==='short'?'9:16 vertical':'16:9 landscape';
-  return `Create one clean ${frame} whiteboard-style illustration for this narration: ${JSON.stringify(text)}. Keep every important subject fully visible inside the central 76% safe area, leaving at least 12% empty margin on every edge. Nothing may touch or continue beyond the canvas boundary. Warm light beige paper background, dark hand-drawn ink lines, sparse red/orange/blue accents, strong visual hierarchy, generous whitespace, no captions, no labels, no readable text, no photorealism, no 3D.`;
+  const intent=String(visualIntent||text).trim();
+  return `Create one clean ${frame} whiteboard-style illustration. Narration context: ${JSON.stringify(text)}. Creative intent: ${JSON.stringify(intent)}. Keep every important subject fully visible inside the central 76% safe area, leaving at least 12% empty margin on every edge. Nothing may touch or continue beyond the canvas boundary. Warm light beige paper background, dark hand-drawn ink lines, sparse red/orange/blue accents, strong visual hierarchy, generous whitespace, no captions, no labels, no readable text, no photorealism, no 3D.`;
 }
 
 export function planScriptScenes(text, cfg) {
@@ -24,7 +25,7 @@ export function planScriptScenes(text, cfg) {
     if (!bucket.length) return;
     const sceneText = bucket.join(' ').trim();
     const durationSec = Math.min(cfg.sceneMaxSec, Math.max(cfg.sceneMinSec, estimateDurationSec(sceneText, cfg.wordsPerMinute)));
-    scenes.push({ text: sceneText, durationMs: Math.round(durationSec * 1000), visualPrompt: promptFor(sceneText,cfg) });
+    scenes.push({ text: sceneText, visualIntent: sceneText, durationMs: Math.round(durationSec * 1000), visualPrompt: visualPromptFor(sceneText,cfg,sceneText) });
     bucket = []; sec = 0;
   };
   for (const unit of units) {
@@ -41,7 +42,7 @@ export function planSrtScenes(text, cfg) {
   const flush = () => {
     if (!bucket.length) return;
     const startMs = bucket[0].startMs, endMs = bucket.at(-1).endMs, sceneText = bucket.map((c)=>c.text).join(' ').trim();
-    scenes.push({ text: sceneText, durationMs: endMs - startMs, sourceStartMs: startMs, sourceEndMs: endMs, visualPrompt: promptFor(sceneText,cfg) });
+    scenes.push({ text: sceneText, visualIntent: sceneText, durationMs: endMs - startMs, sourceStartMs: startMs, sourceEndMs: endMs, visualPrompt: visualPromptFor(sceneText,cfg,sceneText) });
     bucket = [];
   };
   for (const cue of cues) { bucket.push(cue); const durationSec = (bucket.at(-1).endMs - bucket[0].startMs) / 1000; if (durationSec >= cfg.sceneTargetSec || durationSec >= cfg.sceneMaxSec) flush(); }

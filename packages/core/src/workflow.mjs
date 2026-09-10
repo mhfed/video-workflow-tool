@@ -3,9 +3,11 @@ export const REVIEW_STAGES = ['script','voice','visual','clip'];
 export const REVIEW_DECISIONS = new Set(['pending','approved','changes-requested','stale']);
 
 export function normalizeWorkflow(project) {
+  project.version=Math.max(Number(project.version)||1,4);
   project.settings ||= {};
   if (!WORKFLOW_MODES.has(project.settings.workflowMode)) project.settings.workflowMode='studio';
   for (const scene of project.scenes || []) {
+    if(typeof scene.visualIntent!=='string'||!scene.visualIntent.trim())scene.visualIntent=scene.text||'';
     scene.review ||= {};
     for (const stage of REVIEW_STAGES) {
       if (!REVIEW_DECISIONS.has(scene.review[stage])) scene.review[stage]='pending';

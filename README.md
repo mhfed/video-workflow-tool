@@ -31,9 +31,9 @@ npm run web
 
 Open `http://127.0.0.1:4173`. The default **Topic → auto script** input lets you enter an idea and choose target minutes. New projects default to **Studio**, where script, voice, visual, and clip checkpoints are reviewed independently. Switch a project to **Auto run** when you want a complete first draft in one pass.
 
-Projects open on a one-viewport **Overview** with stage progress, a scene-by-stage production matrix, attention queue, bulk actions, and final-cut status. Selecting any matrix cell opens the matching scene and stage in the single-scene **Workbench**: compact scene navigation on the left, one stage preview in the center, a focused inspector on the right, and the approval pipeline fixed along the bottom.
+Projects open in one **AI Directing Room**: a visual storyboard on the left, the best available scene preview in the center, an intent-aware Director on the right, and the cut timeline along the bottom. The Director always explains the smallest useful next action and previews which cached stages an instruction will affect before it is applied.
 
-Use **Scene** view to finish one scene across its stages, or **Stage** view to review the same creative stage across the production. **Next task** prioritizes requested changes and stale work before pending work. Bulk controls generate only eligible scenes and approve only artifacts that already exist.
+Normal visual edits use a short, human-facing creative intent; CUTROOM compiles the technical generation prompt behind an Advanced section. Scenes can be inserted, split, duplicated, merged, moved, or removed without rerunning unrelated work. Existing completed projects infer readiness from their artifacts, so upgrading does not force old approvals to be repeated. See [`docs/CUTROOM_V2_PLAN.md`](docs/CUTROOM_V2_PLAN.md) for the product and engine roadmap.
 
 The interface and new video projects default to Vietnamese. In **Provider settings → Language**, you can switch the interface and independently choose Vietnamese or English as the default content language. Each project records its own language in `project.json`, and generated narration plus embedded subtitles follow that setting.
 

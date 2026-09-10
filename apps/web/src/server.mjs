@@ -4,8 +4,9 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { config } from '../../../packages/core/src/env.mjs';
 import { updateEnvFile } from '../../../packages/core/src/env-file.mjs';
-import { createProject, listProjects, loadProject, saveProject, projectDir } from '../../../packages/core/src/project.mjs';
+import { createProject, duplicateScene, insertScene, listProjects, loadProject, mergeSceneWithNext, moveScene, removeScene, saveProject, splitScene, projectDir } from '../../../packages/core/src/project.mjs';
 import { invalidateRenderedMedia, invalidateScene } from '../../../packages/core/src/invalidation.mjs';
+import { visualPromptFor } from '../../../packages/core/src/scene-plan.mjs';
 import { SUPPORTED_RENDERERS } from '../../../packages/core/src/validate-config.mjs';
 import { SUPPORTED_LANGUAGES } from '../../../packages/core/src/languages.mjs';
 import { SUPPORTED_VIDEO_FORMATS, videoFormatSettings } from '../../../packages/core/src/video-format.mjs';
@@ -13,6 +14,7 @@ import { setReviewDecision, WORKFLOW_MODES } from '../../../packages/core/src/wo
 import { generateScriptOpenAI } from '../../../packages/providers/src/openai.mjs';
 import { generateScriptMock } from '../../../packages/providers/src/mock.mjs';
 import { listVivibeVoices } from '../../../packages/providers/src/vivibe.mjs';
+import { planSceneDirection } from '../../../packages/providers/src/director.mjs';
 import { runPipeline } from '../../worker/src/pipeline.mjs';
 import { rendererNames, resolveRendererName } from '../../../packages/renderers/src/registry.mjs';
 import { rendererInputError } from './renderer-input.mjs';
@@ -167,13 +169,37 @@ const server=http.createServer(async (req,res)=>{
         saveProject(p,cfg);
         return json(res,200,p);
       }
+      if(req.method==='POST'&&parts[3]==='director'&&parts.length===4) {
+        const b=await readBody(req);const p=loadProject(id,cfg);const s=p.scenes.find((scene)=>scene.id===b.sceneId);
+        if(!s)return json(res,404,{error:'scene not found'});
+        return json(res,200,await planSceneDirection({instruction:b.instruction,scene:s,project:p,cfg}));
+      }
+      if(req.method==='POST'&&parts[3]==='scenes'&&parts.length===4) {
+        if(running.has(id))return json(res,409,{error:'Wait for this project render to finish before changing scene structure.'});
+        const b=await readBody(req),p=loadProject(id,cfg);const scene=insertScene(p,b,cfg);saveProject(p,cfg);
+        return json(res,201,{project:p,selectedSceneId:scene.id});
+      }
+      if(req.method==='POST'&&parts[3]==='scenes'&&parts[4]&&parts[5]==='actions') {
+        if(running.has(id))return json(res,409,{error:'Wait for this project render to finish before changing scene structure.'});
+        const b=await readBody(req),p=loadProject(id,cfg),sceneId=decodeURIComponent(parts[4]);let selectedSceneId=sceneId;
+        if(b.action==='duplicate')selectedSceneId=duplicateScene(p,sceneId,cfg).id;
+        else if(b.action==='split')selectedSceneId=splitScene(p,sceneId,cfg,{at:Number.isInteger(b.at)?b.at:null}).second.id;
+        else if(b.action==='merge-next')selectedSceneId=mergeSceneWithNext(p,sceneId,cfg).id;
+        else if(b.action==='remove'){const index=p.scenes.findIndex((scene)=>scene.id===sceneId);removeScene(p,sceneId);selectedSceneId=p.scenes[Math.min(index,p.scenes.length-1)].id;}
+        else if(b.action==='move')selectedSceneId=moveScene(p,sceneId,b.direction).id;
+        else return json(res,400,{error:'Unsupported scene action.'});
+        saveProject(p,cfg);return json(res,200,{project:p,selectedSceneId});
+      }
       if(req.method==='PATCH'&&parts[3]==='scenes'&&parts[4]) {
         if(running.has(id))return json(res,409,{error:'Wait for this project render to finish before editing a scene.'});
         const b=await readBody(req); const p=loadProject(id,cfg); const s=p.scenes.find(x=>x.id===parts[4]);
         if(!s) return json(res,404,{error:'scene not found'});
         const rendererError=rendererInputError(b); if(rendererError)return json(res,400,{error:rendererError});
-        const nextText=typeof b.text==='string'?b.text:s.text; const nextPrompt=typeof b.visualPrompt==='string'?b.visualPrompt:s.visualPrompt; const nextRenderer=typeof b.renderer==='string'?b.renderer:s.renderer;
-        const textChanged=nextText!==s.text,promptChanged=nextPrompt!==s.visualPrompt,rendererChanged=typeof b.renderer==='string'&&nextRenderer!==resolveRendererName(s,p,cfg); s.text=nextText;s.visualPrompt=nextPrompt;
+        const nextText=typeof b.text==='string'?b.text:s.text;const nextIntent=typeof b.visualIntent==='string'?b.visualIntent:s.visualIntent||s.text;const intentChanged=nextIntent!==s.visualIntent;
+        let nextPrompt=typeof b.visualPrompt==='string'?b.visualPrompt:s.visualPrompt;
+        if(typeof b.visualIntent==='string'||nextText!==s.text)nextPrompt=visualPromptFor(nextText,{...cfg,format:p.settings?.format},nextIntent);
+        const nextRenderer=typeof b.renderer==='string'?b.renderer:s.renderer;
+        const textChanged=nextText!==s.text,promptChanged=intentChanged||nextPrompt!==s.visualPrompt&&typeof b.visualPrompt==='string',rendererChanged=typeof b.renderer==='string'&&nextRenderer!==resolveRendererName(s,p,cfg);s.text=nextText;s.visualIntent=nextIntent;s.visualPrompt=nextPrompt;
         if(typeof b.renderer==='string')s.renderer=nextRenderer;
         invalidateScene(p,s,{textChanged,promptChanged,rendererChanged}); saveProject(p,cfg); return json(res,200,p);
       }
