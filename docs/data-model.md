@@ -49,6 +49,7 @@ Representative shape:
   "sourceStartMs": null,
   "sourceEndMs": null,
   "visualPrompt": "Create one clean 16:9 whiteboard-style illustration...",
+  "renderer": "simple",
   "status": "ready",
   "review": {
     "script": "approved",
@@ -70,6 +71,9 @@ Representative shape:
   }
 }
 ```
+
+`renderer` is optional at scene level. When absent, legacy projects continue to
+use `settings.renderer`, followed by the runtime `VIDEO_RENDERER` default.
 
 `settings.workflowMode` is `auto` or `studio`. Review decisions are independent from the technical `status` and can be `pending`, `approved`, `changes-requested`, or `stale`.
 

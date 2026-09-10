@@ -16,6 +16,12 @@ const adapters=new Map([
 
 export const rendererNames=Object.freeze([...adapters.keys()]);
 
+export function isRendererName(name) { return adapters.has(name); }
+
+export function resolveRendererName(scene,project,cfg) {
+  return scene?.renderer || project?.settings?.renderer || cfg?.renderer;
+}
+
 export function getRenderer(name) {
   const adapter=adapters.get(name);
   if(!adapter)throw new Error(`Unsupported VIDEO_RENDERER=${name}`);

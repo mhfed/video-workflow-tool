@@ -58,6 +58,7 @@ const api=async(url,options={})=>{
 
 const statusLabel=(status,c)=>c.status[status]||status||c.status.draft;
 const badgeVariant=(status)=>status==='complete'?'default':status==='error'?'destructive':'secondary';
+const rendererOptions=(names,c)=>names.map((name)=><SelectItem key={name} value={name}>{c[name]||name}</SelectItem>);
 
 function BrandMark(){
   return <div className="brand-mark" aria-hidden="true"><span/><span/><span/></div>;
@@ -131,7 +132,7 @@ function ProjectOverview({project,running,onOpenScene,onBulkRun,onBulkReview,c})
   </section>;
 }
 
-function Workbench({project,initialSceneId,initialStage,running,onSave,onRunStage,onReview,c}){
+function Workbench({project,initialSceneId,initialStage,running,onSave,onRunStage,onReview,rendererNames,c}){
   const [selectedId,setSelectedId]=useState(initialSceneId||project.scenes[0]?.id);
   const [stage,setStage]=useState(initialStage||'script');
   const [viewMode,setViewMode]=useState('scene');
@@ -189,6 +190,7 @@ function Workbench({project,initialSceneId,initialStage,running,onSave,onRunStag
     <aside className="scene-inspector">
       <div className="workbench-pane-head"><span>{c.inspector}</span><small>{stageLabel(stage,c)}</small></div>
       <div className="inspector-body">
+        <label className="scene-renderer"><span>{c.renderer}</span><small>{c.sceneRendererHint}</small><Select value={scene.renderer||project.settings?.renderer} onValueChange={(renderer)=>onSave(scene.id,{text,visualPrompt:prompt,renderer})} disabled={running}><SelectTrigger aria-label={c.renderer}><SelectValue/></SelectTrigger><SelectContent>{rendererOptions(rendererNames,c)}</SelectContent></Select></label>
         {stage==='script'&&<label><span>{c.narration}</span><small>{text.length} {c.chars}</small><Textarea value={text} onChange={(event)=>setText(event.target.value)} rows={12}/></label>}
         {stage==='visual'&&<label><span>{c.visualDirection}</span><small>{c.imagePrompt}</small><Textarea value={prompt} onChange={(event)=>setPrompt(event.target.value)} rows={14}/></label>}
         {stage==='voice'&&<div className="inspector-note"><Mic2/><strong>{c.voiceStage}</strong><p>{c.voiceInspectorBody}</p><small>{(scene.durationMs/1000).toFixed(1)} {c.seconds}</small></div>}
@@ -210,7 +212,7 @@ function Workbench({project,initialSceneId,initialStage,running,onSave,onRunStag
   </section>;
 }
 
-function NewProjectDialog({open,onOpenChange,onCreate,busy,defaultRenderer='simple',defaultLanguage='vi',c}){
+function NewProjectDialog({open,onOpenChange,onCreate,busy,defaultRenderer='simple',rendererNames,defaultLanguage='vi',c}){
   const [sourceType,setSourceType]=useState('topic');
   const [renderer,setRenderer]=useState(defaultRenderer);
   const [language,setLanguage]=useState(defaultLanguage);
@@ -235,7 +237,7 @@ function NewProjectDialog({open,onOpenChange,onCreate,busy,defaultRenderer='simp
         </label>
         <div className="production-options">
           <label>{c.videoFormat}<Select value={format} onValueChange={setFormat}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent><SelectItem value="landscape">{c.landscapeFormat}</SelectItem><SelectItem value="short">{c.shortFormat}</SelectItem></SelectContent></Select><small>{format==='short'?c.shortFormatHint:c.landscapeFormatHint}</small></label>
-          <label>{c.renderStyle}<Select value={renderer} onValueChange={setRenderer}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent><SelectItem value="whiteboard">{c.whiteboard}</SelectItem><SelectItem value="simple">{c.simple}</SelectItem></SelectContent></Select><small>{c.rendererHint}</small></label>
+          <label>{c.renderStyle}<Select value={renderer} onValueChange={setRenderer}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent>{rendererOptions(rendererNames,c)}</SelectContent></Select><small>{c.rendererHint}</small></label>
           <label>{c.contentLanguage}<Select value={language} onValueChange={setLanguage}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent>{UI_LANGUAGES.map((item)=><SelectItem key={item.code} value={item.code}>{item.label}</SelectItem>)}</SelectContent></Select></label>
           <label className="minutes-field">{c.targetLength}<Input name="minutes" type="number" min="1" max="60" defaultValue="6"/><span>{c.minutes}</span></label>
         </div>
@@ -322,7 +324,7 @@ function SettingsDialog({open,onOpenChange,onSaved,c}){
           <div className="settings-section">
             <div className="settings-section-title"><Clapperboard/><span><strong>{c.defaultRenderer}</strong><small>{c.appliedNew}</small></span></div>
             <div className="renderer-setting">
-              <label>{c.renderStyle}<Select value={form.renderer} onValueChange={(value)=>update('renderer',value)}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent><SelectItem value="whiteboard">{c.whiteboard}</SelectItem><SelectItem value="simple">{c.simple}</SelectItem></SelectContent></Select></label>
+              <label>{c.renderStyle}<Select value={form.renderer} onValueChange={(value)=>update('renderer',value)}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent>{rendererOptions(settings.rendererNames||[],c)}</SelectContent></Select></label>
               <p><strong>{form.renderer==='whiteboard'?'Draw-on animation':'Fast image motion'}</strong><span>{form.renderer==='whiteboard'?'Uses the external whiteboard engine and generated scene illustration.':'Uses FFmpeg for a subtle zoom and remains the offline fallback.'}</span></p>
             </div>
           </div>
@@ -444,17 +446,17 @@ export default function App(){
               <div className="project-view-tabs"><button className={projectView==='overview'?'active':''} onClick={()=>setProjectView('overview')}><Grid2X2/>{c.overview}</button><button className={projectView==='workbench'?'active':''} onClick={()=>openWorkbench(workbenchFocus.sceneId||current.scenes[0].id,workbenchFocus.stage)}><SlidersHorizontal/>{c.workbench}</button></div>
               <div className="compact-progress"><strong>{approvedClips}/{current.scenes.length}</strong><small>{c.clipsApproved}</small></div>
               <div className="mode-switch light"><button className={current.settings?.workflowMode==='studio'?'active':''} disabled={busy||running} onClick={()=>updateProject({workflowMode:'studio'})}><SlidersHorizontal/>{c.studioMode}</button><button className={current.settings?.workflowMode==='auto'?'active':''} disabled={busy||running} onClick={()=>updateProject({workflowMode:'auto'})}><Bot/>{c.autoMode}</button></div>
-              <label className="renderer-control"><span>{c.renderer}</span><Select value={current.settings?.renderer||config?.renderer||'simple'} onValueChange={changeRenderer} disabled={busy||running}><SelectTrigger aria-label={c.renderer}><SelectValue/></SelectTrigger><SelectContent><SelectItem value="whiteboard">{c.whiteboard}</SelectItem><SelectItem value="simple">{c.simple}</SelectItem></SelectContent></Select></label>
+              <label className="renderer-control"><span>{c.renderer}</span><Select value={current.settings?.renderer||config?.renderer||'simple'} onValueChange={changeRenderer} disabled={busy||running}><SelectTrigger aria-label={c.renderer}><SelectValue/></SelectTrigger><SelectContent>{rendererOptions(config?.rendererNames||[],c)}</SelectContent></Select></label>
               <label className="renderer-control"><span>{c.videoFormat}</span><Select value={current.settings?.format||'landscape'} onValueChange={changeFormat} disabled={busy||running}><SelectTrigger aria-label={c.videoFormat}><SelectValue/></SelectTrigger><SelectContent><SelectItem value="landscape">16:9</SelectItem><SelectItem value="short">9:16</SelectItem></SelectContent></Select></label>
               <Button size="lg" disabled={busy||running||current.settings?.workflowMode==='studio'&&approvedClips!==current.scenes.length} onClick={()=>run({stage:current.settings?.workflowMode==='studio'?'final':'all'})}>{busy||running?<LoaderCircle className="spin"/>:<Play/>}{busy||running?c.rendering:current.settings?.workflowMode==='studio'?c.assembleFinal:c.runPipeline}</Button>
             </div>
           </section>
           {current.error&&<div className="project-error"><strong>{c.lastRunStopped}</strong><span>{current.error.message}</span></div>}
-          {projectView==='overview'?<ProjectOverview project={current} running={busy||running} onOpenScene={openWorkbench} onBulkRun={runBulk} onBulkReview={reviewBulk} c={c}/>:<Workbench key={`${current.id}:${workbenchFocus.sceneId}:${workbenchFocus.stage}`} project={current} initialSceneId={workbenchFocus.sceneId} initialStage={workbenchFocus.stage} running={busy||running} onSave={saveScene} onRunStage={runStage} onReview={reviewStage} c={c}/>}
+          {projectView==='overview'?<ProjectOverview project={current} running={busy||running} onOpenScene={openWorkbench} onBulkRun={runBulk} onBulkReview={reviewBulk} c={c}/>:<Workbench key={`${current.id}:${workbenchFocus.sceneId}:${workbenchFocus.stage}`} project={current} initialSceneId={workbenchFocus.sceneId} initialStage={workbenchFocus.stage} running={busy||running} onSave={saveScene} onRunStage={runStage} onReview={reviewStage} rendererNames={config?.rendererNames||[]} c={c}/>}
         </>}
       </main>
     </div>
-    <NewProjectDialog open={dialogOpen} onOpenChange={setDialogOpen} onCreate={createProject} busy={busy} defaultRenderer={config?.renderer||'simple'} defaultLanguage={config?.contentLanguage||'vi'} c={c}/>
+    <NewProjectDialog open={dialogOpen} onOpenChange={setDialogOpen} onCreate={createProject} busy={busy} defaultRenderer={config?.renderer||'simple'} rendererNames={config?.rendererNames||[]} defaultLanguage={config?.contentLanguage||'vi'} c={c}/>
     <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} onSaved={refreshHealth} c={c}/>
   </div>;
 }

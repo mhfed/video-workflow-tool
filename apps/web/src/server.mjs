@@ -14,6 +14,8 @@ import { generateScriptOpenAI } from '../../../packages/providers/src/openai.mjs
 import { generateScriptMock } from '../../../packages/providers/src/mock.mjs';
 import { listVivibeVoices } from '../../../packages/providers/src/vivibe.mjs';
 import { runPipeline } from '../../worker/src/pipeline.mjs';
+import { rendererNames, resolveRendererName } from '../../../packages/renderers/src/registry.mjs';
+import { rendererInputError } from './renderer-input.mjs';
 import { mediaTypeFor, serveMedia } from './media.mjs';
 
 let cfg=config();
@@ -25,8 +27,8 @@ const json=(res,status,data)=>{res.writeHead(status,{'content-type':'application
 const readBody=(req)=>new Promise((resolve,reject)=>{let b='';req.on('data',d=>b+=d);req.on('end',()=>{try{resolve(b?JSON.parse(b):{});}catch(e){reject(e);}});req.on('error',reject);});
 const serve=(res,file,type)=>{const stream=fs.createReadStream(file);stream.on('error',()=>{if(!res.headersSent)res.writeHead(404);res.end();});res.writeHead(200,{'content-type':type});stream.pipe(res);};
 const mimeFor=(file)=>({'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.svg':'image/svg+xml','.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.webp':'image/webp','.ico':'image/x-icon'}[path.extname(file).toLowerCase()]||'application/octet-stream');
-const safeConfig=()=>({mockMode:cfg.mockMode,renderer:cfg.renderer,uiLanguage:cfg.uiLanguage,contentLanguage:cfg.contentLanguage,textProvider:cfg.textProvider,imageProvider:cfg.imageProvider,voiceProvider:cfg.voiceProvider,textModel:cfg.openaiTextModel,imageModel:cfg.openaiImageModel,imageSize:cfg.openaiImageSize,ttsModel:cfg.openaiTtsModel,ttsVoice:cfg.openaiTtsVoice,vivibeVoiceId:cfg.vivibeVoiceId,whiteboardAutoInstall:cfg.whiteboardAutoInstall,hasOpenAIKey:!!cfg.openaiApiKey,hasVivibeKey:!!cfg.vivibeApiKey});
-const safeSettings=()=>({hasOpenAIKey:!!cfg.openaiApiKey,hasVivibeKey:!!cfg.vivibeApiKey,uiLanguage:cfg.uiLanguage,contentLanguage:cfg.contentLanguage,enableOpenAI:!cfg.mockMode&&[cfg.textProvider,cfg.imageProvider].every(value=>value==='openai'),voiceProvider:cfg.voiceProvider,renderer:cfg.renderer,baseUrl:cfg.openaiBaseUrl,textModel:cfg.openaiTextModel,imageModel:cfg.openaiImageModel,imageSize:cfg.openaiImageSize,imageQuality:cfg.openaiImageQuality,ttsModel:cfg.openaiTtsModel,ttsVoice:cfg.openaiTtsVoice,ttsInstructions:cfg.openaiTtsInstructions,vivibeBaseUrl:cfg.vivibeBaseUrl,vivibeVoiceId:cfg.vivibeVoiceId,vivibeSpeed:cfg.vivibeSpeed});
+const safeConfig=()=>({mockMode:cfg.mockMode,renderer:cfg.renderer,rendererNames,uiLanguage:cfg.uiLanguage,contentLanguage:cfg.contentLanguage,textProvider:cfg.textProvider,imageProvider:cfg.imageProvider,voiceProvider:cfg.voiceProvider,textModel:cfg.openaiTextModel,imageModel:cfg.openaiImageModel,imageSize:cfg.openaiImageSize,ttsModel:cfg.openaiTtsModel,ttsVoice:cfg.openaiTtsVoice,vivibeVoiceId:cfg.vivibeVoiceId,whiteboardAutoInstall:cfg.whiteboardAutoInstall,hasOpenAIKey:!!cfg.openaiApiKey,hasVivibeKey:!!cfg.vivibeApiKey});
+const safeSettings=()=>({hasOpenAIKey:!!cfg.openaiApiKey,hasVivibeKey:!!cfg.vivibeApiKey,rendererNames,uiLanguage:cfg.uiLanguage,contentLanguage:cfg.contentLanguage,enableOpenAI:!cfg.mockMode&&[cfg.textProvider,cfg.imageProvider].every(value=>value==='openai'),voiceProvider:cfg.voiceProvider,renderer:cfg.renderer,baseUrl:cfg.openaiBaseUrl,textModel:cfg.openaiTextModel,imageModel:cfg.openaiImageModel,imageSize:cfg.openaiImageSize,imageQuality:cfg.openaiImageQuality,ttsModel:cfg.openaiTtsModel,ttsVoice:cfg.openaiTtsVoice,ttsInstructions:cfg.openaiTtsInstructions,vivibeBaseUrl:cfg.vivibeBaseUrl,vivibeVoiceId:cfg.vivibeVoiceId,vivibeSpeed:cfg.vivibeSpeed});
 const isLoopback=(address='')=>address==='127.0.0.1'||address==='::1'||address.startsWith('::ffff:127.');
 const settingString=(body,key,{fallback='',max=500}={})=>typeof body[key]==='string'?body[key].replace(/[\r\n]+/g,' ').trim().slice(0,max):fallback;
 
@@ -169,9 +171,11 @@ const server=http.createServer(async (req,res)=>{
         if(running.has(id))return json(res,409,{error:'Wait for this project render to finish before editing a scene.'});
         const b=await readBody(req); const p=loadProject(id,cfg); const s=p.scenes.find(x=>x.id===parts[4]);
         if(!s) return json(res,404,{error:'scene not found'});
-        const nextText=typeof b.text==='string'?b.text:s.text; const nextPrompt=typeof b.visualPrompt==='string'?b.visualPrompt:s.visualPrompt;
-        const textChanged=nextText!==s.text,promptChanged=nextPrompt!==s.visualPrompt; s.text=nextText;s.visualPrompt=nextPrompt;
-        invalidateScene(p,s,{textChanged,promptChanged}); saveProject(p,cfg); return json(res,200,p);
+        const rendererError=rendererInputError(b); if(rendererError)return json(res,400,{error:rendererError});
+        const nextText=typeof b.text==='string'?b.text:s.text; const nextPrompt=typeof b.visualPrompt==='string'?b.visualPrompt:s.visualPrompt; const nextRenderer=typeof b.renderer==='string'?b.renderer:s.renderer;
+        const textChanged=nextText!==s.text,promptChanged=nextPrompt!==s.visualPrompt,rendererChanged=typeof b.renderer==='string'&&nextRenderer!==resolveRendererName(s,p,cfg); s.text=nextText;s.visualPrompt=nextPrompt;
+        if(typeof b.renderer==='string')s.renderer=nextRenderer;
+        invalidateScene(p,s,{textChanged,promptChanged,rendererChanged}); saveProject(p,cfg); return json(res,200,p);
       }
       if(req.method==='POST'&&parts[3]==='scenes'&&parts[4]&&parts[5]==='review') {
         if(running.has(id))return json(res,409,{error:'Wait for this project render to finish before reviewing a scene.'});

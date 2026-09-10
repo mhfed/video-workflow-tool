@@ -12,7 +12,7 @@ import { containVideoFilter } from '../../../packages/core/src/video-fit.mjs';
 import { markArtifactForReview, normalizeWorkflow, requireApproved } from '../../../packages/core/src/workflow.mjs';
 import { generateImageOpenAI } from '../../../packages/providers/src/openai.mjs';
 import { synthesizeVoice, voiceCacheConfig } from '../../../packages/providers/src/voice.mjs';
-import { getRenderer } from '../../../packages/renderers/src/registry.mjs';
+import { getRenderer, resolveRendererName } from '../../../packages/renderers/src/registry.mjs';
 
 function log(event, detail={}) { console.log(JSON.stringify({time:new Date().toISOString(),event,...detail})); }
 const effectiveProvider = (configured, cfg) => cfg.mockMode ? 'mock' : configured;
@@ -46,7 +46,7 @@ async function ensureImage(scene, project, cfg, force=false) {
 async function ensureVideo(scene, project, cfg, imageFile, force=false) {
   const dir=ensureDir(sceneDir(cfg,project.id,scene.id));
   const file=path.join(dir,'video.mp4');
-  const renderer = project.settings.renderer || cfg.renderer;
+  const renderer=resolveRendererName(scene,project,cfg);
   const adapter=getRenderer(renderer);
   const key=sha256({renderer,renderContract:RENDER_CONTRACT,durationMs:scene.durationMs,image:scene.cache.image,text:scene.text,width:cfg.width,height:cfg.height,fps:cfg.fps,hand:adapter.cacheSignature(cfg)});
   if (!force && scene.cache.video===key && fileExists(file)) return file;

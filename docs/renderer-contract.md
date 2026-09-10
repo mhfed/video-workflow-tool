@@ -27,6 +27,10 @@ pipeline. Its `simple` and `whiteboard` entries delegate directly to the existin
 renderer functions; the registry does not own orchestration, approvals, or media
 generation.
 
+Scene renderer selection uses the optional top-level `scene.renderer` field. The
+registry resolves it before the legacy project and environment defaults:
+`scene.renderer`, then `project.settings.renderer`, then `cfg.renderer`.
+
 ## `simple` renderer
 
 Implementation: `packages/renderers/src/simple.mjs`.

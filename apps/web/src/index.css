@@ -549,6 +549,8 @@ video::cue { color: #fffdf8; background: rgba(22,21,18,.82); font-family: var(--
 .settings-fields.two-columns { grid-template-columns: 1fr 1fr; }
 .settings-fields.three-columns { grid-template-columns: repeat(3,minmax(0,1fr)); }
 .settings-fields label, .instruction-field { display: grid; gap: 7px; color: #454139; font-size: 9px; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; }
+.scene-renderer { padding-bottom: 14px; border-bottom: 1px solid #ddd6c9; }
+.scene-renderer [data-slot="select-trigger"] { width: 100%; color: #292721; background: #fffdf8; border-color: #cfc8ba; font-size: 11px; letter-spacing: 0; text-transform: none; }
 .settings-fields label small { color: #9a9386; font-size: 8px; font-weight: 500; letter-spacing: 0; line-height: 1.4; text-transform: none; }
 .settings-fields input, .settings-fields [data-slot="select-trigger"], .instruction-field textarea { width: 100%; color: #292721; background: #fffdf8; border-color: #cfc8ba; border-radius: 5px; font-size: 11px; font-weight: 500; letter-spacing: 0; text-transform: none; }
 .renderer-setting { display: grid; grid-template-columns: minmax(190px,.55fr) minmax(260px,1fr); gap: 14px; align-items: stretch; }

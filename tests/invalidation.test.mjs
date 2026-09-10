@@ -84,3 +84,24 @@ test('format change can reuse voice and visual source artifacts',()=>{
   assert.equal(scene.cache.clip,undefined);
   assert.equal(project.artifacts.final,undefined);
 });
+
+test('scene renderer change invalidates only that scene render and final output',()=>{
+  const {project,scene}=fixture();
+  const other=structuredClone(scene);
+  other.id='scene-002';
+  project.scenes.push(other);
+  scene.renderer='simple';
+  invalidateScene(project,scene,{rendererChanged:true});
+  assert.equal(scene.cache.voice,'voice-key');
+  assert.equal(scene.artifacts.voice,'voice.mp3');
+  assert.equal(scene.cache.image,'image-key');
+  assert.equal(scene.artifacts.visual,'visual.png');
+  assert.equal(scene.cache.video,undefined);
+  assert.equal(scene.artifacts.video,undefined);
+  assert.equal(scene.cache.clip,undefined);
+  assert.equal(scene.artifacts.clip,undefined);
+  assert.equal(scene.review.clip,'stale');
+  assert.equal(project.artifacts.final,undefined);
+  assert.equal(other.cache.video,'video-key');
+  assert.equal(other.artifacts.clip,'clip.mp4');
+});

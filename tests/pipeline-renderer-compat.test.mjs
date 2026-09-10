@@ -28,14 +28,19 @@ const {run}=await import('../packages/core/src/process.mjs');
 const {sha256}=await import('../packages/core/src/utils.mjs');
 const {runPipeline}=await import('../apps/worker/src/pipeline.mjs');
 
-async function seedVisual(project,cfg) {
-  const scene=project.scenes[0];
+async function seedVisual(project,cfg,scene=project.scenes[0]) {
   const file=path.join(sceneDir(cfg,project.id,scene.id),'visual.png');
   fs.mkdirSync(path.dirname(file),{recursive:true});
   await run(cfg.ffmpegBin,['-loglevel','error','-y','-f','lavfi','-i','color=c=white:s=320x180','-frames:v','1',file],{capture:true});
   scene.cache.image=sha256({prompt:scene.visualPrompt,provider:'openai',model:cfg.openaiImageModel,size:cfg.openaiImageSize,quality:cfg.openaiImageQuality});
   scene.artifacts.visual=path.relative(projectDir(cfg,project.id),file);
   saveProject(project,cfg);
+}
+
+function installFakeWhiteboardEngine() {
+  const scripts=path.join(engine,'scripts');
+  fs.mkdirSync(scripts,{recursive:true});
+  fs.writeFileSync(path.join(scripts,'render_stream_whiteboard.py'),`import json,subprocess,sys\nann=json.load(open(sys.argv[2]))\nassert ann['elements'][0]['region']['width']==320\nsubprocess.run(['ffmpeg','-loglevel','error','-y','-f','lavfi','-i','color=c=white:s=320x180:r=10','-t','1','-c:v','libx264','-pix_fmt','yuv420p',sys.argv[3]],check=True)\n`);
 }
 
 function legacyProject(renderer,cfg) {
@@ -60,9 +65,7 @@ test('legacy simple project runs voice, render, clip, and final assembly',async(
 });
 
 test('legacy whiteboard project runs annotation, render, voice mux, and final assembly',async()=>{
-  const scripts=path.join(engine,'scripts');
-  fs.mkdirSync(scripts,{recursive:true});
-  fs.writeFileSync(path.join(scripts,'render_stream_whiteboard.py'),`import json,subprocess,sys\nann=json.load(open(sys.argv[2]))\nassert ann['elements'][0]['region']['width']==320\nsubprocess.run(['ffmpeg','-loglevel','error','-y','-f','lavfi','-i','color=c=white:s=320x180:r=10','-t','1','-c:v','libx264','-pix_fmt','yuv420p',sys.argv[3]],check=True)\n`);
+  installFakeWhiteboardEngine();
   process.env.MOCK_MODE='0';
   const cfg=config();
   const project=legacyProject('whiteboard',cfg);
@@ -72,5 +75,30 @@ test('legacy whiteboard project runs annotation, render, voice mux, and final as
   assert.ok(fs.existsSync(path.join(sceneDir(cfg,project.id,scene.id),`${scene.id}.annotation.json`)));
   assert.ok(fs.existsSync(path.join(projectDir(cfg,project.id),scene.artifacts.voice)));
   assert.ok(fs.existsSync(path.join(projectDir(cfg,project.id),scene.artifacts.clip)));
+  assert.ok(fs.existsSync(result.final));
+});
+
+test('mixed simple and whiteboard scenes assemble through the existing pipeline',async()=>{
+  installFakeWhiteboardEngine();
+  process.env.MOCK_MODE='0';
+  const cfg=config();
+  const project=legacyProject('simple',cfg);
+  const first=project.scenes[0];
+  first.renderer='simple';
+  const second=structuredClone(first);
+  second.id='scene-002'; second.index=1; second.renderer='whiteboard';
+  second.startMs=first.endMs; second.endMs=second.startMs+second.durationMs;
+  second.cache={}; second.artifacts={};
+  project.scenes.push(second);
+  await seedVisual(project,cfg,first);
+  await seedVisual(project,cfg,second);
+  const result=await runPipeline(project.id);
+  assert.equal(result.project.scenes[0].renderer,'simple');
+  assert.equal(result.project.scenes[1].renderer,'whiteboard');
+  for(const scene of result.project.scenes) {
+    assert.ok(fs.existsSync(path.join(projectDir(cfg,project.id),scene.artifacts.video)));
+    assert.ok(fs.existsSync(path.join(projectDir(cfg,project.id),scene.artifacts.clip)));
+  }
+  assert.ok(fs.existsSync(path.join(sceneDir(cfg,project.id,'scene-002'),'scene-002.annotation.json')));
   assert.ok(fs.existsSync(result.final));
 });

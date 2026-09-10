@@ -8,8 +8,8 @@ export function invalidateFinal(project) {
   return project;
 }
 
-export function invalidateScene(project, scene, { textChanged=false, promptChanged=false }={}) {
-  if (!textChanged && !promptChanged) return project;
+export function invalidateScene(project, scene, { textChanged=false, promptChanged=false, rendererChanged=false }={}) {
+  if (!textChanged && !promptChanged && !rendererChanged) return project;
   scene.cache ||= {};
   scene.artifacts ||= {};
 
@@ -26,10 +26,11 @@ export function invalidateScene(project, scene, { textChanged=false, promptChang
     scene.review ||= {};
     scene.review.visual='stale';
   }
-  if (textChanged || promptChanged) {
+  if (textChanged || promptChanged || rendererChanged) {
     for (const key of ['video','clip']) drop(scene.cache,key);
     for (const key of ['video','clip']) drop(scene.artifacts,key);
-    scene.status='planned';
+    scene.status=rendererChanged&&!textChanged&&!promptChanged?(scene.artifacts.visual?'visual-ready':scene.artifacts.voice?'voice-ready':'planned'):'planned';
+    scene.review ||= {};
     scene.review.clip='stale';
     invalidateFinal(project);
   }
