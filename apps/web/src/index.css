@@ -275,7 +275,7 @@ video::cue { color: #fffdf8; background: rgba(22,21,18,.82); font-family: var(--
 .project-rail.compact .rail-footer > div:first-child { display: block; }
 .project-rail.compact .rail-footer svg { margin: 0; }
 
-.main-stage.workbench-stage { height: calc(100vh - 72px); display: flex; flex-direction: column; gap: 10px; overflow: hidden; padding: 14px 18px 18px; }
+.main-stage.workbench-stage { height: calc(100vh - 72px); display: flex; flex-direction: column; gap: 10px; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; padding: 14px 18px 18px; scrollbar-gutter: stable; }
 .compact-header { width: 100%; max-width: none; min-height: 58px; margin: 0; align-items: center; animation: none; }
 .compact-header h1 { max-width: 420px; margin: 3px 0 0; overflow: hidden; font: 500 25px/1.05 var(--font-serif); text-overflow: ellipsis; white-space: nowrap; }
 .compact-header .project-actions { align-items: center; }
