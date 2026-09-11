@@ -1,6 +1,7 @@
 import { renderSimpleScene } from './simple.mjs';
 import { renderWhiteboardScene, whiteboardHandSignature } from './whiteboard.mjs';
 import { cinematicClipInputs, cinematicRenderInputs, mixCinematicBrollAudio, prepareCinematicVisual, renderCinematicBrollScene } from './cinematic-broll.mjs';
+import { drawRevealClipInputs, drawRevealHandSignature, drawRevealRenderInputs, mixDrawRevealAudio, prepareDrawRevealVisual, renderDrawRevealScene } from './draw-reveal.mjs';
 
 const adapters=new Map([
   ['simple',Object.freeze({
@@ -21,6 +22,15 @@ const adapters=new Map([
     renderCacheInputs:cinematicRenderInputs,
     clipCacheInputs:cinematicClipInputs,
     mixAudio:mixCinematicBrollAudio
+  })],
+  ['draw-reveal',Object.freeze({
+    name:'draw-reveal',
+    render:renderDrawRevealScene,
+    cacheSignature:drawRevealHandSignature,
+    prepareVisual:prepareDrawRevealVisual,
+    renderCacheInputs:drawRevealRenderInputs,
+    clipCacheInputs:drawRevealClipInputs,
+    mixAudio:mixDrawRevealAudio
   })]
 ]);
 

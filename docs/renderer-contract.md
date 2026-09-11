@@ -23,8 +23,8 @@ type RenderScene = (input: RenderSceneInput) => Promise<string>
 The returned string is the rendered scene video path.
 
 `packages/renderers/src/registry.mjs` is the compatibility registry used by the
-pipeline. Its `simple` and `whiteboard` entries delegate directly to the existing
-renderer functions; the registry does not own orchestration, approvals, or media
+pipeline. Its renderer entries delegate directly to isolated adapter functions;
+the registry does not own orchestration, approvals, or media
 generation.
 
 Scene renderer selection uses the optional top-level `scene.renderer` field. The
@@ -64,6 +64,17 @@ Current upstream invocation uses:
 
 The upstream annotation format, masks, hand-path behavior, and OpenCV implementation remain private to this adapter.
 
+## `draw-reveal` renderer
+
+Implementation: `packages/renderers/src/draw-reveal.mjs`.
+
+- Consumes project-local full-color raster artwork rather than converting it to line art.
+- Generates a normalized serpentine path or accepts an explicit normalized path.
+- Encodes nearest-path reveal order into a temporary grayscale schedule mask.
+- Thresholds that mask over narration duration and moves the existing hand asset along the same path.
+- Supports renderer-local burned captions and optional quiet background music through the existing adapter hooks.
+- Requires FFmpeg only and never invokes the external whiteboard engine.
+
 ## v0.1 annotation policy
 
 Each scene is represented as one semantic full-canvas region. This is fully automatic and robust enough to validate the end-to-end workflow.
@@ -81,5 +92,5 @@ A new adapter should:
 - accept the same generic scene inputs;
 - write only inside the project/scene workspace or its own managed dependency directory;
 - throw actionable errors when prerequisites are missing;
-- never store renderer-specific structures in canonical project state;
+- keep any additive renderer-specific options minimal and namespaced;
 - let the common pipeline own voice mux, output normalization, caching, and final concat.

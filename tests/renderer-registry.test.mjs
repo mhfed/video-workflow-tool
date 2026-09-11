@@ -11,10 +11,11 @@ test('renderer resolution prefers the canonical scene override and preserves leg
 });
 
 test('renderer registry rejects unsupported renderer names',()=>{
-  assert.deepEqual(rendererNames,['simple','whiteboard','cinematic-broll']);
+  assert.deepEqual(rendererNames,['simple','whiteboard','cinematic-broll','draw-reveal']);
   assert.equal(isRendererName('simple'),true);
   assert.equal(isRendererName('whiteboard'),true);
   assert.equal(isRendererName('cinematic-broll'),true);
+  assert.equal(isRendererName('draw-reveal'),true);
   assert.equal(isRendererName('banana'),false);
   assert.throws(()=>getRenderer('banana'),/Unsupported VIDEO_RENDERER=banana/);
 });

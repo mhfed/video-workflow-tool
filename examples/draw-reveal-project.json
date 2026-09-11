@@ -1,0 +1,36 @@
+{
+  "version": 6,
+  "id": "draw-reveal-example",
+  "title": "Local color illustration reveal",
+  "settings": {
+    "renderer": "draw-reveal",
+    "format": "short",
+    "aspectRatio": "9:16",
+    "width": 1080,
+    "height": 1920,
+    "fps": 30,
+    "backgroundMusic": "assets/quiet-bed.mp3",
+    "drawReveal": {
+      "subtitles": true,
+      "subtitleMaxWords": 14,
+      "subtitlePosition": 0.72,
+      "musicVolumeDb": -20,
+      "pathRows": 9,
+      "revealPortion": 0.88
+    }
+  },
+  "scenes": [
+    {
+      "id": "scene-001",
+      "index": 0,
+      "renderer": "draw-reveal",
+      "text": "A full-color illustration can appear as if the hand is creating it from nothing.",
+      "artwork": "assets/colored-illustration.png",
+      "startMs": 0,
+      "endMs": 5000,
+      "durationMs": 5000,
+      "cache": {},
+      "artifacts": {}
+    }
+  ]
+}

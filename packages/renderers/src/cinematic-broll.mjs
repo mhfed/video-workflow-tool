@@ -38,7 +38,7 @@ function finiteNumber(value,fallback,{min=-Infinity,max=Infinity}={}) {
   return Number.isFinite(number)&&number>=min&&number<=max?number:fallback;
 }
 
-function captionFor(text,maxWords=14,maxCharsPerLine=22) {
+export function captionFor(text,maxWords=14,maxCharsPerLine=22) {
   const words=String(text||'').replace(/\s+/g,' ').trim().split(' ').filter(Boolean);
   const limit=Math.max(4,Math.round(finiteNumber(maxWords,14,{min:4,max:24})));
   const lineLimit=Math.max(10,Math.round(maxCharsPerLine));
@@ -60,11 +60,11 @@ function captionFor(text,maxWords=14,maxCharsPerLine=22) {
   return `${selected.slice(0,split).join(' ')}\n${selected.slice(split).join(' ')}`;
 }
 
-function escapeFilterValue(value) {
+export function escapeFilterValue(value) {
   return String(value).replaceAll('\\','\\\\').replaceAll(':','\\:').replaceAll("'","\\'").replaceAll(',','\\,');
 }
 
-async function supportsFilter(ffmpegBin,name) {
+export async function supportsFilter(ffmpegBin,name) {
   const key=`${ffmpegBin}:${name}`;
   if(!filterSupport.has(key))filterSupport.set(key,(async()=>{
     try {
@@ -75,8 +75,8 @@ async function supportsFilter(ffmpegBin,name) {
   return filterSupport.get(key);
 }
 
-async function renderCaptionPng({captionFile,text,width,height,fontSize,position,signal}) {
-  if(process.platform!=='darwin')throw new Error('Cinematic B-roll subtitles require an FFmpeg build with the drawtext filter. Install FFmpeg with libfreetype support.');
+export async function renderCaptionPng({captionFile,text,width,height,fontSize,position,signal}) {
+  if(process.platform!=='darwin')throw new Error('Burned subtitles require an FFmpeg build with the drawtext filter. Install FFmpeg with libfreetype support.');
   const moduleCache=path.join(os.tmpdir(),'vwt-swift-module-cache');
   ensureDir(moduleCache);
   await run('/usr/bin/swift',[captionScript,captionFile,String(width),String(height),text,String(fontSize),String(position)],{capture:true,signal,env:{SWIFT_MODULECACHE_PATH:moduleCache,CLANG_MODULE_CACHE_PATH:moduleCache}});

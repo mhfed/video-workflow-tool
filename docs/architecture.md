@@ -103,7 +103,9 @@ Provider-specific fields come from ENV/config and do not become the canonical pr
 `packages/renderers` owns media engines:
 
 - `simple`: FFmpeg-only scene renderer used for smoke tests and fallback;
-- `whiteboard`: adapter around `geeklee/srt-whiteboard-animation`.
+- `whiteboard`: adapter around `geeklee/srt-whiteboard-animation`;
+- `cinematic-broll`: local B-roll composition with captions and optional music;
+- `draw-reveal`: local full-color artwork reveal mask with a path-following hand.
 
 The whiteboard adapter:
 

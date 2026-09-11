@@ -10,7 +10,7 @@ Topic / Script / SRT
   -> scene plan
   -> per-scene voice
   -> per-scene illustration
-  -> simple, whiteboard, or cinematic-broll renderer
+  -> simple, whiteboard, cinematic-broll, or draw-reveal renderer
   -> synchronized scene clips
   -> final.mp4
 ```
@@ -126,6 +126,37 @@ The scene editor includes server-side Pexels and Pixabay video search. Add eithe
 
 Automatic copyright detection, TikTok/YouTube downloading, AI video generation, karaoke highlighting, and a transition engine remain deliberately out of scope. Search-provider responses stay behind adapters; the renderer does not know whether a local clip came from Pexels, Pixabay, or a future source.
 
+## Draw Reveal renderer
+
+`draw-reveal` animates an existing full-color illustration from hidden to fully visible while a hand follows the reveal path. Unlike `whiteboard`, it does not invoke the external sketch engine or redraw the source as black line art. It runs locally with FFmpeg and accepts `.png`, `.jpg`, or `.jpeg` artwork inside the project directory.
+
+```json
+{
+  "settings": {
+    "renderer": "draw-reveal",
+    "format": "short",
+    "width": 1080,
+    "height": 1920,
+    "fps": 30,
+    "backgroundMusic": "assets/quiet-bed.mp3",
+    "drawReveal": { "subtitles": true, "musicVolumeDb": -20 }
+  },
+  "scenes": [{
+    "id": "scene-001",
+    "renderer": "draw-reveal",
+    "text": "The finished color illustration is revealed along the moving hand.",
+    "artwork": "assets/colored-illustration.png",
+    "drawReveal": {
+      "path": [[0.08, 0.12], [0.92, 0.12], [0.92, 0.34], [0.08, 0.34]]
+    }
+  }]
+}
+```
+
+When `drawReveal.path` is absent, the renderer fits the source artwork to the output canvas and generates a deterministic serpentine path inside those displayed artwork bounds. Coordinates are normalized from 0 to 1. Optional settings include `pathRows`, `handAsset`, `handScale`, `handAnchorX`, `handAnchorY`, `revealPortion`, `backgroundColor`, `subtitles`, `subtitleFontSize`, `subtitleMaxWords`, `subtitlePosition`, and `musicVolumeDb`. Narration remains the primary audio, and music is looped quietly underneath when `backgroundMusic` is present. See [`examples/draw-reveal-project.json`](examples/draw-reveal-project.json).
+
+Current path generation is geometric rather than semantic: it does not understand object parts or reproduce an illustrator's true stroke order. There is no AI artwork generation, OCR, remote provider, path-authoring UI, or style marketplace in this phase.
+
 Operate/review:
 
 ```bash
@@ -140,7 +171,7 @@ npm run cli -- run --project <project-id> --force
 ```text
 workspace/<project-id>/
 ├── project.json
-├── assets/               # optional local B-roll and music inputs
+├── assets/               # optional local artwork, B-roll, and music inputs
 ├── topic.txt             # topic projects
 ├── script.md | source.srt
 ├── scenes/

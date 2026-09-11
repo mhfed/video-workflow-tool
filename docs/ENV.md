@@ -63,7 +63,7 @@ SCENE_MAX_SEC=18
 - `MOCK_MODE=1`: no paid AI calls; useful for CI/smoke tests. Mock artifacts have distinct cache keys, so they cannot be silently reused in a later real run.
 - `UI_LANGUAGE=vi|en`: web interface language; defaults to Vietnamese.
 - `CONTENT_LANGUAGE=vi|en`: language for new projects and topic-to-script generation; each project keeps its own value in `project.json`.
-- `VIDEO_RENDERER=simple|whiteboard|cinematic-broll`: Cinematic B-roll renders project-local video selected manually or downloaded through a provider.
+- `VIDEO_RENDERER=simple|whiteboard|cinematic-broll|draw-reveal`: Draw Reveal progressively exposes a project-local color illustration under a moving hand.
 - `TEXT_PROVIDER`, `IMAGE_PROVIDER`: `openai` or `mock`.
 - `VOICE_PROVIDER`: `openai`, `vivibe`, or `mock`. Voice selection is independent from the text/image source.
 - `WHITEBOARD_AUTO_INSTALL=1`: clones the upstream whiteboard engine when absent and prepares its isolated Python environment when needed.

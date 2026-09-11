@@ -145,3 +145,15 @@ test('cinematic B-roll uses local visual media and the existing voice, clip, and
   assert.equal(rerendered.takes.video.length,takeCounts.video+1);
   assert.equal(rerendered.takes.clip.length,takeCounts.clip+1);
 });
+
+test('draw-reveal uses local artwork and the existing voice, clip, and final lifecycle',async()=>{
+  process.env.MOCK_MODE='0';
+  const cfg=config(),project=legacyProject('draw-reveal',cfg);
+  project.settings.format='short';project.settings.aspectRatio='9:16';project.settings.width=180;project.settings.height=320;project.settings.drawReveal={subtitles:false,pathRows:5};
+  const scene=project.scenes[0];scene.artwork='assets/artwork.png';
+  const assets=path.join(projectDir(cfg,project.id),'assets');fs.mkdirSync(assets,{recursive:true});
+  await run(cfg.ffmpegBin,['-loglevel','error','-y','-f','lavfi','-i','color=c=white:s=180x320','-vf','drawbox=x=20:y=40:w=140:h=180:color=0xE0653E:t=fill','-frames:v','1',path.join(assets,'artwork.png')],{capture:true});
+  saveProject(project,cfg);const result=await runPipeline(project.id),rendered=result.project.scenes[0];
+  assert.ok(rendered.cache.image);assert.equal(rendered.artifacts.visual,undefined);assert.ok(fs.existsSync(path.join(projectDir(cfg,project.id),rendered.artifacts.voice)));
+  const clip=path.join(projectDir(cfg,project.id),rendered.artifacts.clip);assert.ok(fs.existsSync(clip));assert.deepEqual(await (await import('../packages/core/src/media.mjs')).probeVideoSize(clip,cfg),{width:180,height:320});assert.ok(fs.existsSync(result.final));
+});

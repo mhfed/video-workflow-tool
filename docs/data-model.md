@@ -76,6 +76,8 @@ Representative shape:
 `renderer` is optional at scene level. When absent, legacy projects continue to
 use `settings.renderer`, followed by the runtime `VIDEO_RENDERER` default.
 
+Renderer-specific local inputs remain additive. A `draw-reveal` scene uses a project-relative `artwork` path and may override namespaced options under `drawReveal`, including a normalized `path`. Existing projects require no migration.
+
 `visualIntent` is the owner-facing description of what the scene should show.
 `visualPrompt` is compiled from narration, visual intent, format, and the shared
 art direction. The normal UI edits `visualIntent` and keeps the compiled prompt

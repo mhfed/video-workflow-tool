@@ -21,6 +21,11 @@ test('accepts the cinematic B-roll renderer',()=>{
   assert.equal(result.ok,true);
 });
 
+test('accepts the draw-reveal renderer',()=>{
+  const result=validateConfig({...base,renderer:'draw-reveal'});
+  assert.equal(result.ok,true);
+});
+
 test('requires OpenAI key for real OpenAI providers',()=>{
   const result=validateConfig({...base,openaiApiKey:''});
   assert.equal(result.ok,false);

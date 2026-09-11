@@ -55,6 +55,8 @@ const rendererSummary=(name)=>name==='whiteboard'
   ? {title:'Draw-on animation',body:'Uses the external whiteboard engine and generated scene illustration.'}
   :name==='cinematic-broll'
     ? {title:'Local cinematic footage',body:'Uses project-local B-roll with burned subtitles and optional background music.'}
+    :name==='draw-reveal'
+      ? {title:'Color illustration reveal',body:'A moving hand progressively reveals project-local full-color artwork.'}
     : {title:'Fast image motion',body:'Uses FFmpeg for a subtle zoom and remains the offline fallback.'};
 
 function BrandMark(){
