@@ -69,7 +69,7 @@ The upstream annotation format, masks, hand-path behavior, and OpenCV implementa
 Implementation: `packages/renderers/src/draw-reveal.mjs`.
 
 - Consumes project-local full-color raster artwork rather than converting it to line art.
-- Generates a normalized serpentine path or accepts an explicit normalized path.
+- Generates a deterministic edge/contour-aware path with a contain-fitted serpentine fallback, or accepts an explicit normalized path.
 - Encodes nearest-path reveal order into a temporary grayscale schedule mask.
 - Thresholds that mask over narration duration and moves the existing hand asset along the same path.
 - Supports renderer-local burned captions and optional quiet background music through the existing adapter hooks.

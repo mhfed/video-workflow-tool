@@ -27,6 +27,7 @@ import { rendererNames, resolveRendererName } from '../../../packages/renderers/
 import { rendererInputError } from './renderer-input.mjs';
 import { mediaTypeFor, serveMedia } from './media.mjs';
 import { assignDownloadedBroll, downloadBrollAsset } from './broll-media.mjs';
+import { assignUploadedArtwork, resolveArtworkFile, storeArtworkUpload } from './artwork-media.mjs';
 
 let cfg=config();
 const here=path.dirname(fileURLToPath(import.meta.url));
@@ -173,6 +174,10 @@ const server=http.createServer(async (req,res)=>{
       if(parts[2]==='scenes'&&parts[3]&&parts[4]) {
         const s=p.scenes.find(x=>x.id===decodeURIComponent(parts[3])); if(!s){res.writeHead(404).end('Scene not found');return;}
         const kind=parts[4]; const artifactKey=kind==='visual'?'visual':kind;
+        if(kind==='artwork'){
+          const artwork=resolveArtworkFile(s,projectDir(cfg,p.id));if(!artwork){res.writeHead(404).end('No artwork asset');return;}
+          return serveMedia(req,res,artwork.file,artwork.type);
+        }
         const rel=s.artifacts?.[artifactKey]; if(!rel){res.writeHead(404).end(`No ${kind} artifact`);return;}
         return serveMedia(req,res,path.join(projectDir(cfg,p.id),rel),mediaTypeFor(kind));
       }
@@ -227,6 +232,14 @@ const server=http.createServer(async (req,res)=>{
         recordHistory(p,`Select ${downloaded.source.provider} B-roll for ${s.id}`);
         assignDownloadedBroll(p,s,downloaded,{brollStartMs:body.brollStartMs,currentRenderer:previousRenderer});saveProject(p,cfg);
         return json(res,200,{project:p,asset:{path:downloaded.path,reused:downloaded.reused,source:s.brollSource}});
+      }
+      if(req.method==='POST'&&parts[3]==='scenes'&&parts[4]&&parts[5]==='artwork'){
+        if(!isLoopback(req.socket.remoteAddress))return json(res,403,{error:'Artwork uploads are only available from this machine.'});
+        if(projectBusy(id))return json(res,409,{error:'Wait for this project job to finish before changing artwork.'});
+        const p=loadProject(id,cfg),s=p.scenes.find((scene)=>scene.id===decodeURIComponent(parts[4]));if(!s)return json(res,404,{error:'scene not found'});
+        let upload;try{upload=await storeArtworkUpload(req,projectDir(cfg,p.id),{filename:req.headers['x-file-name'],contentType:req.headers['content-type']});}catch(error){return json(res,400,{error:error.message});}
+        const previousRenderer=resolveRendererName(s,p,cfg);recordHistory(p,`Upload artwork for ${s.id}`);assignUploadedArtwork(p,s,upload,{currentRenderer:previousRenderer});saveProject(p,cfg);
+        return json(res,200,{project:p,asset:{...upload}});
       }
       if(req.method==='PATCH'&&parts.length===3) {
         if(projectBusy(id))return json(res,409,{error:'Wait for this project job to finish before changing it.'});

@@ -75,6 +75,51 @@ export function drawRevealPath({path:explicitPath,pathRows=9,artworkWidth=null,a
   return normalizedPath(explicitPath,pathRows,bounds);
 }
 
+function readPgm(file) {
+  const buffer=fs.readFileSync(file);let offset=0;
+  const skip=()=>{while(offset<buffer.length){if(buffer[offset]===35){while(offset<buffer.length&&buffer[offset]!==10)offset++;continue;}if(buffer[offset]<=32){offset++;continue;}break;}};
+  const token=()=>{skip();const start=offset;while(offset<buffer.length&&buffer[offset]>32&&buffer[offset]!==35)offset++;return buffer.subarray(start,offset).toString('ascii');};
+  if(token()!=='P5')throw new Error('Draw Reveal edge analysis returned an unsupported image format.');
+  const width=Number(token()),height=Number(token()),max=Number(token());
+  if(buffer[offset]===13&&buffer[offset+1]===10)offset+=2;else if(buffer[offset]<=32)offset++;
+  if(!Number.isInteger(width)||!Number.isInteger(height)||width<1||height<1||max!==255||buffer.length-offset<width*height)throw new Error('Draw Reveal edge analysis returned an invalid PGM image.');
+  return {width,height,pixels:buffer.subarray(offset,offset+width*height)};
+}
+
+function contourPathFromPgm(file,pathRows=9) {
+  const {width,height,pixels}=readPgm(file),columns=Math.max(6,Math.min(12,Math.round(width/20))),rows=Math.max(6,Math.min(24,Math.round(pathRows)*2)),cells=[];
+  for(let row=0;row<rows;row++){
+    const line=[];
+    for(let column=0;column<columns;column++)line.push({count:0,x:0,y:0});
+    cells.push(line);
+  }
+  for(let y=0;y<height;y++)for(let x=0;x<width;x++){
+    if(pixels[y*width+x]<24)continue;
+    const row=Math.min(rows-1,Math.floor(y/height*rows)),column=Math.min(columns-1,Math.floor(x/width*columns)),cell=cells[row][column];
+    cell.count++;cell.x+=x;cell.y+=y;
+  }
+  const points=[];
+  for(let row=0;row<rows;row++){
+    const columnsInOrder=Array.from({length:columns},(_,index)=>row%2===0?index:columns-1-index);
+    for(const column of columnsInOrder){const cell=cells[row][column];if(cell.count)points.push([cell.x/cell.count/(width-1),cell.y/cell.count/(height-1)]);}
+  }
+  const reduced=points.length<=60?points:Array.from({length:60},(_,index)=>points[Math.round(index*(points.length-1)/59)]);
+  return reduced.filter((point,index)=>!index||Math.hypot(point[0]-reduced[index-1][0],point[1]-reduced[index-1][1])>.01);
+}
+
+export async function generateDrawRevealPath({artwork,outputFile,pathRows=9,cfg,signal=null}) {
+  const safeRows=Math.round(finiteNumber(pathRows,9,{min:3,max:24})),longest=Math.max(cfg.width,cfg.height),scale=Math.min(1,240/longest),width=Math.max(32,Math.round(cfg.width*scale)),height=Math.max(32,Math.round(cfg.height*scale));
+  const edgeFile=`${outputFile}.edges.pgm`;
+  try {
+    const filter=`color=c=white:s=${width}x${height}[background];[0:v]scale=${width}:${height}:force_original_aspect_ratio=decrease,format=rgba[artwork];[background][artwork]overlay=(W-w)/2:(H-h)/2:shortest=1,format=gray,edgedetect=low=0.05:high=0.15[edges]`;
+    await run(cfg.ffmpegBin,['-y','-i',artwork,'-filter_complex',filter,'-map','[edges]','-frames:v','1','-update','1',edgeFile],{capture:true,signal});
+    const path=contourPathFromPgm(edgeFile,safeRows);
+    if(path.length>=2)return {path,mode:'contour-v1'};
+  } finally { fs.rmSync(edgeFile,{force:true}); }
+  const size=await probeVideoSize(artwork,cfg,{signal});
+  return {path:drawRevealPath({pathRows:safeRows,artworkWidth:size.width,artworkHeight:size.height,canvasWidth:cfg.width,canvasHeight:cfg.height}),mode:'serpentine-fallback'};
+}
+
 export function writeRevealSchedule(file,{width,height,path:points}) {
   const longest=Math.max(width,height),scale=Math.min(1,360/longest);
   const maskWidth=Math.max(32,Math.round(width*scale)),maskHeight=Math.max(32,Math.round(height*scale));
@@ -124,15 +169,12 @@ export async function prepareDrawRevealVisual({scene,projectRoot}) {
   return {file,cacheKey:sha256({path:scene.artwork,content:await fileIdentity(file)}),provider:'local-artwork',label:path.basename(scene.artwork)};
 }
 
-export async function drawRevealRenderInputs({scene,project,projectRoot,cfg={ffprobeBin:'ffprobe',width:1920,height:1080},signal=null}) {
+export async function drawRevealRenderInputs({scene,project,projectRoot}) {
   const settings=settingsFor(scene,project),hand=handFileFor(scene,project,projectRoot);
-  let pathOptions=settings;
-  if(settings.path===undefined){
-    const artwork=assertRelativeAsset(scene.artwork,'artwork',scene.id,projectRoot,IMAGE_EXTENSIONS),size=await probeVideoSize(artwork,cfg,{signal});
-    pathOptions={...settings,artworkWidth:size.width,artworkHeight:size.height,canvasWidth:cfg.width,canvasHeight:cfg.height};
-  }
   return {
-    path:drawRevealPath(pathOptions),
+    path:settings.path===undefined?null:drawRevealPath(settings),
+    pathRows:Math.round(finiteNumber(settings.pathRows,9,{min:3,max:24})),
+    pathMode:settings.path===undefined?'contour-v1':'explicit',
     handAsset:settings.handAsset||null,
     handContent:settings.handAsset?await fileIdentity(hand):null,
     handScale:finiteNumber(settings.handScale,.3,{min:.12,max:.6}),
@@ -157,13 +199,14 @@ export async function drawRevealClipInputs({scene,project,projectRoot}) {
 export async function renderDrawRevealScene({scene,project,projectRoot,imageFile,outputFile,durationSec,cfg,signal}) {
   const artwork=imageFile||assertRelativeAsset(scene.artwork,'artwork',scene.id,projectRoot,IMAGE_EXTENSIONS);
   const hand=handFileFor(scene,project,projectRoot),options=await drawRevealRenderInputs({scene,project,projectRoot,cfg,signal});
+  const drawPath=options.path||(await generateDrawRevealPath({artwork,outputFile,pathRows:options.pathRows,cfg,signal})).path;
   const duration=Math.max(.04,finiteNumber(durationSec,0,{min:.04})),revealDuration=duration*options.revealPortion;
   const maskFile=`${outputFile}.reveal.pgm`,textFile=`${outputFile}.caption.txt`,captionFile=`${outputFile}.caption.png`;
   const fontSize=Math.max(18,Math.round(finiteNumber(options.subtitleFontSize,cfg.height*.047,{min:12,max:240})));
   const caption=captionFor(scene.text,options.subtitleMaxWords,Math.floor(cfg.width*.84/(fontSize*.58)));
   const handWidth=Math.max(24,Math.round(cfg.width*options.handScale));
-  const x=coordinateExpression(options.path,'x',cfg.width,cfg.height,revealDuration),y=coordinateExpression(options.path,'y',cfg.width,cfg.height,revealDuration);
-  ensureDir(path.dirname(outputFile));writeRevealSchedule(maskFile,{width:cfg.width,height:cfg.height,path:options.path});
+  const x=coordinateExpression(drawPath,'x',cfg.width,cfg.height,revealDuration),y=coordinateExpression(drawPath,'y',cfg.width,cfg.height,revealDuration);
+  ensureDir(path.dirname(outputFile));writeRevealSchedule(maskFile,{width:cfg.width,height:cfg.height,path:drawPath});
   const args=['-y','-loop','1','-framerate',String(cfg.fps),'-i',artwork,'-loop','1','-framerate',String(cfg.fps),'-i',maskFile,'-loop','1','-framerate',String(cfg.fps),'-i',hand];
   let filter=`color=c=${options.backgroundColor}:s=${cfg.width}x${cfg.height}:r=${cfg.fps}:d=${duration}[paper];color=c=${options.backgroundColor}:s=${cfg.width}x${cfg.height}:r=${cfg.fps}:d=${duration}[blank];[0:v]scale=${cfg.width}:${cfg.height}:force_original_aspect_ratio=decrease,format=rgba[art];[paper][art]overlay=(W-w)/2:(H-h)/2:shortest=1,format=rgb24[full];[1:v]scale=${cfg.width}:${cfg.height}:flags=bilinear,format=gray,geq=lum='if(lte(lum(X\\,Y)\\,255*min(T/${revealDuration.toFixed(6)}\\,1))\\,255\\,0)',setrange=full[mask];[full][mask]alphamerge[masked];[blank][masked]overlay=0:0:shortest=1[revealed];[2:v]scale=${handWidth}:-1,format=rgba[hand];[revealed][hand]overlay=x='${x}-overlay_w*${options.handAnchorX}':y='${y}-overlay_h*${options.handAnchorY}':enable='between(t,0,${revealDuration.toFixed(6)})'[withhand]`;
   try {

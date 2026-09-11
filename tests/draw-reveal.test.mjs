@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { probeDuration, probeVideoSize } from '../packages/core/src/media.mjs';
 import { run } from '../packages/core/src/process.mjs';
-import { drawRevealClipInputs, drawRevealPath, drawRevealRenderInputs, mixDrawRevealAudio, prepareDrawRevealVisual, renderDrawRevealScene } from '../packages/renderers/src/draw-reveal.mjs';
+import { drawRevealClipInputs, drawRevealPath, drawRevealRenderInputs, generateDrawRevealPath, mixDrawRevealAudio, prepareDrawRevealVisual, renderDrawRevealScene } from '../packages/renderers/src/draw-reveal.mjs';
 
 const cfg={ffmpegBin:'ffmpeg',ffprobeBin:'ffprobe',width:180,height:320,fps:10};
 
@@ -32,8 +32,16 @@ test('draw-reveal cache inputs track artwork, path, hand, subtitles, and music',
   const first=await prepareDrawRevealVisual({scene,projectRoot});fs.writeFileSync(path.join(assets,'art.png'),'second');const second=await prepareDrawRevealVisual({scene,projectRoot});
   assert.notEqual(first.cacheKey,second.cacheKey);
   const inputs=await drawRevealRenderInputs({scene,project,projectRoot});
-  assert.deepEqual(inputs.path,[[.1,.1],[.9,.9]]);assert.equal(inputs.handAsset,'assets/hand.png');assert.equal(inputs.handContent.length,64);assert.equal(inputs.subtitleMaxWords,9);
+  assert.deepEqual(inputs.path,[[.1,.1],[.9,.9]]);assert.equal(inputs.pathMode,'explicit');assert.equal(inputs.pathRows,9);assert.equal(inputs.handAsset,'assets/hand.png');assert.equal(inputs.handContent.length,64);assert.equal(inputs.subtitleMaxWords,9);
   const clipInputs=await drawRevealClipInputs({scene,project,projectRoot});assert.equal(clipInputs.musicVolumeDb,-23);assert.equal(clipInputs.content.length,64);
+});
+
+test('draw-reveal falls back deterministically when artwork has no detectable contours',async()=>{
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'vwt-draw-fallback-')),artwork=path.join(root,'blank.png'),output=path.join(root,'scene.mp4');
+  await run('ffmpeg',['-loglevel','error','-y','-f','lavfi','-i','color=c=white:s=120x80','-frames:v','1',artwork],{capture:true});
+  const generated=await generateDrawRevealPath({artwork,outputFile:output,pathRows:5,cfg});
+  assert.equal(generated.mode,'serpentine-fallback');assert.equal(generated.path.length,5);assert.ok(generated.path.every(([x,y])=>x>=0&&x<=1&&y>=0&&y<=1));
+  assert.equal(fs.existsSync(`${output}.edges.pgm`),false);
 });
 
 test('draw-reveal progressively reveals color artwork, follows duration, and mixes narration with quiet music',async()=>{
@@ -44,6 +52,7 @@ test('draw-reveal progressively reveals color artwork, follows duration, and mix
   await run('ffmpeg',['-loglevel','error','-y','-f','lavfi','-i','sine=frequency=180:duration=0.25','-c:a','pcm_s16le',music],{capture:true});
   const scene={id:'scene-001',text:'The colored illustration appears under the moving hand.',artwork:'local assets/colored artwork.png',backgroundMusic:'local assets/music.wav',drawReveal:{subtitles:true,musicVolumeDb:-20}};
   const project={settings:{drawReveal:{revealPortion:.85}}},prepared=await prepareDrawRevealVisual({scene,projectRoot});
+  const generated=await generateDrawRevealPath({artwork,outputFile:video,pathRows:9,cfg});assert.equal(generated.mode,'contour-v1');assert.ok(generated.path.length>8);
   await renderDrawRevealScene({scene,project,projectRoot,imageFile:prepared.file,outputFile:video,durationSec:1.2,cfg});
   await mixDrawRevealAudio({scene,project,projectRoot,videoFile:video,voiceFile:voice,outputFile:clip,durationSec:1.2,cfg});
   assert.deepEqual(await probeVideoSize(clip,cfg),{width:180,height:320});const duration=await probeDuration(clip,cfg);assert.ok(duration>=1.1&&duration<=1.35,`unexpected duration ${duration}`);

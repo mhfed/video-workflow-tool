@@ -153,9 +153,11 @@ Automatic copyright detection, TikTok/YouTube downloading, AI video generation, 
 }
 ```
 
-When `drawReveal.path` is absent, the renderer fits the source artwork to the output canvas and generates a deterministic serpentine path inside those displayed artwork bounds. Coordinates are normalized from 0 to 1. Optional settings include `pathRows`, `handAsset`, `handScale`, `handAnchorX`, `handAnchorY`, `revealPortion`, `backgroundColor`, `subtitles`, `subtitleFontSize`, `subtitleMaxWords`, `subtitlePosition`, and `musicVolumeDb`. Narration remains the primary audio, and music is looped quietly underneath when `backgroundMusic` is present. See [`examples/draw-reveal-project.json`](examples/draw-reveal-project.json).
+In the scene editor, choose Draw Reveal and use **Choose local artwork** to upload a PNG or JPEG up to 25 MB. The server streams it into `assets/artwork/`, names it by content hash, and stores only its project-relative path and generic source metadata.
 
-Current path generation is geometric rather than semantic: it does not understand object parts or reproduce an illustrator's true stroke order. There is no AI artwork generation, OCR, remote provider, path-authoring UI, or style marketplace in this phase.
+When `drawReveal.path` is absent, FFmpeg creates a small edge map and the renderer builds a deterministic path through populated contour cells. If the image contains too few detectable edges, it falls back to a serpentine path inside the contain-fitted artwork bounds. Coordinates for an explicit path are normalized from 0 to 1. Optional settings include `pathRows`, `handAsset`, `handScale`, `handAnchorX`, `handAnchorY`, `revealPortion`, `backgroundColor`, `subtitles`, `subtitleFontSize`, `subtitleMaxWords`, `subtitlePosition`, and `musicVolumeDb`. Narration remains the primary audio, and music is looped quietly underneath when `backgroundMusic` is present. See [`examples/draw-reveal-project.json`](examples/draw-reveal-project.json).
+
+Current contour extraction is visual rather than semantic: it follows detected edges but does not understand object parts or reproduce an illustrator's true stroke order. There is no AI artwork generation, OCR, remote provider, path-authoring UI, or style marketplace in this phase.
 
 Operate/review:
 
