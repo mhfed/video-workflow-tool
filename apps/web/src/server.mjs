@@ -19,12 +19,14 @@ import { generateScriptOpenAI, planNarrativeBeatsOpenAI } from '../../../package
 import { generateScriptMock } from '../../../packages/providers/src/mock.mjs';
 import { listVivibeVoices } from '../../../packages/providers/src/vivibe.mjs';
 import { planSceneDirection } from '../../../packages/providers/src/director.mjs';
+import { brollProviderNames, searchBroll } from '../../../packages/providers/src/broll.mjs';
 import { runPipeline } from '../../worker/src/pipeline.mjs';
 import { ProjectJobQueue } from '../../worker/src/job-queue.mjs';
 import { runQualityChecks, runRepairActions } from '../../worker/src/quality.mjs';
 import { rendererNames, resolveRendererName } from '../../../packages/renderers/src/registry.mjs';
 import { rendererInputError } from './renderer-input.mjs';
 import { mediaTypeFor, serveMedia } from './media.mjs';
+import { assignDownloadedBroll, downloadBrollAsset } from './broll-media.mjs';
 
 let cfg=config();
 const here=path.dirname(fileURLToPath(import.meta.url));
@@ -36,8 +38,8 @@ const json=(res,status,data)=>{res.writeHead(status,{'content-type':'application
 const readBody=(req)=>new Promise((resolve,reject)=>{let b='';req.on('data',d=>b+=d);req.on('end',()=>{try{resolve(b?JSON.parse(b):{});}catch(e){reject(e);}});req.on('error',reject);});
 const serve=(res,file,type)=>{const stream=fs.createReadStream(file);stream.on('error',()=>{if(!res.headersSent)res.writeHead(404);res.end();});res.writeHead(200,{'content-type':type});stream.pipe(res);};
 const mimeFor=(file)=>({'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.svg':'image/svg+xml','.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.webp':'image/webp','.ico':'image/x-icon'}[path.extname(file).toLowerCase()]||'application/octet-stream');
-const safeConfig=()=>({mockMode:cfg.mockMode,renderer:cfg.renderer,rendererNames,uiLanguage:cfg.uiLanguage,contentLanguage:cfg.contentLanguage,textProvider:cfg.textProvider,imageProvider:cfg.imageProvider,voiceProvider:cfg.voiceProvider,textModel:cfg.openaiTextModel,imageModel:cfg.openaiImageModel,imageSize:cfg.openaiImageSize,ttsModel:cfg.openaiTtsModel,ttsVoice:cfg.openaiTtsVoice,vivibeVoiceId:cfg.vivibeVoiceId,whiteboardAutoInstall:cfg.whiteboardAutoInstall,hasOpenAIKey:!!cfg.openaiApiKey,hasVivibeKey:!!cfg.vivibeApiKey});
-const safeSettings=()=>({hasOpenAIKey:!!cfg.openaiApiKey,hasVivibeKey:!!cfg.vivibeApiKey,rendererNames,uiLanguage:cfg.uiLanguage,contentLanguage:cfg.contentLanguage,enableOpenAI:!cfg.mockMode&&[cfg.textProvider,cfg.imageProvider].every(value=>value==='openai'),voiceProvider:cfg.voiceProvider,renderer:cfg.renderer,baseUrl:cfg.openaiBaseUrl,textModel:cfg.openaiTextModel,imageModel:cfg.openaiImageModel,imageSize:cfg.openaiImageSize,imageQuality:cfg.openaiImageQuality,ttsModel:cfg.openaiTtsModel,ttsVoice:cfg.openaiTtsVoice,ttsInstructions:cfg.openaiTtsInstructions,vivibeBaseUrl:cfg.vivibeBaseUrl,vivibeVoiceId:cfg.vivibeVoiceId,vivibeSpeed:cfg.vivibeSpeed});
+const safeConfig=()=>({mockMode:cfg.mockMode,renderer:cfg.renderer,rendererNames,brollProviderNames,uiLanguage:cfg.uiLanguage,contentLanguage:cfg.contentLanguage,textProvider:cfg.textProvider,imageProvider:cfg.imageProvider,voiceProvider:cfg.voiceProvider,textModel:cfg.openaiTextModel,imageModel:cfg.openaiImageModel,imageSize:cfg.openaiImageSize,ttsModel:cfg.openaiTtsModel,ttsVoice:cfg.openaiTtsVoice,vivibeVoiceId:cfg.vivibeVoiceId,whiteboardAutoInstall:cfg.whiteboardAutoInstall,hasOpenAIKey:!!cfg.openaiApiKey,hasVivibeKey:!!cfg.vivibeApiKey,hasPexelsKey:!!cfg.pexelsApiKey,hasPixabayKey:!!cfg.pixabayApiKey});
+const safeSettings=()=>({hasOpenAIKey:!!cfg.openaiApiKey,hasVivibeKey:!!cfg.vivibeApiKey,hasPexelsKey:!!cfg.pexelsApiKey,hasPixabayKey:!!cfg.pixabayApiKey,rendererNames,brollProviderNames,uiLanguage:cfg.uiLanguage,contentLanguage:cfg.contentLanguage,enableOpenAI:!cfg.mockMode&&[cfg.textProvider,cfg.imageProvider].every(value=>value==='openai'),voiceProvider:cfg.voiceProvider,renderer:cfg.renderer,baseUrl:cfg.openaiBaseUrl,textModel:cfg.openaiTextModel,imageModel:cfg.openaiImageModel,imageSize:cfg.openaiImageSize,imageQuality:cfg.openaiImageQuality,ttsModel:cfg.openaiTtsModel,ttsVoice:cfg.openaiTtsVoice,ttsInstructions:cfg.openaiTtsInstructions,vivibeBaseUrl:cfg.vivibeBaseUrl,vivibeVoiceId:cfg.vivibeVoiceId,vivibeSpeed:cfg.vivibeSpeed});
 const isLoopback=(address='')=>address==='127.0.0.1'||address==='::1'||address.startsWith('::ffff:127.');
 const settingString=(body,key,{fallback='',max=500}={})=>typeof body[key]==='string'?body[key].replace(/[\r\n]+/g,' ').trim().slice(0,max):fallback;
 const projectBusy=(id)=>legacyRunning.has(id)||jobQueue.activeProjectIds().includes(id);
@@ -100,6 +102,12 @@ function settingsUpdates(body) {
   const vivibeSpeed=Number(body.vivibeSpeed??cfg.vivibeSpeed);
   if(!Number.isFinite(vivibeSpeed)||vivibeSpeed<0.5||vivibeSpeed>2)throw new Error('Vivibe speed must be between 0.5 and 2.0.');
   updates.VIVIBE_SPEED=String(vivibeSpeed);
+  const pexelsApiKey=settingString(body,'pexelsApiKey',{max:500});
+  if(pexelsApiKey)updates.PEXELS_API_KEY=pexelsApiKey;
+  else if(body.clearPexelsApiKey===true)updates.PEXELS_API_KEY='';
+  const pixabayApiKey=settingString(body,'pixabayApiKey',{max:500});
+  if(pixabayApiKey)updates.PIXABAY_API_KEY=pixabayApiKey;
+  else if(body.clearPixabayApiKey===true)updates.PIXABAY_API_KEY='';
 
   const enableOpenAI=typeof body.enableOpenAI==='boolean'?body.enableOpenAI:(!cfg.mockMode&&cfg.textProvider==='openai'&&cfg.imageProvider==='openai');
   updates.TEXT_PROVIDER=enableOpenAI?'openai':'mock';
@@ -145,6 +153,12 @@ const server=http.createServer(async (req,res)=>{
       if(!['http:','https:'].includes(parsed.protocol)||parsed.username||parsed.password)return json(res,400,{error:'VIVIBE_BASE_URL must use HTTP(S) and cannot include credentials.'});
       const voices=await listVivibeVoices({...cfg,vivibeApiKey:apiKey,vivibeBaseUrl:baseUrl});
       return json(res,200,{items:voices.items.map((voice)=>({id:String(voice.id||''),name:String(voice.name||voice.id||'Unnamed voice'),isActive:voice.isActive!==false})).filter((voice)=>voice.id&&voice.isActive),total:voices.total});
+    }
+    if(req.method==='GET'&&url.pathname==='/api/broll/search') {
+      if(!isLoopback(req.socket.remoteAddress))return json(res,403,{error:'B-roll search is only available from this machine.'});
+      const provider=String(url.searchParams.get('provider')||'pexels'),query=String(url.searchParams.get('query')||'');
+      const result=await searchBroll({provider,query,page:Number(url.searchParams.get('page')||1),perPage:Number(url.searchParams.get('perPage')||12),orientation:String(url.searchParams.get('orientation')||'portrait'),language:cfg.contentLanguage},cfg);
+      return json(res,200,result);
     }
     if(req.method==='GET'&&parts[0]==='media'&&parts[1]) {
       const p=loadProject(decodeURIComponent(parts[1]),cfg);
@@ -204,6 +218,15 @@ const server=http.createServer(async (req,res)=>{
         if(projectBusy(id))return json(res,409,{error:'Wait for the active job before selecting a take.'});
         const p=loadProject(id,cfg),s=p.scenes.find((scene)=>scene.id===decodeURIComponent(parts[4]));if(!s)return json(res,404,{error:'scene not found'});
         recordHistory(p,`Select ${parts[6]} take for ${s.id}`);selectTake(p,s,decodeURIComponent(parts[6]),decodeURIComponent(parts[7]));saveProject(p,cfg);return json(res,200,p);
+      }
+      if(req.method==='POST'&&parts[3]==='scenes'&&parts[4]&&parts[5]==='broll'){
+        if(!isLoopback(req.socket.remoteAddress))return json(res,403,{error:'B-roll downloads are only available from this machine.'});
+        if(projectBusy(id))return json(res,409,{error:'Wait for this project job to finish before changing B-roll.'});
+        const body=await readBody(req),p=loadProject(id,cfg),s=p.scenes.find((scene)=>scene.id===decodeURIComponent(parts[4]));if(!s)return json(res,404,{error:'scene not found'});
+        const downloaded=await downloadBrollAsset(body.selection,projectDir(cfg,p.id)),previousRenderer=resolveRendererName(s,p,cfg);
+        recordHistory(p,`Select ${downloaded.source.provider} B-roll for ${s.id}`);
+        assignDownloadedBroll(p,s,downloaded,{brollStartMs:body.brollStartMs,currentRenderer:previousRenderer});saveProject(p,cfg);
+        return json(res,200,{project:p,asset:{path:downloaded.path,reused:downloaded.reused,source:s.brollSource}});
       }
       if(req.method==='PATCH'&&parts.length===3) {
         if(projectBusy(id))return json(res,409,{error:'Wait for this project job to finish before changing it.'});

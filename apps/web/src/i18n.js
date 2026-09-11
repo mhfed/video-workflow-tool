@@ -52,5 +52,7 @@ const vi={
 
 en['cinematic-broll']='Cinematic B-roll';
 vi['cinematic-broll']='B-roll điện ảnh';
+Object.assign(en,{brollLibrary:'B-roll library',brollSearchPlaceholder:'Search portrait footage…',brollNoResults:'No matching videos found.',brollSelected:'B-roll downloaded and assigned to this scene.',brollStart:'Source start offset',source:'Source',search:'Search',viewSource:'View source',useBroll:'Use clip',brollProviders:'B-roll providers',brollProvidersHint:'Keys stay server-side and enable Pexels/Pixabay video search.',keepKey:'Keep saved key',removeKey:'Remove saved key'});
+Object.assign(vi,{brollLibrary:'Thư viện B-roll',brollSearchPlaceholder:'Tìm video dọc…',brollNoResults:'Không tìm thấy video phù hợp.',brollSelected:'Đã tải và gán B-roll cho phân cảnh.',brollStart:'Điểm bắt đầu nguồn',source:'Nguồn',search:'Tìm kiếm',viewSource:'Xem nguồn',useBroll:'Dùng clip',brollProviders:'Nguồn B-roll',brollProvidersHint:'API key chỉ lưu phía server để tìm video Pexels/Pixabay.',keepKey:'Giữ key đã lưu',removeKey:'Xóa key đã lưu'});
 
 export function copyFor(language){return language==='en'?en:vi;}

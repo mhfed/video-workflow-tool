@@ -122,7 +122,9 @@ Set the project or scene renderer to `cinematic-broll`, use the existing `short`
 
 Subtitles are derived from `scene.text`, limited to roughly two balanced lines, and placed in the lower-middle phone-safe area. They are on by default; optional settings live under `settings.cinematicBroll` (or a scene-level `cinematicBroll` override): `subtitles`, `subtitleMaxWords`, `subtitleFontSize`, `subtitlePosition`, and `musicVolumeDb`. A scene-level `backgroundMusic` overrides the project setting. Asset paths must remain inside the project directory. See [`examples/cinematic-broll-project.json`](examples/cinematic-broll-project.json).
 
-This phase intentionally has no stock-media provider, web search/downloader, copyright detector, AI clip generation, media library, karaoke highlighting, or transition engine. Later providers only need to resolve a local file and write its relative path to `broll`.
+The scene editor includes server-side Pexels and Pixabay video search. Add either API key in Provider Settings, open a Cinematic B-roll scene, search from its visual intent, review the creator/source credit, choose an optional start offset, and select a clip. The server downloads it once to `assets/broll/`, records generic attribution metadata, and the renderer continues entirely from that local file.
+
+Automatic copyright detection, TikTok/YouTube downloading, AI video generation, karaoke highlighting, and a transition engine remain deliberately out of scope. Search-provider responses stay behind adapters; the renderer does not know whether a local clip came from Pexels, Pixabay, or a future source.
 
 Operate/review:
 

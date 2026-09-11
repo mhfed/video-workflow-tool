@@ -105,3 +105,15 @@ test('scene renderer change invalidates only that scene render and final output'
   assert.equal(other.cache.video,'video-key');
   assert.equal(other.artifacts.clip,'clip.mp4');
 });
+
+test('changing a resolved B-roll visual preserves voice and invalidates visual media downstream',()=>{
+  const {project,scene}=fixture();
+  invalidateScene(project,scene,{visualChanged:true});
+  assert.equal(scene.cache.voice,'voice-key');
+  assert.equal(scene.artifacts.voice,'voice.mp3');
+  assert.equal(scene.cache.image,undefined);
+  assert.equal(scene.artifacts.visual,undefined);
+  assert.equal(scene.cache.video,undefined);
+  assert.equal(scene.cache.clip,undefined);
+  assert.equal(project.artifacts.final,undefined);
+});

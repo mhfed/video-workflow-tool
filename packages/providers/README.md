@@ -11,3 +11,9 @@ Supported voice adapters:
 - `mock`: offline silent audio for smoke tests.
 
 To add another voice source, implement its adapter and register its cache identity plus synthesizer in `src/voice.mjs`. The worker pipeline does not need provider-specific branches.
+
+## B-roll search
+
+`src/broll.mjs` normalizes Pexels and Pixabay video search into one UI-facing result shape and chooses a rendition suited to the target aspect ratio. Credentials come only from `PEXELS_API_KEY` and `PIXABAY_API_KEY`.
+
+The web download boundary accepts only HTTPS media URLs on the provider's known CDN host, streams with a size limit into a temporary file, then atomically moves the completed clip under the project's `assets/broll/` directory. Project state stores only the local relative path and generic source/creator attribution; API-specific response fields never enter the renderer.

@@ -123,7 +123,7 @@ function SettingsDialog({open,onOpenChange,onSaved,c}){
   const [saving,setSaving]=useState(false);
   const [message,setMessage]=useState(null);
   const update=(key,value)=>setForm((current)=>({...current,[key]:value}));
-  const hydrated=(settings)=>({...settings,apiKey:'',clearApiKey:false,vivibeApiKey:'',clearVivibeApiKey:false});
+  const hydrated=(settings)=>({...settings,apiKey:'',clearApiKey:false,vivibeApiKey:'',clearVivibeApiKey:false,pexelsApiKey:'',clearPexelsApiKey:false,pixabayApiKey:'',clearPixabayApiKey:false});
 
   useEffect(()=>{
     if(!open)return;
@@ -175,6 +175,14 @@ function SettingsDialog({open,onOpenChange,onSaved,c}){
             <div className="settings-fields two-columns">
               <label>{c.interfaceLanguage}<Select value={form.uiLanguage} onValueChange={(value)=>update('uiLanguage',value)}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent>{UI_LANGUAGES.map((item)=><SelectItem key={item.code} value={item.code}>{item.label}</SelectItem>)}</SelectContent></Select></label>
               <label>{c.defaultVideoLanguage}<Select value={form.contentLanguage} onValueChange={(value)=>update('contentLanguage',value)}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent>{UI_LANGUAGES.map((item)=><SelectItem key={item.code} value={item.code}>{item.label}</SelectItem>)}</SelectContent></Select></label>
+            </div>
+          </div>
+          <Separator/>
+          <div className="settings-section">
+            <div className="settings-section-title"><Film/><span><strong>{c.brollProviders}</strong><small>{c.brollProvidersHint}</small></span></div>
+            <div className="settings-fields two-columns">
+              <label>Pexels API key<Input type="password" autoComplete="new-password" value={form.pexelsApiKey} onChange={(event)=>setForm((current)=>({...current,pexelsApiKey:event.target.value,clearPexelsApiKey:false}))} placeholder={form.hasPexelsKey?'Leave blank to keep saved key':'Pexels API key'}/>{form.hasPexelsKey&&<Button type="button" size="sm" variant="ghost" onClick={()=>setForm((current)=>({...current,clearPexelsApiKey:!current.clearPexelsApiKey,pexelsApiKey:''}))}>{form.clearPexelsApiKey?c.keepKey:c.removeKey}</Button>}</label>
+              <label>Pixabay API key<Input type="password" autoComplete="new-password" value={form.pixabayApiKey} onChange={(event)=>setForm((current)=>({...current,pixabayApiKey:event.target.value,clearPixabayApiKey:false}))} placeholder={form.hasPixabayKey?'Leave blank to keep saved key':'Pixabay API key'}/>{form.hasPixabayKey&&<Button type="button" size="sm" variant="ghost" onClick={()=>setForm((current)=>({...current,clearPixabayApiKey:!current.clearPixabayApiKey,pixabayApiKey:''}))}>{form.clearPixabayApiKey?c.keepKey:c.removeKey}</Button>}</label>
             </div>
           </div>
           <Separator/>
@@ -285,6 +293,8 @@ export default function App(){
   const editSceneStructure=async(sceneId,payload)=>{setBusy(true);setError('');try{const result=await api(`/api/projects/${encodeURIComponent(current.id)}/scenes/${encodeURIComponent(sceneId)}/actions`,{method:'POST',body:JSON.stringify(payload)});setCurrent(result.project);await refreshProjects();return result;}catch(cause){setError(cause.message);return null;}finally{setBusy(false);}};
   const insertNewScene=async(afterSceneId)=>{setBusy(true);setError('');try{const result=await api(`/api/projects/${encodeURIComponent(current.id)}/scenes`,{method:'POST',body:JSON.stringify({afterSceneId,text:c.language==='en'?'A new scene.':'Một phân cảnh mới.'})});setCurrent(result.project);await refreshProjects();return result;}catch(cause){setError(cause.message);return null;}finally{setBusy(false);}};
   const planDirection=async(sceneId,instruction)=>{setError('');try{return await api(`/api/projects/${encodeURIComponent(current.id)}/director`,{method:'POST',body:JSON.stringify({sceneId,instruction})});}catch(cause){setError(cause.message);throw cause;}};
+  const searchBroll=async({provider,query,orientation='portrait'})=>api(`/api/broll/search?provider=${encodeURIComponent(provider)}&query=${encodeURIComponent(query)}&orientation=${encodeURIComponent(orientation)}`);
+  const selectBroll=async(sceneId,selection,brollStartMs=0)=>{setBusy(true);setError('');try{const result=await api(`/api/projects/${encodeURIComponent(current.id)}/scenes/${encodeURIComponent(sceneId)}/broll`,{method:'POST',body:JSON.stringify({selection,brollStartMs})});setCurrent(result.project);await refreshProjects();return result;}catch(cause){setError(cause.message);throw cause;}finally{setBusy(false);}};
   const loadRoughCut=async()=>api(`/api/projects/${encodeURIComponent(current.id)}/rough-cut`);
   const cancelJob=async(jobId)=>{setError('');try{const result=await api(`/api/projects/${encodeURIComponent(current.id)}/jobs/${encodeURIComponent(jobId)}/cancel`,{method:'POST'});setCurrent(result.project);return result;}catch(cause){setError(cause.message);return null;}};
   const historyAction=async(action)=>{setBusy(true);setError('');try{const project=await api(`/api/projects/${encodeURIComponent(current.id)}/history/${action}`,{method:'POST'});setCurrent(project);await refreshProjects();return project;}catch(cause){setError(cause.message);return null;}finally{setBusy(false);}};
@@ -321,7 +331,7 @@ export default function App(){
         {error&&<div className="error-banner"><CircleDot/><span>{error}</span><button onClick={()=>setError('')}>{c.dismiss}</button></div>}
         {!current?<EmptyState onCreate={()=>setDialogOpen(true)} onDemo={createDemo} c={c}/>:<>
           {current.error&&<div className="project-error"><strong>{c.lastRunStopped}</strong><span>{current.error.message}</span></div>}
-          <DirectorWorkspace key={current.id} project={current} running={busy||running} keyboardLocked={paletteOpen||dialogOpen||settingsOpen||!!navDrawer} activeJob={activeJob} command={workspaceCommand} onContextChange={setWorkspaceContext} onCancelJob={cancelJob} onUndo={()=>historyAction('undo')} onRedo={()=>historyAction('redo')} onSelectTake={selectSceneTake} onRunQuality={runQuality} onGetRepairPlan={getRepairPlan} onApplyRepairs={applyRepairs} onSave={saveScene} onRunStage={runStage} onReview={reviewStage} onRunAll={run} onLoadRoughCut={loadRoughCut} onUpdateProject={updateProject} onSceneAction={editSceneStructure} onInsertScene={insertNewScene} onDirectorPlan={planDirection} rendererNames={config?.rendererNames||[]} c={c}/>
+          <DirectorWorkspace key={current.id} project={current} running={busy||running} keyboardLocked={paletteOpen||dialogOpen||settingsOpen||!!navDrawer} activeJob={activeJob} command={workspaceCommand} onContextChange={setWorkspaceContext} onCancelJob={cancelJob} onUndo={()=>historyAction('undo')} onRedo={()=>historyAction('redo')} onSelectTake={selectSceneTake} onRunQuality={runQuality} onGetRepairPlan={getRepairPlan} onApplyRepairs={applyRepairs} onSave={saveScene} onRunStage={runStage} onReview={reviewStage} onRunAll={run} onLoadRoughCut={loadRoughCut} onUpdateProject={updateProject} onSceneAction={editSceneStructure} onInsertScene={insertNewScene} onDirectorPlan={planDirection} onSearchBroll={searchBroll} onSelectBroll={selectBroll} brollProviders={{names:config?.brollProviderNames||['pexels','pixabay'],configured:{pexels:!!config?.hasPexelsKey,pixabay:!!config?.hasPixabayKey}}} rendererNames={config?.rendererNames||[]} c={c}/>
         </>}
       </main>
     </div>

@@ -63,11 +63,22 @@ SCENE_MAX_SEC=18
 - `MOCK_MODE=1`: no paid AI calls; useful for CI/smoke tests. Mock artifacts have distinct cache keys, so they cannot be silently reused in a later real run.
 - `UI_LANGUAGE=vi|en`: web interface language; defaults to Vietnamese.
 - `CONTENT_LANGUAGE=vi|en`: language for new projects and topic-to-script generation; each project keeps its own value in `project.json`.
-- `VIDEO_RENDERER=simple|whiteboard`: `simple` is FFmpeg-only; `whiteboard` wraps `geeklee/srt-whiteboard-animation`.
+- `VIDEO_RENDERER=simple|whiteboard|cinematic-broll`: Cinematic B-roll renders project-local video selected manually or downloaded through a provider.
 - `TEXT_PROVIDER`, `IMAGE_PROVIDER`: `openai` or `mock`.
 - `VOICE_PROVIDER`: `openai`, `vivibe`, or `mock`. Voice selection is independent from the text/image source.
 - `WHITEBOARD_AUTO_INSTALL=1`: clones the upstream whiteboard engine when absent and prepares its isolated Python environment when needed.
 - `VIDEO_WIDTH`, `VIDEO_HEIGHT`, `VIDEO_FPS`: final clip normalization.
+
+## B-roll search providers
+
+The Cinematic B-roll search panel can use either provider. Keys stay in `.env` and are never written to `project.json` or returned to the browser:
+
+```bash
+PEXELS_API_KEY=<your-pexels-key>
+PIXABAY_API_KEY=<your-pixabay-key>
+```
+
+Search results keep source and creator links for attribution. Selecting a result downloads it once into `workspace/<project-id>/assets/broll/`; rendering remains local and deterministic afterward.
 
 ## Vivibe / LucyAI voice
 

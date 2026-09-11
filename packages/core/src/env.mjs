@@ -44,6 +44,8 @@ export function config() {
     vivibeSpeed: Number(env.VIVIBE_SPEED || 1),
     vivibePollIntervalMs: Number(env.VIVIBE_POLL_INTERVAL_MS || 2000),
     vivibeTimeoutMs: Number(env.VIVIBE_TIMEOUT_MS || 120000),
+    pexelsApiKey: env.PEXELS_API_KEY || '',
+    pixabayApiKey: env.PIXABAY_API_KEY || '',
     scriptMinutes: Number(env.SCRIPT_TARGET_MINUTES || 6),
     ffmpegBin: env.FFMPEG_BIN || 'ffmpeg',
     ffprobeBin: env.FFPROBE_BIN || 'ffprobe',
