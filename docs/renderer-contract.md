@@ -70,6 +70,7 @@ Implementation: `packages/renderers/src/draw-reveal.mjs`.
 
 - Consumes project-local full-color raster artwork rather than converting it to line art.
 - Generates a deterministic edge/contour-aware path with a contain-fitted serpentine fallback, or accepts an explicit normalized path.
+- Exposes path resolution through an optional adapter hook so the local editor previews the exact automatic or explicit path without duplicating renderer logic.
 - Encodes nearest-path reveal order into a temporary grayscale schedule mask.
 - Thresholds that mask over narration duration and moves the existing hand asset along the same path.
 - Supports renderer-local burned captions and optional quiet background music through the existing adapter hooks.

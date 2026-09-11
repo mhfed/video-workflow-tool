@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { run } from '../../core/src/process.mjs';
@@ -38,13 +39,15 @@ async function fileIdentity(file) {
 }
 
 function normalizedPath(value,rows=9,bounds={left:.06,right:.94,top:.06,bottom:.94}) {
-  if(value!==undefined){
+  if(value!==undefined&&value!==null){
     if(!Array.isArray(value)||value.length<2)throw new Error('Draw Reveal "path" must contain at least two normalized [x, y] points.');
     if(value.length>64)throw new Error('Draw Reveal "path" supports at most 64 points.');
-    return value.map((point,index)=>{
+    const points=value.map((point,index)=>{
       if(!Array.isArray(point)||point.length!==2||!point.every(Number.isFinite)||point.some((number)=>number<0||number>1))throw new Error(`Draw Reveal path point ${index+1} must be [x, y] with values from 0 to 1.`);
       return [point[0],point[1]];
     });
+    if(!points.some(([x,y])=>x!==points[0][0]||y!==points[0][1]))throw new Error('Draw Reveal "path" must contain at least two distinct points.');
+    return points;
   }
   const count=Math.round(finiteNumber(rows,9,{min:3,max:24})),points=[];
   for(let index=0;index<count;index++){
@@ -172,9 +175,9 @@ export async function prepareDrawRevealVisual({scene,projectRoot}) {
 export async function drawRevealRenderInputs({scene,project,projectRoot}) {
   const settings=settingsFor(scene,project),hand=handFileFor(scene,project,projectRoot);
   return {
-    path:settings.path===undefined?null:drawRevealPath(settings),
+    path:settings.path==null?null:drawRevealPath(settings),
     pathRows:Math.round(finiteNumber(settings.pathRows,9,{min:3,max:24})),
-    pathMode:settings.path===undefined?'contour-v1':'explicit',
+    pathMode:settings.path==null?'contour-v1':'explicit',
     handAsset:settings.handAsset||null,
     handContent:settings.handAsset?await fileIdentity(hand):null,
     handScale:finiteNumber(settings.handScale,.3,{min:.12,max:.6}),
@@ -187,6 +190,14 @@ export async function drawRevealRenderInputs({scene,project,projectRoot}) {
     subtitleMaxWords:finiteNumber(settings.subtitleMaxWords,14,{min:4,max:24}),
     subtitlePosition:finiteNumber(settings.subtitlePosition,.72,{min:.2,max:.86})
   };
+}
+
+export async function resolveDrawRevealPath({scene,project,projectRoot,cfg,signal=null}) {
+  const options=await drawRevealRenderInputs({scene,project,projectRoot});
+  if(options.path)return {path:options.path,mode:'explicit'};
+  const artwork=assertRelativeAsset(scene.artwork,'artwork',scene.id,projectRoot,IMAGE_EXTENSIONS),temporary=fs.mkdtempSync(path.join(os.tmpdir(),'vwt-draw-path-'));
+  try{return await generateDrawRevealPath({artwork,outputFile:path.join(temporary,'preview'),pathRows:options.pathRows,cfg,signal});}
+  finally{fs.rmSync(temporary,{recursive:true,force:true});}
 }
 
 export async function drawRevealClipInputs({scene,project,projectRoot}) {

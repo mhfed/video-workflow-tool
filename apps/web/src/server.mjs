@@ -23,11 +23,12 @@ import { brollProviderNames, searchBroll } from '../../../packages/providers/src
 import { runPipeline } from '../../worker/src/pipeline.mjs';
 import { ProjectJobQueue } from '../../worker/src/job-queue.mjs';
 import { runQualityChecks, runRepairActions } from '../../worker/src/quality.mjs';
-import { rendererNames, resolveRendererName } from '../../../packages/renderers/src/registry.mjs';
+import { getRenderer, rendererNames, resolveRendererName } from '../../../packages/renderers/src/registry.mjs';
 import { rendererInputError } from './renderer-input.mjs';
 import { mediaTypeFor, serveMedia } from './media.mjs';
 import { assignDownloadedBroll, downloadBrollAsset } from './broll-media.mjs';
 import { assignUploadedArtwork, resolveArtworkFile, storeArtworkUpload } from './artwork-media.mjs';
+import { assignDrawRevealPath, drawRevealPathChanged, normalizeDrawRevealPathUpdate } from './draw-reveal-path.mjs';
 
 let cfg=config();
 const here=path.dirname(fileURLToPath(import.meta.url));
@@ -240,6 +241,22 @@ const server=http.createServer(async (req,res)=>{
         let upload;try{upload=await storeArtworkUpload(req,projectDir(cfg,p.id),{filename:req.headers['x-file-name'],contentType:req.headers['content-type']});}catch(error){return json(res,400,{error:error.message});}
         const previousRenderer=resolveRendererName(s,p,cfg);recordHistory(p,`Upload artwork for ${s.id}`);assignUploadedArtwork(p,s,upload,{currentRenderer:previousRenderer});saveProject(p,cfg);
         return json(res,200,{project:p,asset:{...upload}});
+      }
+      if(parts[3]==='scenes'&&parts[4]&&parts[5]==='draw-reveal'&&parts[6]==='path'){
+        if(!isLoopback(req.socket.remoteAddress))return json(res,403,{error:'Draw path editing is only available from this machine.'});
+        if(projectBusy(id))return json(res,409,{error:'Wait for this project job to finish before editing the draw path.'});
+        const p=loadProject(id,cfg),s=p.scenes.find((scene)=>scene.id===decodeURIComponent(parts[4]));if(!s)return json(res,404,{error:'scene not found'});
+        const rendererName=resolveRendererName(s,p,cfg),adapter=getRenderer(rendererName);if(rendererName!=='draw-reveal'||!adapter.resolvePath)return json(res,409,{error:'This scene must use the draw-reveal renderer before editing its path.'});
+        if(req.method==='GET'){
+          const renderCfg={...cfg,width:p.settings.width,height:p.settings.height,fps:p.settings.fps},result=await adapter.resolvePath({scene:s,project:p,projectRoot:projectDir(cfg,p.id),cfg:renderCfg});
+          return json(res,200,result);
+        }
+        if(req.method==='PATCH'){
+          const body=await readBody(req);let nextPath;try{nextPath=normalizeDrawRevealPathUpdate(body.path);}catch(error){return json(res,400,{error:error.message});}
+          if(drawRevealPathChanged(s,nextPath)){recordHistory(p,`${nextPath===null?'Reset':'Edit'} draw path for ${s.id}`);assignDrawRevealPath(p,s,nextPath);saveProject(p,cfg);}
+          return json(res,200,{project:p,path:nextPath,mode:nextPath===null?'contour-v1':'explicit'});
+        }
+        return json(res,405,{error:'Method not allowed.'});
       }
       if(req.method==='PATCH'&&parts.length===3) {
         if(projectBusy(id))return json(res,409,{error:'Wait for this project job to finish before changing it.'});
