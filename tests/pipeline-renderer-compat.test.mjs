@@ -157,3 +157,33 @@ test('draw-reveal uses local artwork and the existing voice, clip, and final lif
   assert.ok(rendered.cache.image);assert.equal(rendered.artifacts.visual,undefined);assert.ok(fs.existsSync(path.join(projectDir(cfg,project.id),rendered.artifacts.voice)));
   const clip=path.join(projectDir(cfg,project.id),rendered.artifacts.clip);assert.ok(fs.existsSync(clip));assert.deepEqual(await (await import('../packages/core/src/media.mjs')).probeVideoSize(clip,cfg),{width:180,height:320});assert.ok(fs.existsSync(result.final));
 });
+
+test('Vivibe checkpoint survives a timeout and the next pipeline run resumes it',async(t)=>{
+  const previous={mockMode:process.env.MOCK_MODE,voiceProvider:process.env.VOICE_PROVIDER,vivibeKey:process.env.VIVIBE_API_KEY,vivibeUrl:process.env.VIVIBE_BASE_URL,vivibeVoice:process.env.VIVIBE_VOICE_ID,vivibePoll:process.env.VIVIBE_POLL_INTERVAL_MS,vivibeTimeout:process.env.VIVIBE_TIMEOUT_MS};
+  t.after(()=>{
+    process.env.MOCK_MODE=previous.mockMode;process.env.VOICE_PROVIDER=previous.voiceProvider;
+    for(const [name,value] of [['VIVIBE_API_KEY',previous.vivibeKey],['VIVIBE_BASE_URL',previous.vivibeUrl],['VIVIBE_VOICE_ID',previous.vivibeVoice],['VIVIBE_POLL_INTERVAL_MS',previous.vivibePoll],['VIVIBE_TIMEOUT_MS',previous.vivibeTimeout]])value===undefined?delete process.env[name]:process.env[name]=value;
+  });
+  process.env.MOCK_MODE='0';process.env.VOICE_PROVIDER='vivibe';process.env.VIVIBE_API_KEY='test-key';process.env.VIVIBE_BASE_URL='https://vivibe.example.test/json-rpc';process.env.VIVIBE_VOICE_ID='voice-1';process.env.VIVIBE_POLL_INTERVAL_MS='1';process.env.VIVIBE_TIMEOUT_MS='3';
+  const cfg=config(),project=createProject({title:'Vivibe resume pipeline',sourceText:'Resume this voice export.',workflowMode:'auto'},cfg);
+  const source=path.join(root,'vivibe-resume-source.wav');
+  await run(cfg.ffmpegBin,['-loglevel','error','-y','-f','lavfi','-i','sine=frequency=220:duration=0.1','-c:a','pcm_s16le',source],{capture:true});
+  const originalFetch=globalThis.fetch;
+  let createCalls=0,completed=false;
+  globalThis.fetch=async(url,init={})=>{
+    if(url==='https://cdn.example.test/resume.wav')return new Response(fs.readFileSync(source),{status:200});
+    const body=JSON.parse(init.body);
+    if(body.method==='ttsLongText'){createCalls++;return new Response(JSON.stringify({result:{projectExportId:'resume-export-1'}}),{status:200});}
+    return new Response(JSON.stringify({result:completed?{state:'completed',url:'https://cdn.example.test/resume.wav'}:{state:'processing'}}),{status:200});
+  };
+  t.after(()=>{globalThis.fetch=originalFetch;});
+  await assert.rejects(runPipeline(project.id,{sceneId:'scene-001',stage:'voice'}),/Tiến trình đã được lưu/);
+  const pending=loadProject(project.id,cfg).scenes[0].operations.voice;
+  assert.deepEqual({provider:pending.provider,id:pending.id,state:pending.state},{provider:'vivibe',id:'resume-export-1',state:'processing'});
+  completed=true;
+  await runPipeline(project.id,{sceneId:'scene-001',stage:'voice'});
+  const resumed=loadProject(project.id,cfg).scenes[0];
+  assert.equal(createCalls,1);
+  assert.equal(resumed.operations?.voice,undefined);
+  assert.ok(fs.existsSync(path.join(projectDir(cfg,project.id),resumed.artifacts.voice)));
+});

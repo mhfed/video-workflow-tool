@@ -36,11 +36,15 @@ export async function listVivibeVoices(cfg,{limit=100,page=1,fetchImpl=fetch,sig
   return {items:Array.isArray(result.items)?result.items:[],total:Number(result.total||0)};
 }
 
-async function completedAudioUrl(text,cfg,{fetchImpl=fetch,sleepImpl=sleep,signal=null}={}) {
+async function completedAudioUrl(text,cfg,{fetchImpl=fetch,sleepImpl=sleep,signal=null,jobId=null,onJob=null}={}) {
   vivibeConfig(cfg);
-  const created=await vivibeRpc(cfg,'ttsLongText',{text,userVoiceId:cfg.vivibeVoiceId,speed:cfg.vivibeSpeed},fetchImpl,signal);
-  const exportId=created.projectExportId;
+  let exportId=jobId;
+  if(!exportId){
+    const created=await vivibeRpc(cfg,'ttsLongText',{text,userVoiceId:cfg.vivibeVoiceId,speed:cfg.vivibeSpeed},fetchImpl,signal);
+    exportId=created.projectExportId;
+  }
   if(!exportId)throw new Error('Vivibe ttsLongText returned no projectExportId');
+  await onJob?.({id:exportId,resumed:!!jobId});
   const deadline=Date.now()+cfg.vivibeTimeoutMs;
   while(Date.now()<=deadline){
     if(signal?.aborted)throw Object.assign(new Error('Operation cancelled'),{name:'AbortError'});
@@ -56,12 +60,12 @@ async function completedAudioUrl(text,cfg,{fetchImpl=fetch,sleepImpl=sleep,signa
     if(!['waiting','pending','processing','active'].includes(status.state))throw new Error(`Vivibe returned an unknown export state: ${status.state||'missing'}`);
     await sleepImpl(cfg.vivibePollIntervalMs);
   }
-  throw new Error(`Vivibe voice export vẫn đang chờ sau ${cfg.vivibeTimeoutMs}ms. Hãy kiểm tra trạng thái job và số dư credit Vivibe rồi thử lại.`);
+  throw new Error(`Vivibe voice export vẫn đang xử lý sau ${cfg.vivibeTimeoutMs}ms. Tiến trình đã được lưu; lần chạy tiếp theo sẽ tiếp tục export này thay vì tạo lại.`);
 }
 
-export async function synthesizeSpeechVivibe(text,outputFile,cfg,{fetchImpl=fetch,sleepImpl=sleep,runImpl=run,signal=null}={}) {
+export async function synthesizeSpeechVivibe(text,outputFile,cfg,{fetchImpl=fetch,sleepImpl=sleep,runImpl=run,signal=null,jobId=null,onJob=null}={}) {
   ensureDir(path.dirname(outputFile));
-  const audioUrl=await completedAudioUrl(text,cfg,{fetchImpl,sleepImpl,signal});
+  const audioUrl=await completedAudioUrl(text,cfg,{fetchImpl,sleepImpl,signal,jobId,onJob});
   const response=await fetchImpl(audioUrl,{signal});
   if(!response.ok)throw new Error(`Vivibe audio download failed (${response.status})`);
   const sourceFile=`${outputFile}.vivibe-source-${process.pid}`;

@@ -18,6 +18,7 @@ export function invalidateScene(project, scene, { textChanged=false, promptChang
     drop(scene.cache,'voice');
     drop(scene.artifacts,'voice');
     drop(scene.selectedTakes,'voice');
+    drop(scene.operations,'voice');
     scene.review ||= {};
     scene.review.script='pending';
     scene.review.voice='stale';

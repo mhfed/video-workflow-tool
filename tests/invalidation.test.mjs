@@ -6,7 +6,8 @@ function fixture() {
   const scene={
     text:'old narration', visualPrompt:'old prompt', status:'ready',
     cache:{voice:'voice-key',image:'image-key',video:'video-key',clip:'clip-key'},
-    artifacts:{voice:'voice.mp3',visual:'visual.png',video:'video.mp4',clip:'clip.mp4'}
+    artifacts:{voice:'voice.mp3',visual:'visual.png',video:'video.mp4',clip:'clip.mp4'},
+    operations:{voice:{provider:'vivibe',id:'export-1',cacheKey:'voice-key',state:'processing'}}
   };
   return {project:{status:'complete',artifacts:{final:'output/final.mp4'},scenes:[scene]},scene};
 }
@@ -31,6 +32,7 @@ test('narration edit preserves image but invalidates voice and downstream video'
   assert.equal(scene.artifacts.visual,'visual.png');
   assert.equal(scene.cache.voice,undefined);
   assert.equal(scene.artifacts.voice,undefined);
+  assert.equal(scene.operations.voice,undefined);
   assert.equal(scene.cache.video,undefined);
   assert.equal(scene.cache.clip,undefined);
   assert.equal(project.artifacts.final,undefined);

@@ -13,7 +13,7 @@ const adapters={
   },
   vivibe:{
     cache:(cfg)=>({baseUrl:cfg.vivibeBaseUrl,voiceId:cfg.vivibeVoiceId,speed:cfg.vivibeSpeed}),
-    synthesize:({text,outputFile,cfg,signal})=>synthesizeSpeechVivibe(text,outputFile,cfg,{signal})
+    synthesize:({text,outputFile,cfg,signal,jobId,onJob})=>synthesizeSpeechVivibe(text,outputFile,cfg,{signal,jobId,onJob})
   }
 };
 
@@ -25,8 +25,8 @@ export function voiceCacheConfig(provider,cfg) {
   return adapter.cache(cfg);
 }
 
-export async function synthesizeVoice({provider,text,outputFile,cfg,durationSec,signal}) {
+export async function synthesizeVoice({provider,text,outputFile,cfg,durationSec,signal,jobId=null,onJob=null}) {
   const adapter=adapters[provider];
   if(!adapter)throw new Error(`Unsupported VOICE_PROVIDER=${provider}`);
-  return adapter.synthesize({text,outputFile,cfg,durationSec,signal});
+  return adapter.synthesize({text,outputFile,cfg,durationSec,signal,jobId,onJob});
 }

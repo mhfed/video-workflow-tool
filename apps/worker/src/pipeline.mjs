@@ -5,7 +5,7 @@ import { loadProject, saveProject, sceneDir, projectDir, updateTimeline } from '
 import { invalidateFinal } from '../../../packages/core/src/invalidation.mjs';
 import { buildWebVtt } from '../../../packages/core/src/captions.mjs';
 import { languageInfo, normalizeLanguage } from '../../../packages/core/src/languages.mjs';
-import { sha256, fileExists, ensureDir } from '../../../packages/core/src/utils.mjs';
+import { sha256, fileExists, ensureDir, nowIso } from '../../../packages/core/src/utils.mjs';
 import { probeDuration } from '../../../packages/core/src/media.mjs';
 import { run } from '../../../packages/core/src/process.mjs';
 import { containVideoFilter } from '../../../packages/core/src/video-fit.mjs';
@@ -28,11 +28,20 @@ async function ensureVoice(scene, project, cfg, force=false,signal=null) {
   const key=sha256({text:scene.text,provider,...voiceCacheConfig(provider,cfg)});
   const current=artifactFile(scene,project,cfg,'voice');
   if (!force && scene.cache.voice===key && fileExists(current)) return current;
+  const checkpoint=scene.operations?.voice;
+  const jobId=checkpoint?.provider===provider&&checkpoint?.cacheKey===key?checkpoint.id:null;
   const target=createTakeTarget(dir,'voice','mp3',key),file=target.file;
   log('voice:start',{scene:scene.id,provider});
-  await synthesizeVoice({provider,text:scene.text,outputFile:file,cfg,durationSec:scene.durationMs/1000,signal});
+  await synthesizeVoice({provider,text:scene.text,outputFile:file,cfg,durationSec:scene.durationMs/1000,signal,jobId,onJob:({id,resumed})=>{
+    scene.operations ||= {};
+    const previous=scene.operations.voice;
+    scene.operations.voice={provider,id,cacheKey:key,state:'processing',createdAt:previous?.id===id&&previous.createdAt?previous.createdAt:nowIso(),updatedAt:nowIso()};
+    saveProject(project,cfg);
+    log(resumed?'voice:resume':'voice:queued',{scene:scene.id,provider,jobId:id});
+  }});
   scene.durationMs=Math.round((await probeDuration(file,cfg,{signal}))*1000);
   scene.cache.voice=key; recordTake(scene,'voice',{id:target.id,path:path.relative(projectDir(cfg,project.id),file),cacheKey:key,provider,durationMs:scene.durationMs}); scene.status='voice-ready'; markArtifactForReview(scene,'voice');
+  if(scene.operations)delete scene.operations.voice;
   saveProject(updateTimeline(project),cfg); log('voice:done',{scene:scene.id,durationMs:scene.durationMs}); return file;
 }
 

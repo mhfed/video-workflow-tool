@@ -111,7 +111,7 @@ VIVIBE_VOICE_ID=<voice-id-from-getUserVoices>
 VIVIBE_SPEED=1
 ```
 
-The adapter calls `ttsLongText`, polls `getExportStatus` every two seconds, downloads the completed audio, and normalizes it to MP3 with FFmpeg. Optional timeout controls are `VIVIBE_POLL_INTERVAL_MS` and `VIVIBE_TIMEOUT_MS`.
+The adapter calls `ttsLongText`, polls `getExportStatus` every two seconds, downloads the completed audio, and normalizes it to MP3 with FFmpeg. The export checkpoint is saved in `project.json`, so a timeout or server restart resumes the same Vivibe job instead of creating and charging for another one. Optional controls are `VIVIBE_POLL_INTERVAL_MS` and `VIVIBE_TIMEOUT_MS`; the default timeout is 600000 ms (10 minutes).
 
 ## Non-secret prerequisites
 

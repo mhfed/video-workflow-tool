@@ -120,6 +120,7 @@ test('Vivibe surfaces an explicit credit error instead of a raw provider payload
 
 test('Vivibe creates, polls, downloads, and normalizes narration audio',async()=>{
   const requests=[];
+  const jobs=[];
   let statusCalls=0;
   const fetchImpl=async(url,init={})=>{
     if(url==='https://cdn.example.test/voice.wav')return new Response(Buffer.from('source-audio'),{status:200});
@@ -137,11 +138,30 @@ test('Vivibe creates, polls, downloads, and normalizes narration audio',async()=
   };
   const dir=fs.mkdtempSync(path.join(os.tmpdir(),'vwt-vivibe-'));
   const output=path.join(dir,'voice.mp3');
-  await synthesizeSpeechVivibe('Xin chào',output,{vivibeApiKey:'vivibe-key',vivibeBaseUrl:'https://api.lucylab.io/json-rpc',vivibeVoiceId:'voice-1',vivibeSpeed:1.2,vivibePollIntervalMs:2000,vivibeTimeoutMs:30000,ffmpegBin:'ffmpeg-test'},{fetchImpl,sleepImpl:async(ms)=>waits.push(ms),runImpl});
+  await synthesizeSpeechVivibe('Xin chào',output,{vivibeApiKey:'vivibe-key',vivibeBaseUrl:'https://api.lucylab.io/json-rpc',vivibeVoiceId:'voice-1',vivibeSpeed:1.2,vivibePollIntervalMs:2000,vivibeTimeoutMs:30000,ffmpegBin:'ffmpeg-test'},{fetchImpl,sleepImpl:async(ms)=>waits.push(ms),runImpl,onJob:(job)=>jobs.push(job)});
   assert.deepEqual(requests[0],{method:'ttsLongText',input:{text:'Xin chào',userVoiceId:'voice-1',speed:1.2}});
   assert.deepEqual(requests[1],{method:'getExportStatus',input:{projectExportId:'export-1'}});
+  assert.deepEqual(jobs,[{id:'export-1',resumed:false}]);
   assert.equal(requests.length,4);
   assert.deepEqual(waits,[2000,2000]);
   assert.equal(fs.readFileSync(output,'utf8'),'normalized-mp3');
   assert.equal(fs.readdirSync(dir).some((name)=>name.includes('vivibe-source')),false);
+});
+
+test('Vivibe resumes a saved export without creating or charging for another job',async()=>{
+  const requests=[];
+  const jobs=[];
+  const fetchImpl=async(url,init={})=>{
+    if(url==='https://cdn.example.test/resumed.wav')return new Response(Buffer.from('resumed-audio'),{status:200});
+    const body=JSON.parse(init.body);requests.push(body);
+    if(body.method==='ttsLongText')throw new Error('resume must not create another Vivibe export');
+    return new Response(JSON.stringify({result:{state:'completed',url:'https://cdn.example.test/resumed.wav'}}),{status:200});
+  };
+  const runImpl=async(_bin,args)=>fs.writeFileSync(args.at(-1),'resumed-mp3');
+  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'vwt-vivibe-resume-'));
+  const output=path.join(dir,'voice.mp3');
+  await synthesizeSpeechVivibe('Xin chào',output,{vivibeApiKey:'vivibe-key',vivibeBaseUrl:'https://api.lucylab.io/json-rpc',vivibeVoiceId:'voice-1',vivibeSpeed:1,vivibePollIntervalMs:2000,vivibeTimeoutMs:30000,ffmpegBin:'ffmpeg-test'},{fetchImpl,runImpl,jobId:'saved-export-1',onJob:(job)=>jobs.push(job)});
+  assert.deepEqual(requests,[{method:'getExportStatus',input:{projectExportId:'saved-export-1'}}]);
+  assert.deepEqual(jobs,[{id:'saved-export-1',resumed:true}]);
+  assert.equal(fs.readFileSync(output,'utf8'),'resumed-mp3');
 });
