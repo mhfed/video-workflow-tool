@@ -4,8 +4,7 @@ import { config } from '../../../packages/core/src/env.mjs';
 import { createProject, listProjects, loadProject } from '../../../packages/core/src/project.mjs';
 import { normalizeLanguage, SUPPORTED_LANGUAGES } from '../../../packages/core/src/languages.mjs';
 import { SUPPORTED_VIDEO_FORMATS } from '../../../packages/core/src/video-format.mjs';
-import { generateScriptOpenAI, planNarrativeBeatsOpenAI } from '../../../packages/providers/src/openai.mjs';
-import { generateScriptMock } from '../../../packages/providers/src/mock.mjs';
+import { generateScriptText, planNarrativeBeatsText, textProviderName } from '../../../packages/providers/src/text.mjs';
 import { runPipeline } from './pipeline.mjs';
 
 function args(argv){const out={_:[]};for(let i=0;i<argv.length;i++){const v=argv[i];if(v.startsWith('--')){const k=v.slice(2);out[k]=argv[i+1]?.startsWith('--')?true:argv[++i];}else out._.push(v);}return out;}
@@ -17,11 +16,11 @@ try {
     const language=normalizeLanguage(a.language,cfg.contentLanguage),format=a.format||'landscape';
     if(a.language&&!SUPPORTED_LANGUAGES.has(a.language))throw new Error('--language must be one of: vi, en');
     if(!SUPPORTED_VIDEO_FORMATS.has(format))throw new Error('--format must be one of: landscape, short');
-    if(a.topic){topic=String(a.topic);sourceText=cfg.mockMode||cfg.textProvider==='mock'?generateScriptMock(topic,{language}):await generateScriptOpenAI(topic,cfg,{minutes:Number(a.minutes||cfg.scriptMinutes),language});sourceType='topic';}
+    if(a.topic){topic=String(a.topic);sourceText=await generateScriptText(topic,cfg,{minutes:Number(a.minutes||cfg.scriptMinutes),language});sourceType='topic';}
     else {if(!sourceFile)throw new Error('Use --topic "...", --script <file>, or --srt <file>');sourceText=fs.readFileSync(sourceFile,'utf8');sourceType=a.srt?'srt':'script';}
     let plannedScenes=null;
-    if(sourceType!=='srt'&&!cfg.mockMode&&cfg.textProvider==='openai'){
-      try{plannedScenes=await planNarrativeBeatsOpenAI(sourceText,{...cfg,contentLanguage:language},{language,format});}
+    if(sourceType!=='srt'&&textProviderName(cfg)!=='mock'){
+      try{plannedScenes=await planNarrativeBeatsText(sourceText,{...cfg,contentLanguage:language},{language,format});}
       catch(error){console.warn(`Semantic planner fallback: ${error.message}`);}
     }
     const p=createProject({title:a.title||topic||sourceFile,sourceText,sourceType,topic,workflowMode:a.mode||'studio',format,plannedScenes},{...cfg,contentLanguage:language});

@@ -15,8 +15,7 @@ import { buildRoughCutManifest } from '../../../packages/core/src/rough-cut.mjs'
 import { buildRepairPlan } from '../../../packages/core/src/repair-plan.mjs';
 import { recordHistory, redoProject, undoProject } from '../../../packages/core/src/history.mjs';
 import { selectTake } from '../../../packages/core/src/takes.mjs';
-import { generateScriptOpenAI, planNarrativeBeatsOpenAI } from '../../../packages/providers/src/openai.mjs';
-import { generateScriptMock } from '../../../packages/providers/src/mock.mjs';
+import { generateScriptText, planNarrativeBeatsText, textProviderName } from '../../../packages/providers/src/text.mjs';
 import { listVivibeVoices } from '../../../packages/providers/src/vivibe.mjs';
 import { planSceneDirection } from '../../../packages/providers/src/director.mjs';
 import { brollProviderNames, searchBroll } from '../../../packages/providers/src/broll.mjs';
@@ -29,6 +28,7 @@ import { mediaTypeFor, serveMedia } from './media.mjs';
 import { assignDownloadedBroll, downloadBrollAsset } from './broll-media.mjs';
 import { assignUploadedArtwork, resolveArtworkFile, storeArtworkUpload } from './artwork-media.mjs';
 import { assignDrawRevealPath, drawRevealPathChanged, normalizeDrawRevealPathUpdate } from './draw-reveal-path.mjs';
+import { CodexAccountClient, safeCodexAccountStatus } from './codex-account.mjs';
 
 let cfg=config();
 const here=path.dirname(fileURLToPath(import.meta.url));
@@ -36,12 +36,13 @@ const pub=path.resolve(here,'../dist');
 const envFile=path.resolve('.env');
 const legacyRunning=new Set();
 const jobQueue=new ProjectJobQueue({getConfig:()=>cfg,runners:{render:runPipeline,quality:runQualityChecks,repair:runRepairActions}});
+const codexAccount=new CodexAccountClient({bin:cfg.codexBin,cwd:path.resolve('.')});
 const json=(res,status,data)=>{res.writeHead(status,{'content-type':'application/json; charset=utf-8'});res.end(JSON.stringify(data,null,2));};
 const readBody=(req)=>new Promise((resolve,reject)=>{let b='';req.on('data',d=>b+=d);req.on('end',()=>{try{resolve(b?JSON.parse(b):{});}catch(e){reject(e);}});req.on('error',reject);});
 const serve=(res,file,type)=>{const stream=fs.createReadStream(file);stream.on('error',()=>{if(!res.headersSent)res.writeHead(404);res.end();});res.writeHead(200,{'content-type':type});stream.pipe(res);};
 const mimeFor=(file)=>({'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.svg':'image/svg+xml','.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.webp':'image/webp','.ico':'image/x-icon'}[path.extname(file).toLowerCase()]||'application/octet-stream');
-const safeConfig=()=>({mockMode:cfg.mockMode,renderer:cfg.renderer,rendererNames,brollProviderNames,uiLanguage:cfg.uiLanguage,contentLanguage:cfg.contentLanguage,textProvider:cfg.textProvider,imageProvider:cfg.imageProvider,voiceProvider:cfg.voiceProvider,textModel:cfg.openaiTextModel,imageModel:cfg.openaiImageModel,imageSize:cfg.openaiImageSize,ttsModel:cfg.openaiTtsModel,ttsVoice:cfg.openaiTtsVoice,vivibeVoiceId:cfg.vivibeVoiceId,whiteboardAutoInstall:cfg.whiteboardAutoInstall,hasOpenAIKey:!!cfg.openaiApiKey,hasVivibeKey:!!cfg.vivibeApiKey,hasPexelsKey:!!cfg.pexelsApiKey,hasPixabayKey:!!cfg.pixabayApiKey});
-const safeSettings=()=>({hasOpenAIKey:!!cfg.openaiApiKey,hasVivibeKey:!!cfg.vivibeApiKey,hasPexelsKey:!!cfg.pexelsApiKey,hasPixabayKey:!!cfg.pixabayApiKey,rendererNames,brollProviderNames,uiLanguage:cfg.uiLanguage,contentLanguage:cfg.contentLanguage,enableOpenAI:!cfg.mockMode&&[cfg.textProvider,cfg.imageProvider].every(value=>value==='openai'),voiceProvider:cfg.voiceProvider,renderer:cfg.renderer,baseUrl:cfg.openaiBaseUrl,textModel:cfg.openaiTextModel,imageModel:cfg.openaiImageModel,imageSize:cfg.openaiImageSize,imageQuality:cfg.openaiImageQuality,ttsModel:cfg.openaiTtsModel,ttsVoice:cfg.openaiTtsVoice,ttsInstructions:cfg.openaiTtsInstructions,vivibeBaseUrl:cfg.vivibeBaseUrl,vivibeVoiceId:cfg.vivibeVoiceId,vivibeSpeed:cfg.vivibeSpeed});
+const safeConfig=()=>({mockMode:cfg.mockMode,renderer:cfg.renderer,rendererNames,brollProviderNames,uiLanguage:cfg.uiLanguage,contentLanguage:cfg.contentLanguage,textProvider:cfg.textProvider,imageProvider:cfg.imageProvider,voiceProvider:cfg.voiceProvider,textModel:cfg.openaiTextModel,codexModel:cfg.codexModel,imageModel:cfg.openaiImageModel,imageSize:cfg.openaiImageSize,ttsModel:cfg.openaiTtsModel,ttsVoice:cfg.openaiTtsVoice,vivibeVoiceId:cfg.vivibeVoiceId,whiteboardAutoInstall:cfg.whiteboardAutoInstall,hasOpenAIKey:!!cfg.openaiApiKey,hasVivibeKey:!!cfg.vivibeApiKey,hasPexelsKey:!!cfg.pexelsApiKey,hasPixabayKey:!!cfg.pixabayApiKey});
+const safeSettings=()=>({hasOpenAIKey:!!cfg.openaiApiKey,hasVivibeKey:!!cfg.vivibeApiKey,hasPexelsKey:!!cfg.pexelsApiKey,hasPixabayKey:!!cfg.pixabayApiKey,rendererNames,brollProviderNames,uiLanguage:cfg.uiLanguage,contentLanguage:cfg.contentLanguage,textProvider:cfg.textProvider,enableOpenAI:!cfg.mockMode&&cfg.imageProvider==='openai',voiceProvider:cfg.voiceProvider,renderer:cfg.renderer,baseUrl:cfg.openaiBaseUrl,textModel:cfg.openaiTextModel,codexModel:cfg.codexModel,imageModel:cfg.openaiImageModel,imageSize:cfg.openaiImageSize,imageQuality:cfg.openaiImageQuality,ttsModel:cfg.openaiTtsModel,ttsVoice:cfg.openaiTtsVoice,ttsInstructions:cfg.openaiTtsInstructions,vivibeBaseUrl:cfg.vivibeBaseUrl,vivibeVoiceId:cfg.vivibeVoiceId,vivibeSpeed:cfg.vivibeSpeed});
 const isLoopback=(address='')=>address==='127.0.0.1'||address==='::1'||address.startsWith('::ffff:127.');
 const settingString=(body,key,{fallback='',max=500}={})=>typeof body[key]==='string'?body[key].replace(/[\r\n]+/g,' ').trim().slice(0,max):fallback;
 const projectBusy=(id)=>legacyRunning.has(id)||jobQueue.activeProjectIds().includes(id);
@@ -72,6 +73,7 @@ function settingsUpdates(body) {
   if(!['http:','https:'].includes(parsed.protocol)||parsed.username||parsed.password)throw new Error('OPENAI_BASE_URL must use HTTP(S) and cannot include credentials.');
   updates.OPENAI_BASE_URL=baseUrl.replace(/\/$/,'');
   updates.OPENAI_TEXT_MODEL=settingString(body,'textModel',{fallback:cfg.openaiTextModel,max:120});
+  updates.CODEX_MODEL=settingString(body,'codexModel',{fallback:cfg.codexModel,max:120});
   updates.OPENAI_IMAGE_MODEL=settingString(body,'imageModel',{fallback:cfg.openaiImageModel,max:120});
   updates.OPENAI_TTS_MODEL=settingString(body,'ttsModel',{fallback:cfg.openaiTtsModel,max:120});
   updates.OPENAI_TTS_VOICE=settingString(body,'ttsVoice',{fallback:cfg.openaiTtsVoice,max:120});
@@ -111,12 +113,14 @@ function settingsUpdates(body) {
   if(pixabayApiKey)updates.PIXABAY_API_KEY=pixabayApiKey;
   else if(body.clearPixabayApiKey===true)updates.PIXABAY_API_KEY='';
 
-  const enableOpenAI=typeof body.enableOpenAI==='boolean'?body.enableOpenAI:(!cfg.mockMode&&cfg.textProvider==='openai'&&cfg.imageProvider==='openai');
-  updates.TEXT_PROVIDER=enableOpenAI?'openai':'mock';
+  const textProvider=settingString(body,'textProvider',{fallback:cfg.textProvider,max:30});
+  if(!['openai','codex','mock'].includes(textProvider))throw new Error('Unsupported text provider.');
+  const enableOpenAI=typeof body.enableOpenAI==='boolean'?body.enableOpenAI:(!cfg.mockMode&&cfg.imageProvider==='openai');
+  updates.TEXT_PROVIDER=textProvider;
   updates.IMAGE_PROVIDER=enableOpenAI?'openai':'mock';
-  updates.MOCK_MODE=!enableOpenAI&&voiceProvider==='mock'?'1':'0';
+  updates.MOCK_MODE=textProvider==='mock'&&!enableOpenAI&&voiceProvider==='mock'?'1':'0';
   const willHaveKey=updates.OPENAI_API_KEY!==undefined?!!updates.OPENAI_API_KEY:!!cfg.openaiApiKey;
-  if((enableOpenAI||voiceProvider==='openai')&&!willHaveKey)throw new Error('Add an OpenAI API key before enabling an OpenAI provider.');
+  if((textProvider==='openai'||enableOpenAI||voiceProvider==='openai')&&!willHaveKey)throw new Error('Add an OpenAI API key before enabling an OpenAI provider.');
   const willHaveVivibeKey=updates.VIVIBE_API_KEY!==undefined?!!updates.VIVIBE_API_KEY:!!cfg.vivibeApiKey;
   if(voiceProvider==='vivibe'&&!willHaveVivibeKey)throw new Error('Add a Vivibe API key before selecting Vivibe voice.');
   if(voiceProvider==='vivibe'&&!updates.VIVIBE_VOICE_ID)throw new Error('Choose or enter a Vivibe Voice ID.');
@@ -127,12 +131,29 @@ const server=http.createServer(async (req,res)=>{
   try {
     const url=new URL(req.url,`http://${req.headers.host}`); const parts=url.pathname.split('/').filter(Boolean);
     if(req.method==='GET'&&url.pathname==='/api/health') return json(res,200,{ok:true,running:activeIds(),config:safeConfig()});
+    if(url.pathname.startsWith('/api/codex/')){
+      if(!isLoopback(req.socket.remoteAddress))return json(res,403,{error:'ChatGPT connection is only available from this machine.'});
+      if(req.method==='GET'&&url.pathname==='/api/codex/status'){
+        try{return json(res,200,safeCodexAccountStatus(await codexAccount.status()));}
+        catch(error){return json(res,200,safeCodexAccountStatus({available:false,error:error.message}));}
+      }
+      if(req.method==='POST'&&url.pathname==='/api/codex/login'){
+        const login=await codexAccount.login();
+        if(!login.authUrl)return json(res,500,{error:'Codex did not return a ChatGPT sign-in URL.'});
+        return json(res,200,login);
+      }
+      if(req.method==='POST'&&url.pathname==='/api/codex/logout')return json(res,200,safeCodexAccountStatus(await codexAccount.logout()));
+    }
     if(url.pathname==='/api/settings') {
       if(!isLoopback(req.socket.remoteAddress))return json(res,403,{error:'Settings are only available from this machine.'});
       if(req.method==='GET')return json(res,200,safeSettings());
       if(req.method==='PATCH'){
         if(activeIds().length)return json(res,409,{error:'Wait for the active job to finish before changing settings.'});
         const updates=settingsUpdates(await readBody(req));
+        if(updates.TEXT_PROVIDER==='codex'){
+          const status=await codexAccount.status();
+          if(!status.connected)return json(res,400,{error:'Connect a ChatGPT subscription before selecting the Codex text provider.'});
+        }
         updateEnvFile(envFile,updates);
         for(const [key,value] of Object.entries(updates))process.env[key]=value;
         cfg=config();
@@ -141,6 +162,12 @@ const server=http.createServer(async (req,res)=>{
     }
     if(req.method==='POST'&&url.pathname==='/api/settings/test') {
       if(!isLoopback(req.socket.remoteAddress))return json(res,403,{error:'Settings are only available from this machine.'});
+      if(cfg.textProvider==='codex'){
+        const status=await codexAccount.status({refresh:true});
+        if(!status.connected)return json(res,400,{error:'Connect a ChatGPT subscription before testing the Codex text provider.'});
+        return json(res,200,{ok:true,provider:'codex',model:cfg.codexModel||'account default',planType:status.planType});
+      }
+      if(cfg.textProvider==='mock'&&cfg.imageProvider==='mock'&&cfg.voiceProvider==='mock')return json(res,200,{ok:true,provider:'mock',model:'offline'});
       if(!cfg.openaiApiKey)return json(res,400,{error:'No OpenAI API key is configured.'});
       const endpoint=`${cfg.openaiBaseUrl}/models/${encodeURIComponent(cfg.openaiTextModel)}`;
       const response=await fetch(endpoint,{headers:{authorization:`Bearer ${cfg.openaiApiKey}`}});
@@ -190,9 +217,9 @@ const server=http.createServer(async (req,res)=>{
       if(!SUPPORTED_RENDERERS.has(renderer))return json(res,400,{error:'Unsupported video renderer.'});
       if(!SUPPORTED_LANGUAGES.has(language))return json(res,400,{error:'Unsupported project language.'});
       if(!SUPPORTED_VIDEO_FORMATS.has(format))return json(res,400,{error:'Unsupported video format.'});
-      if(sourceType==='topic'){topic=String(b.topic||b.sourceText||'').trim();if(!topic)throw new Error('topic is required');sourceText=cfg.mockMode||cfg.textProvider==='mock'?generateScriptMock(topic,{language}):await generateScriptOpenAI(topic,cfg,{minutes:Number(b.minutes||cfg.scriptMinutes),language});}
-      if(sourceType!=='srt'&&!cfg.mockMode&&cfg.textProvider==='openai'){
-        try{plannedScenes=await planNarrativeBeatsOpenAI(sourceText,{...cfg,contentLanguage:language},{language,format});}
+      if(sourceType==='topic'){topic=String(b.topic||b.sourceText||'').trim();if(!topic)throw new Error('topic is required');sourceText=await generateScriptText(topic,cfg,{minutes:Number(b.minutes||cfg.scriptMinutes),language});}
+      if(sourceType!=='srt'&&textProviderName(cfg)!=='mock'){
+        try{plannedScenes=await planNarrativeBeatsText(sourceText,{...cfg,contentLanguage:language},{language,format});}
         catch(error){console.warn(`Semantic planner fallback: ${error.message}`);}
       }
       return json(res,201,createProject({title:b.title||topic,sourceText,sourceType,topic,workflowMode,format,plannedScenes},{...cfg,renderer,contentLanguage:language}));
@@ -354,3 +381,5 @@ const server=http.createServer(async (req,res)=>{
   } catch(e) { json(res,500,{error:e.message,stack:process.env.NODE_ENV==='development'?e.stack:undefined}); }
 });
 server.listen(cfg.webPort,cfg.webHost,()=>{console.log(`Video Workflow Tool: http://${cfg.webHost}:${cfg.webPort}`);jobQueue.start();});
+const shutdown=()=>{codexAccount.close();server.close(()=>process.exit(0));setTimeout(()=>process.exit(0),2000).unref();};
+for(const signal of ['SIGINT','SIGTERM'])process.once(signal,shutdown);

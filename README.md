@@ -59,6 +59,8 @@ For each scene the UI can show the generated visual, narration audio, rendered c
 
 Provider settings let text/images stay on OpenAI while narration uses OpenAI Speech, Vivibe/LucyAI, or the offline mock provider. Vivibe keys remain server-side in `.env`; the UI can fetch active voices through `getUserVoices` and save the selected Voice ID.
 
+For a private, single-owner setup, the writing provider can instead use an existing ChatGPT subscription. In **Provider settings → Writing & direction AI**, choose **ChatGPT subscription** and click **Connect ChatGPT**. The browser handles the official sign-in flow while the local server runs Codex in the background. This covers topic-to-script generation, semantic scene planning, and Director proposals; image and speech generation remain separate providers.
+
 ## Zero-cost smoke test
 
 No API key is required to test orchestration:

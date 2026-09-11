@@ -32,6 +32,11 @@ test('requires OpenAI key for real OpenAI providers',()=>{
   assert.match(result.errors.join('\n'),/OPENAI_API_KEY/);
 });
 
+test('accepts a ChatGPT subscription text provider without an OpenAI API key',()=>{
+  const result=validateConfig({...base,textProvider:'codex',imageProvider:'mock',voiceProvider:'mock',openaiApiKey:'',codexTimeoutMs:300000});
+  assert.equal(result.ok,true);
+});
+
 test('rejects unsupported image sizes and invalid scene timing',()=>{
   const result=validateConfig({...base,openaiImageSize:'2048x1152',sceneMinSec:20,sceneTargetSec:12,sceneMaxSec:8});
   assert.equal(result.ok,false);

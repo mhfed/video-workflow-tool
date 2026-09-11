@@ -1,4 +1,5 @@
 import { planDirectionOpenAI } from './openai.mjs';
+import { planDirectionCodex } from './codex.mjs';
 
 const ACTIONS=new Set(['update_scene','split_scene','regenerate_visual','regenerate_voice','regenerate_clip','noop']);
 const STAGES=new Set(['script','voice','visual','clip','final']);
@@ -33,7 +34,7 @@ export async function planSceneDirection({instruction,scene,project,cfg}) {
   const input=clean(instruction,2000);
   if(!input)throw new Error('Director instruction is required.');
   const language=project.settings?.language||cfg.contentLanguage||'vi';
-  const proposal=cfg.mockMode||cfg.textProvider==='mock'?localProposal(input,scene,language):await planDirectionOpenAI({instruction:input,scene,project},cfg);
+  const provider=cfg.mockMode?'mock':cfg.textProvider;
+  const proposal=provider==='mock'?localProposal(input,scene,language):provider==='codex'?await planDirectionCodex({instruction:input,scene,project},cfg):await planDirectionOpenAI({instruction:input,scene,project},cfg);
   return normalizeDirectorProposal(proposal,language);
 }
-
