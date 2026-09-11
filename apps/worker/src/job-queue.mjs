@@ -48,6 +48,9 @@ export class ProjectJobQueue {
     }
     const active=this.controllers.get(jobId);
     if(job.status==='running'&&active){job.status='cancelling';job.message='Stopping provider and renderer';saveProject(project,cfg);active.controller.abort();return job;}
+    if(job.status==='running'&&!active){
+      job.status='cancelled';job.cancelledAt=nowIso();job.message='Cancelled after worker stopped';job.error=null;saveProject(project,cfg);return job;
+    }
     return job;
   }
 
