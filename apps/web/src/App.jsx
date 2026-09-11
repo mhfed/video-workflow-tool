@@ -369,8 +369,8 @@ export default function App(){
     ...(current&&commandSceneId?[['voice',AudioLines],['visual',ImageIcon],['clip',Film]].map(([stage,icon])=>({id:`regenerate-${stage}`,group:c.commandGroups.actions,label:`${c.regenerate} ${c[`${stage}Stage`].toLowerCase()}`,meta:c.commandCurrentScene,icon,run:()=>runStage(commandSceneId,stage)})) : []),
     ...(current&&commandSceneId?[{id:'quality-scene',group:c.commandGroups.actions,label:c.checkScene,meta:c.commandCurrentScene,icon:Gauge,run:()=>runQuality([commandSceneId])},{id:'focus-preview',group:c.commandGroups.actions,label:c.focusPreview,meta:c.commandCurrentScene,icon:Eye,shortcut:'F',run:()=>sendWorkspaceCommand('focus')},{id:'export-final',group:c.commandGroups.actions,label:c.exportFinal,meta:current.title,icon:Clapperboard,run:()=>run({stage:'final'})}] : []),
   ];
-  return <div className="app-shell">
-    <header className="app-header">
+  return <div className={`app-shell ${current?'editing':''}`}>
+    {!current&&<header className="app-header">
       <button className="brand" onClick={()=>setCurrent(null)}><BrandMark/><span><strong>CUTROOM</strong><small>{c.brandSubtitle}</small></span></button>
       <div className="header-rule"/>
       <div className="runtime-status">
@@ -379,7 +379,7 @@ export default function App(){
       </div>
       <button className="command-trigger" onClick={()=>setPaletteOpen(true)}><Command/><span>{c.quickActions}</span><kbd>⌘ K</kbd></button>
       <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onClick={()=>Promise.all([refreshProjects(),refreshHealth()])}><RefreshCw/></Button></TooltipTrigger><TooltipContent>{c.refreshWorkspace}</TooltipContent></Tooltip>
-    </header>
+    </header>}
 
     <div className={`workspace-grid ${current?'project-open':''}`}>
       <ApplicationNavigation current={current} projects={projects} drawer={navDrawer} onDrawer={setNavDrawer} onHome={()=>{setNavDrawer(null);setCurrent(null);}} onCreate={()=>{setNavDrawer(null);setDialogOpen(true);}} onSelect={load} onSettings={()=>{setNavDrawer(null);setSettingsOpen(true);}} health={health} c={c}/>
@@ -388,7 +388,7 @@ export default function App(){
         {error&&<div className="error-banner"><CircleDot/><span>{error}</span><button onClick={()=>setError('')}>{c.dismiss}</button></div>}
         {!current?<EmptyState onCreate={()=>setDialogOpen(true)} onDemo={createDemo} c={c}/>:<>
           {current.error&&<div className="project-error"><strong>{c.lastRunStopped}</strong><span>{current.error.message}</span></div>}
-          <DirectorWorkspace key={current.id} project={current} running={busy||running} keyboardLocked={paletteOpen||dialogOpen||settingsOpen||!!navDrawer} activeJob={activeJob} command={workspaceCommand} onContextChange={setWorkspaceContext} onCancelJob={cancelJob} onUndo={()=>historyAction('undo')} onRedo={()=>historyAction('redo')} onSelectTake={selectSceneTake} onRunQuality={runQuality} onGetRepairPlan={getRepairPlan} onApplyRepairs={applyRepairs} onSave={saveScene} onRunStage={runStage} onReview={reviewStage} onReviewBulk={reviewBulk} onRunAll={run} onLoadRoughCut={loadRoughCut} onUpdateProject={updateProject} onSceneAction={editSceneStructure} onInsertScene={insertNewScene} onDirectorPlan={planDirection} onSearchBroll={searchBroll} onSelectBroll={selectBroll} onUploadArtwork={uploadArtwork} onLoadDrawRevealPath={loadDrawRevealPath} onSaveDrawRevealPath={saveDrawRevealPath} brollProviders={{names:config?.brollProviderNames||['pexels','pixabay'],configured:{pexels:!!config?.hasPexelsKey,pixabay:!!config?.hasPixabayKey}}} rendererNames={config?.rendererNames||[]} c={c}/>
+          <DirectorWorkspace key={current.id} project={current} running={busy||running} keyboardLocked={paletteOpen||dialogOpen||settingsOpen||!!navDrawer} activeJob={activeJob} command={workspaceCommand} onContextChange={setWorkspaceContext} onCreate={()=>setDialogOpen(true)} onCancelJob={cancelJob} onUndo={()=>historyAction('undo')} onRedo={()=>historyAction('redo')} onSelectTake={selectSceneTake} onRunQuality={runQuality} onGetRepairPlan={getRepairPlan} onApplyRepairs={applyRepairs} onSave={saveScene} onRunStage={runStage} onReview={reviewStage} onReviewBulk={reviewBulk} onRunAll={run} onLoadRoughCut={loadRoughCut} onUpdateProject={updateProject} onSceneAction={editSceneStructure} onInsertScene={insertNewScene} onDirectorPlan={planDirection} onSearchBroll={searchBroll} onSelectBroll={selectBroll} onUploadArtwork={uploadArtwork} onLoadDrawRevealPath={loadDrawRevealPath} onSaveDrawRevealPath={saveDrawRevealPath} brollProviders={{names:config?.brollProviderNames||['pexels','pixabay'],configured:{pexels:!!config?.hasPexelsKey,pixabay:!!config?.hasPixabayKey}}} rendererNames={config?.rendererNames||[]} c={c}/>
         </>}
       </main>
     </div>

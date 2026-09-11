@@ -11,7 +11,7 @@ import '@/index.css';
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
-    <TooltipProvider delayDuration={300}>
+    <TooltipProvider delayDuration={120}>
       <App />
     </TooltipProvider>
   </StrictMode>
