@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { containVideoFilter } from '../packages/core/src/video-fit.mjs';
+import { containVideoFilter, coverVideoFilter } from '../packages/core/src/video-fit.mjs';
 
 test('video fit preserves the full image and pads to the target frame',()=>{
   const filter=containVideoFilter(1920,1080);
@@ -12,4 +12,12 @@ test('video fit preserves the full image and pads to the target frame',()=>{
 
 test('video fit rejects invalid target dimensions',()=>{
   assert.throws(()=>containVideoFilter(0,1080),/positive integers/);
+  assert.throws(()=>coverVideoFilter(1080,-1),/positive integers/);
+});
+
+test('cover fit fills and center-crops arbitrary source ratios',()=>{
+  const filter=coverVideoFilter(1080,1920);
+  assert.match(filter,/force_original_aspect_ratio=increase/);
+  assert.match(filter,/crop=1080:1920/);
+  assert.doesNotMatch(filter,/pad=/);
 });

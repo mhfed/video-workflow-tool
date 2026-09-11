@@ -10,7 +10,7 @@ Topic / Script / SRT
   -> scene plan
   -> per-scene voice
   -> per-scene illustration
-  -> simple or whiteboard renderer
+  -> simple, whiteboard, or cinematic-broll renderer
   -> synchronized scene clips
   -> final.mp4
 ```
@@ -48,7 +48,8 @@ The default real configuration uses:
 - OpenAI Speech API with `gpt-4o-mini-tts` for narration audio.
 - Optional Vivibe/LucyAI narration through a separate voice-provider adapter.
 - `geeklee/srt-whiteboard-animation` for whiteboard rendering. The engine is cloned/prepared automatically when `WHITEBOARD_AUTO_INSTALL=1`.
-- FFmpeg for per-scene muxing, 16:9 normalization, and final concatenation.
+- Local B-roll for cinematic vertical scenes; no media search or download service is required.
+- FFmpeg for per-scene composition/muxing, frame normalization, and final concatenation.
 
 For handoff, review [`docs/REVIEW_CHECKLIST.md`](docs/REVIEW_CHECKLIST.md). The default real workflow requires one secret: `OPENAI_API_KEY`. See [`docs/ENV.md`](docs/ENV.md) for all optional settings.
 
@@ -94,6 +95,35 @@ npm run cli -- create --title "Existing narration" --srt ./subtitles.srt
 
 Use `--language vi` or `--language en` to override `CONTENT_LANGUAGE` for one project.
 
+## Cinematic B-roll renderer
+
+Set the project or scene renderer to `cinematic-broll`, use the existing `short` format, and place each source clip inside that project's workspace directory. A scene requires a project-relative `broll` path; `brollStartMs` is optional. The clip is looped when it is shorter than the narration, trimmed to the scene duration, and center-cropped with cover behavior to the configured frame.
+
+```json
+{
+  "settings": {
+    "renderer": "cinematic-broll",
+    "format": "short",
+    "width": 1080,
+    "height": 1920,
+    "fps": 30,
+    "backgroundMusic": "assets/quiet-bed.mp3",
+    "cinematicBroll": { "musicVolumeDb": -20 }
+  },
+  "scenes": [{
+    "id": "scene-001",
+    "renderer": "cinematic-broll",
+    "text": "The narration also becomes the burned-in scene subtitle.",
+    "broll": "assets/city-at-dawn.mp4",
+    "brollStartMs": 1250
+  }]
+}
+```
+
+Subtitles are derived from `scene.text`, limited to roughly two balanced lines, and placed in the lower-middle phone-safe area. They are on by default; optional settings live under `settings.cinematicBroll` (or a scene-level `cinematicBroll` override): `subtitles`, `subtitleMaxWords`, `subtitleFontSize`, `subtitlePosition`, and `musicVolumeDb`. A scene-level `backgroundMusic` overrides the project setting. Asset paths must remain inside the project directory. See [`examples/cinematic-broll-project.json`](examples/cinematic-broll-project.json).
+
+This phase intentionally has no stock-media provider, web search/downloader, copyright detector, AI clip generation, media library, karaoke highlighting, or transition engine. Later providers only need to resolve a local file and write its relative path to `broll`.
+
 Operate/review:
 
 ```bash
@@ -108,6 +138,7 @@ npm run cli -- run --project <project-id> --force
 ```text
 workspace/<project-id>/
 ├── project.json
+├── assets/               # optional local B-roll and music inputs
 ├── topic.txt             # topic projects
 ├── script.md | source.srt
 ├── scenes/

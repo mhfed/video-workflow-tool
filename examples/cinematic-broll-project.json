@@ -1,0 +1,35 @@
+{
+  "version": 6,
+  "id": "cinematic-broll-example",
+  "title": "Local cinematic short",
+  "settings": {
+    "renderer": "cinematic-broll",
+    "format": "short",
+    "aspectRatio": "9:16",
+    "width": 1080,
+    "height": 1920,
+    "fps": 30,
+    "backgroundMusic": "assets/quiet-bed.mp3",
+    "cinematicBroll": {
+      "musicVolumeDb": -20,
+      "subtitles": true,
+      "subtitleMaxWords": 14,
+      "subtitlePosition": 0.68
+    }
+  },
+  "scenes": [
+    {
+      "id": "scene-001",
+      "index": 0,
+      "renderer": "cinematic-broll",
+      "text": "The smallest decisions can quietly change the direction of your life.",
+      "broll": "assets/city-at-dawn.mp4",
+      "brollStartMs": 1250,
+      "startMs": 0,
+      "endMs": 5000,
+      "durationMs": 5000,
+      "cache": {},
+      "artifacts": {}
+    }
+  ]
+}

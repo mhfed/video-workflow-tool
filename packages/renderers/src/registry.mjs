@@ -1,5 +1,6 @@
 import { renderSimpleScene } from './simple.mjs';
 import { renderWhiteboardScene, whiteboardHandSignature } from './whiteboard.mjs';
+import { cinematicClipInputs, cinematicRenderInputs, mixCinematicBrollAudio, prepareCinematicVisual, renderCinematicBrollScene } from './cinematic-broll.mjs';
 
 const adapters=new Map([
   ['simple',Object.freeze({
@@ -11,6 +12,15 @@ const adapters=new Map([
     name:'whiteboard',
     render:renderWhiteboardScene,
     cacheSignature:whiteboardHandSignature
+  })],
+  ['cinematic-broll',Object.freeze({
+    name:'cinematic-broll',
+    render:renderCinematicBrollScene,
+    cacheSignature:()=>null,
+    prepareVisual:prepareCinematicVisual,
+    renderCacheInputs:cinematicRenderInputs,
+    clipCacheInputs:cinematicClipInputs,
+    mixAudio:mixCinematicBrollAudio
   })]
 ]);
 

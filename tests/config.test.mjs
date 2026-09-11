@@ -16,6 +16,11 @@ test('accepts default real workflow configuration',()=>{
   assert.equal(result.errors.length,0);
 });
 
+test('accepts the cinematic B-roll renderer',()=>{
+  const result=validateConfig({...base,renderer:'cinematic-broll'});
+  assert.equal(result.ok,true);
+});
+
 test('requires OpenAI key for real OpenAI providers',()=>{
   const result=validateConfig({...base,openaiApiKey:''});
   assert.equal(result.ok,false);

@@ -1,7 +1,7 @@
 import { SUPPORTED_LANGUAGES } from './languages.mjs';
 
 export const SUPPORTED_IMAGE_SIZES=new Set(['1024x1024','1024x1536','1536x1024','auto']);
-export const SUPPORTED_RENDERERS=new Set(['simple','whiteboard']);
+export const SUPPORTED_RENDERERS=new Set(['simple','whiteboard','cinematic-broll']);
 const TEXT_IMAGE_PROVIDERS=new Set(['openai','mock']);
 const VOICE_PROVIDERS=new Set(['openai','vivibe','mock']);
 

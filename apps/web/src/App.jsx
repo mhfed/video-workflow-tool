@@ -51,6 +51,11 @@ const api=async(url,options={})=>{
 };
 
 const rendererOptions=(names,c)=>names.map((name)=><SelectItem key={name} value={name}>{c[name]||name}</SelectItem>);
+const rendererSummary=(name)=>name==='whiteboard'
+  ? {title:'Draw-on animation',body:'Uses the external whiteboard engine and generated scene illustration.'}
+  :name==='cinematic-broll'
+    ? {title:'Local cinematic footage',body:'Uses project-local B-roll with burned subtitles and optional background music.'}
+    : {title:'Fast image motion',body:'Uses FFmpeg for a subtle zoom and remains the offline fallback.'};
 
 function BrandMark(){
   return <div className="brand-mark" aria-hidden="true"><span/><span/><span/></div>;
@@ -186,7 +191,7 @@ function SettingsDialog({open,onOpenChange,onSaved,c}){
             <div className="settings-section-title"><Clapperboard/><span><strong>{c.defaultRenderer}</strong><small>{c.appliedNew}</small></span></div>
             <div className="renderer-setting">
               <label>{c.renderStyle}<Select value={form.renderer} onValueChange={(value)=>update('renderer',value)}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent>{rendererOptions(form.rendererNames||[],c)}</SelectContent></Select></label>
-              <p><strong>{form.renderer==='whiteboard'?'Draw-on animation':'Fast image motion'}</strong><span>{form.renderer==='whiteboard'?'Uses the external whiteboard engine and generated scene illustration.':'Uses FFmpeg for a subtle zoom and remains the offline fallback.'}</span></p>
+              <p><strong>{rendererSummary(form.renderer).title}</strong><span>{rendererSummary(form.renderer).body}</span></p>
             </div>
           </div>
           <Separator/>

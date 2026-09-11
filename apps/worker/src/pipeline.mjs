@@ -38,6 +38,17 @@ async function ensureVoice(scene, project, cfg, force=false,signal=null) {
 
 async function ensureImage(scene, project, cfg, force=false,signal=null) {
   const dir=ensureDir(sceneDir(cfg,project.id,scene.id));
+  const renderer=resolveRendererName(scene,project,cfg);
+  const adapter=getRenderer(renderer);
+  if(adapter.prepareVisual){
+    const prepared=await adapter.prepareVisual({scene,project,projectRoot:projectDir(cfg,project.id),cfg,signal});
+    const key=prepared.cacheKey;
+    if(!force&&scene.cache.image===key)return prepared.file;
+    scene.cache.image=key;
+    recordTake(scene,'visual',{cacheKey:key,provider:prepared.provider,label:prepared.label,meta:{source:scene.broll}});
+    scene.status='visual-ready';markArtifactForReview(scene,'visual');saveProject(project,cfg);
+    return prepared.file;
+  }
   const provider=effectiveProvider(cfg.imageProvider,cfg);
   const key=sha256({prompt:scene.visualPrompt,provider,model:provider==='openai'?cfg.openaiImageModel:null,size:provider==='openai'?cfg.openaiImageSize:null,quality:provider==='openai'?cfg.openaiImageQuality:null});
   const current=artifactFile(scene,project,cfg,'visual');
@@ -53,24 +64,32 @@ async function ensureVideo(scene, project, cfg, imageFile, force=false,signal=nu
   const dir=ensureDir(sceneDir(cfg,project.id,scene.id));
   const renderer=resolveRendererName(scene,project,cfg);
   const adapter=getRenderer(renderer);
-  const key=sha256({renderer,renderContract:RENDER_CONTRACT,durationMs:scene.durationMs,image:scene.cache.image,text:scene.text,width:cfg.width,height:cfg.height,fps:cfg.fps,hand:adapter.cacheSignature(cfg)});
+  const keyParts={renderer,renderContract:RENDER_CONTRACT,durationMs:scene.durationMs,image:scene.cache.image,text:scene.text,width:cfg.width,height:cfg.height,fps:cfg.fps,hand:adapter.cacheSignature(cfg)};
+  if(adapter.renderCacheInputs)keyParts.rendererInputs=await adapter.renderCacheInputs({scene,project,projectRoot:projectDir(cfg,project.id),cfg,signal});
+  const key=sha256(keyParts);
   const current=artifactFile(scene,project,cfg,'video');
   if (!force && scene.cache.video===key && fileExists(current)) return current;
   const target=createTakeTarget(dir,'video','mp4',key),file=target.file;
   log('render:start',{scene:scene.id,renderer});
-  const args={scene,imageFile,outputFile:file,durationSec:scene.durationMs/1000,cfg,signal};
+  const args={scene,project,projectRoot:projectDir(cfg,project.id),imageFile,outputFile:file,durationSec:scene.durationMs/1000,cfg,signal};
   await adapter.render(args);
   scene.cache.video=key; recordTake(scene,'video',{id:target.id,path:path.relative(projectDir(cfg,project.id),file),cacheKey:key,provider:renderer}); scene.status='rendered'; saveProject(project,cfg); log('render:done',{scene:scene.id}); return file;
 }
 
 async function ensureClip(scene, project, cfg, videoFile, voiceFile, force=false,signal=null) {
   const dir=ensureDir(sceneDir(cfg,project.id,scene.id));
-  const key=sha256({video:scene.cache.video,voice:scene.cache.voice,fit:RENDER_CONTRACT,width:cfg.width,height:cfg.height,fps:cfg.fps});
+  const renderer=resolveRendererName(scene,project,cfg),adapter=getRenderer(renderer);
+  const keyParts={video:scene.cache.video,voice:scene.cache.voice,fit:RENDER_CONTRACT,width:cfg.width,height:cfg.height,fps:cfg.fps};
+  if(adapter.clipCacheInputs)keyParts.rendererInputs=await adapter.clipCacheInputs({scene,project,projectRoot:projectDir(cfg,project.id),cfg,signal});
+  const key=sha256(keyParts);
   const current=artifactFile(scene,project,cfg,'clip');
   if (!force && scene.cache.clip===key && fileExists(current)) return current;
   const target=createTakeTarget(dir,'clip','mp4',key),file=target.file;
-  const vf=containVideoFilter(cfg.width,cfg.height);
-  await run(cfg.ffmpegBin,['-y','-i',videoFile,'-i',voiceFile,'-map','0:v:0','-map','1:a:0','-vf',vf,'-r',String(cfg.fps),'-c:v','libx264','-preset','medium','-crf','18','-c:a','aac','-b:a','192k','-shortest','-movflags','+faststart',file],{capture:true,signal});
+  if(adapter.mixAudio)await adapter.mixAudio({scene,project,projectRoot:projectDir(cfg,project.id),videoFile,voiceFile,outputFile:file,durationSec:scene.durationMs/1000,cfg,signal});
+  else {
+    const vf=containVideoFilter(cfg.width,cfg.height);
+    await run(cfg.ffmpegBin,['-y','-i',videoFile,'-i',voiceFile,'-map','0:v:0','-map','1:a:0','-vf',vf,'-r',String(cfg.fps),'-c:v','libx264','-preset','medium','-crf','18','-c:a','aac','-b:a','192k','-shortest','-movflags','+faststart',file],{capture:true,signal});
+  }
   scene.cache.clip=key; recordTake(scene,'clip',{id:target.id,path:path.relative(projectDir(cfg,project.id),file),cacheKey:key,provider:'ffmpeg'}); scene.status='ready'; markArtifactForReview(scene,'clip'); saveProject(project,cfg); return file;
 }
 

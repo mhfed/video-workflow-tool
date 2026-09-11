@@ -50,4 +50,7 @@ const vi={
   status:{draft:'Nháp',planned:'Đã lên kế hoạch','voice-ready':'Đã có giọng đọc','visual-ready':'Đã có hình',rendered:'Đã render',ready:'Sẵn sàng',running:'Đang render',complete:'Hoàn tất',error:'Cần xử lý'}
 };
 
+en['cinematic-broll']='Cinematic B-roll';
+vi['cinematic-broll']='B-roll điện ảnh';
+
 export function copyFor(language){return language==='en'?en:vi;}
