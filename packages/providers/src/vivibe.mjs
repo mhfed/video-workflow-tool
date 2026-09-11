@@ -9,6 +9,12 @@ function vivibeConfig(cfg) {
   return cfg;
 }
 
+const creditErrorPattern=/\b(credit|credits|quota|balance|insufficient|payment|funds|billing|usage limit|limit reached)\b/i;
+const detailText=(value)=>typeof value==='string'?value:JSON.stringify(value||{});
+const vivibeError=(method,status,detail)=>creditErrorPattern.test(detailText(detail))
+  ? new Error(`Vivibe ${method} báo tài khoản đã hết credit hoặc chạm hạn mức sử dụng. Hãy kiểm tra số dư Vivibe rồi thử lại.`)
+  : new Error(`Vivibe ${method} failed${status?` (${status})`:''}: ${detailText(detail).slice(0,1200)}`);
+
 async function vivibeRpc(cfg, method, input, fetchImpl=fetch,signal=null) {
   if (!cfg.vivibeApiKey) throw new Error('VIVIBE_API_KEY is required for Vivibe API requests');
   const response=await fetchImpl(cfg.vivibeBaseUrl,{
@@ -19,8 +25,8 @@ async function vivibeRpc(cfg, method, input, fetchImpl=fetch,signal=null) {
   const body=await response.text();
   let data;
   try { data=body?JSON.parse(body):{}; } catch { throw new Error(`Vivibe ${method} returned invalid JSON (${response.status})`); }
-  if(!response.ok)throw new Error(`Vivibe ${method} failed (${response.status}): ${body.slice(0,1200)}`);
-  if(data?.error)throw new Error(`Vivibe ${method} failed: ${data.error.message||JSON.stringify(data.error)}`);
+  if(!response.ok)throw vivibeError(method,response.status,body);
+  if(data?.error)throw vivibeError(method,null,data.error);
   if(!data?.result)throw new Error(`Vivibe ${method} returned no result`);
   return data.result;
 }
@@ -45,12 +51,12 @@ async function completedAudioUrl(text,cfg,{fetchImpl=fetch,sleepImpl=sleep,signa
       if(!['http:','https:'].includes(url.protocol)||url.username||url.password)throw new Error('Vivibe returned an unsafe audio URL');
       return url.href;
     }
-    if(status.state==='failed')throw new Error(`Vivibe voice export failed${status.message?`: ${status.message}`:''}`);
+    if(status.state==='failed')throw vivibeError('voice export',null,status.message||status.error||status);
     // Vivibe reports `waiting` while an export is queued before processing starts.
     if(!['waiting','pending','processing','active'].includes(status.state))throw new Error(`Vivibe returned an unknown export state: ${status.state||'missing'}`);
     await sleepImpl(cfg.vivibePollIntervalMs);
   }
-  throw new Error(`Vivibe voice export timed out after ${cfg.vivibeTimeoutMs}ms`);
+  throw new Error(`Vivibe voice export vẫn đang chờ sau ${cfg.vivibeTimeoutMs}ms. Hãy kiểm tra trạng thái job và số dư credit Vivibe rồi thử lại.`);
 }
 
 export async function synthesizeSpeechVivibe(text,outputFile,cfg,{fetchImpl=fetch,sleepImpl=sleep,runImpl=run,signal=null}={}) {

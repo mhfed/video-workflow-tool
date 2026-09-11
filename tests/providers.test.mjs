@@ -110,6 +110,14 @@ test('Vivibe lists active user voices through JSON-RPC',async()=>{
   assert.equal(result.items[0].id,'voice-1');
 });
 
+test('Vivibe surfaces an explicit credit error instead of a raw provider payload',async()=>{
+  const fetchImpl=async()=>new Response(JSON.stringify({error:{code:'INSUFFICIENT_CREDITS',message:'No credits remaining'}}),{status:402});
+  await assert.rejects(
+    listVivibeVoices({vivibeApiKey:'vivibe-key',vivibeBaseUrl:'https://api.lucylab.io/json-rpc'},{fetchImpl}),
+    /hết credit hoặc chạm hạn mức/i
+  );
+});
+
 test('Vivibe creates, polls, downloads, and normalizes narration audio',async()=>{
   const requests=[];
   let statusCalls=0;
