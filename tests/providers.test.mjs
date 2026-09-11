@@ -118,7 +118,7 @@ test('Vivibe creates, polls, downloads, and normalizes narration audio',async()=
     const body=JSON.parse(init.body);requests.push(body);
     if(body.method==='ttsLongText')return new Response(JSON.stringify({result:{projectExportId:'export-1'}}),{status:200});
     statusCalls++;
-    const statuses=[{state:'active'},{state:'processing'},{state:'completed',url:'https://cdn.example.test/voice.wav'}];
+    const statuses=[{state:'waiting'},{state:'processing'},{state:'completed',url:'https://cdn.example.test/voice.wav'}];
     return new Response(JSON.stringify({result:statuses[statusCalls-1]}),{status:200});
   };
   const waits=[];

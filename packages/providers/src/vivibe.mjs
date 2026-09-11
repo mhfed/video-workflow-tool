@@ -46,7 +46,8 @@ async function completedAudioUrl(text,cfg,{fetchImpl=fetch,sleepImpl=sleep,signa
       return url.href;
     }
     if(status.state==='failed')throw new Error(`Vivibe voice export failed${status.message?`: ${status.message}`:''}`);
-    if(!['pending','processing','active'].includes(status.state))throw new Error(`Vivibe returned an unknown export state: ${status.state||'missing'}`);
+    // Vivibe reports `waiting` while an export is queued before processing starts.
+    if(!['waiting','pending','processing','active'].includes(status.state))throw new Error(`Vivibe returned an unknown export state: ${status.state||'missing'}`);
     await sleepImpl(cfg.vivibePollIntervalMs);
   }
   throw new Error(`Vivibe voice export timed out after ${cfg.vivibeTimeoutMs}ms`);
