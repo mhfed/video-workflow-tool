@@ -65,20 +65,21 @@ SCENE_MAX_SEC=18
 - `CONTENT_LANGUAGE=vi|en`: language for new projects and topic-to-script generation; each project keeps its own value in `project.json`.
 - `VIDEO_RENDERER=simple|whiteboard|cinematic-broll|draw-reveal`: Draw Reveal progressively exposes a project-local color illustration under a moving hand.
 - `TEXT_PROVIDER`: `openai`, `codex`, or `mock`. `codex` uses the owner's locally authenticated ChatGPT subscription for scripts, semantic scene plans, and Director proposals.
-- `IMAGE_PROVIDER`: `openai` or `mock`.
+- `IMAGE_PROVIDER`: `openai`, `codex`, or `mock`. `codex` invokes the built-in `$imagegen` skill through the owner's ChatGPT session and does not use `OPENAI_API_KEY`.
 - `VOICE_PROVIDER`: `openai`, `vivibe`, or `mock`. Voice selection is independent from the text/image source.
 - `WHITEBOARD_AUTO_INSTALL=1`: clones the upstream whiteboard engine when absent and prepares its isolated Python environment when needed.
 - `VIDEO_WIDTH`, `VIDEO_HEIGHT`, `VIDEO_FPS`: final clip normalization.
 
-## ChatGPT subscription text provider
+## ChatGPT subscription text and image providers
 
-The easiest setup is entirely in the web UI: open **Provider settings → Writing & direction AI**, choose **ChatGPT subscription**, and click **Connect ChatGPT**. CUTROOM starts the official Codex login flow and updates the account status automatically.
+The easiest setup is entirely in the web UI: open **Provider settings**, choose **ChatGPT subscription** for writing and/or **ChatGPT subscription · ImageGen** for images, and click **Connect ChatGPT**. CUTROOM starts the official Codex login flow and updates the account status automatically.
 
 Manual environment equivalents are:
 
 ```bash
 MOCK_MODE=0
 TEXT_PROVIDER=codex
+IMAGE_PROVIDER=codex
 CODEX_BIN=codex
 CODEX_MODEL=
 CODEX_TIMEOUT_MS=300000

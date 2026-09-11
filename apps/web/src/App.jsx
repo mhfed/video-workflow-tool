@@ -37,7 +37,6 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
-import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { copyFor, UI_LANGUAGES } from './i18n';
@@ -153,7 +152,7 @@ function SettingsDialog({open,onOpenChange,onSaved,c}){
       await onSaved();
       if(testAfter){
         const result=await api('/api/settings/test',{method:'POST',body:'{}'});
-        setMessage({type:'success',text:result.provider==='codex'?c.codexTestSuccess:`Connected successfully with ${result.model}.`});
+        setMessage({type:'success',text:result.provider==='codex'||result.codex?c.codexTestSuccess:`Connected successfully with ${result.model}.`});
       }else setMessage({type:'success',text:c.settingsSaved});
     }catch(cause){setMessage({type:'error',text:cause.message});}
     finally{setSaving(false);}
@@ -187,16 +186,18 @@ function SettingsDialog({open,onOpenChange,onSaved,c}){
     finally{setVoiceLoading(false);}
   };
 
+  const codexSelected=!!form&&(form.textProvider==='codex'||form.imageProvider==='codex');
+  const openAISelected=!!form&&[form.textProvider,form.imageProvider,form.voiceProvider].includes('openai');
+
   return <Dialog open={open} onOpenChange={onOpenChange}>
     <DialogContent className="settings-dialog">
       {!form?<div className="settings-loading"><DialogTitle className="sr-only">{c.providerSettings}</DialogTitle><DialogDescription className="sr-only">{c.loadingConfig}</DialogDescription><LoaderCircle className="spin"/><span>{c.loadingConfig}</span></div>:<div className="settings-layout">
         <aside className="settings-aside">
           <div><div className="dialog-index">{c.settingsIndex}</div><DialogTitle>{c.providerSettings}</DialogTitle><DialogDescription>{c.providerDescription}</DialogDescription></div>
           <div className="security-card"><ShieldCheck/><div><strong>{c.serverSecrets}</strong><p>{c.serverSecretsBody}</p></div></div>
-          <div className="connection-state"><span className={`status-light ${form.textProvider==='codex'?codexAuth.connected:form.textProvider==='mock'||form.hasOpenAIKey&&!form.clearApiKey?'online':''}`}/><div><strong>{form.textProvider==='codex'?(codexAuth.connected?`ChatGPT ${codexAuth.planType||''}`.trim():c.codexNotConnected):form.textProvider==='openai'?(form.hasOpenAIKey?'OpenAI API':'No OpenAI key'):c.mockText}</strong><small>{c.textProviderLabel}</small></div></div>
-          <div className="connection-state"><span className={`status-light ${form.enableOpenAI&&form.hasOpenAIKey&&!form.clearApiKey||!form.enableOpenAI?'online':''}`}/><div><strong>{form.enableOpenAI?'OpenAI Image API':c.mockImages}</strong><small>{c.imageProviderLabel}</small></div></div>
+          <div className="connection-state"><span className={`status-light ${(form.textProvider==='codex'?codexAuth.connected:form.textProvider==='mock'||form.hasOpenAIKey&&!form.clearApiKey)?'online':''}`}/><div><strong>{form.textProvider==='codex'?(codexAuth.connected?`ChatGPT ${codexAuth.planType||''}`.trim():c.codexNotConnected):form.textProvider==='openai'?(form.hasOpenAIKey?'OpenAI API':'No OpenAI key'):c.mockText}</strong><small>{c.textProviderLabel}</small></div></div>
+          <div className="connection-state"><span className={`status-light ${(form.imageProvider==='codex'?codexAuth.connected:form.imageProvider==='mock'||form.hasOpenAIKey&&!form.clearApiKey)?'online':''}`}/><div><strong>{form.imageProvider==='codex'?(codexAuth.connected?'ChatGPT ImageGen':c.codexNotConnected):form.imageProvider==='openai'?'OpenAI Image API':c.mockImages}</strong><small>{c.imageProviderLabel}</small></div></div>
           <div className="connection-state"><span className={`status-light ${form.voiceProvider==='mock'||form.voiceProvider==='openai'&&form.hasOpenAIKey||form.voiceProvider==='vivibe'&&form.hasVivibeKey?'online':''}`}/><div><strong>{form.voiceProvider==='vivibe'?'Vivibe / LucyAI':form.voiceProvider==='openai'?'OpenAI voice':'Mock voice'}</strong><small>Active voice source</small></div></div>
-          <div className="settings-mode"><div><strong>{c.useOpenAIImages}</strong><span>{c.imageProviderHint}</span></div><Switch checked={form.enableOpenAI} onCheckedChange={(value)=>update('enableOpenAI',value)}/></div>
           <div className="settings-aside-foot"><KeyRound/><span>{c.independentVoice}</span></div>
         </aside>
 
@@ -216,7 +217,15 @@ function SettingsDialog({open,onOpenChange,onSaved,c}){
               <label>{c.provider}<Select value={form.textProvider} onValueChange={(value)=>update('textProvider',value)}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent><SelectItem value="codex">ChatGPT subscription</SelectItem><SelectItem value="openai">OpenAI API</SelectItem><SelectItem value="mock">Mock · offline</SelectItem></SelectContent></Select></label>
               <p>{form.textProvider==='codex'?c.codexProviderBody:form.textProvider==='openai'?c.openaiTextProviderBody:c.mockTextProviderBody}</p>
             </div>
-            {form.textProvider==='codex'&&<div className={`codex-connect-card ${codexAuth.connected?'connected':''}`}>
+          </div>
+          <Separator/>
+          <div className="settings-section">
+            <div className="settings-section-title"><ImageIcon/><span><strong>{c.imageProviderLabel}</strong><small>{c.imageProviderHint}</small></span></div>
+            <div className="text-provider-row">
+              <label>{c.provider}<Select value={form.imageProvider} onValueChange={(value)=>update('imageProvider',value)}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent><SelectItem value="codex">ChatGPT subscription · ImageGen</SelectItem><SelectItem value="openai">OpenAI Image API</SelectItem><SelectItem value="mock">Mock · offline</SelectItem></SelectContent></Select></label>
+              <p>{form.imageProvider==='codex'?c.codexImageProviderBody:form.imageProvider==='openai'?c.openaiImageProviderBody:c.mockImageProviderBody}</p>
+            </div>
+            {codexSelected&&<div className={`codex-connect-card ${codexAuth.connected?'connected':''}`}>
               <div className="codex-connect-status"><span className="codex-mark">GPT</span><div><strong>{codexAuth.connected?c.codexConnected:c.codexNotConnected}</strong><small>{codexAuth.connected?[codexAuth.email,codexAuth.planType&&String(codexAuth.planType).toUpperCase()].filter(Boolean).join(' · '):codexAuth.error||c.codexConnectHint}</small></div></div>
               <div className="codex-connect-actions"><label>{c.codexModel}<Input value={form.codexModel} onChange={(event)=>update('codexModel',event.target.value)} placeholder={c.codexModelPlaceholder}/></label>{codexAuth.connected?<Button type="button" variant="outline" disabled={authLoading} onClick={disconnectCodex}>{authLoading?<LoaderCircle className="spin"/>:<LogOut/>}{c.disconnect}</Button>:<Button type="button" disabled={authLoading||codexAuth.available===false} onClick={connectCodex}>{authLoading?<LoaderCircle className="spin"/>:<LogIn/>}{c.connectChatGPT}</Button>}</div>
             </div>}
@@ -251,9 +260,10 @@ function SettingsDialog({open,onOpenChange,onSaved,c}){
             <div className="settings-section-title"><BrainCircuit/><span><strong>{c.generationStack}</strong><small>{c.modelsUsed}</small></span></div>
             <div className="settings-fields two-columns">
               {form.textProvider==='openai'&&<label>{c.scriptModel}<Input value={form.textModel} onChange={(event)=>update('textModel',event.target.value)} /></label>}
-              <label>{c.imageModel}<Input value={form.imageModel} onChange={(event)=>update('imageModel',event.target.value)} /></label>
-              <label>{c.imageSize}<Select value={form.imageSize} onValueChange={(value)=>update('imageSize',value)}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent><SelectItem value="1536x1024">1536 × 1024</SelectItem><SelectItem value="1024x1024">1024 × 1024</SelectItem><SelectItem value="1024x1536">1024 × 1536</SelectItem><SelectItem value="auto">Auto</SelectItem></SelectContent></Select></label>
-              <label>{c.imageQuality}<Select value={form.imageQuality} onValueChange={(value)=>update('imageQuality',value)}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent><SelectItem value="low">Low</SelectItem><SelectItem value="medium">Medium</SelectItem><SelectItem value="high">High</SelectItem><SelectItem value="auto">Auto</SelectItem></SelectContent></Select></label>
+              {form.imageProvider==='openai'&&<label>{c.imageModel}<Input value={form.imageModel} onChange={(event)=>update('imageModel',event.target.value)} /></label>}
+              {form.imageProvider==='codex'&&<label>{c.imageModel}<Input value="gpt-image-2 · ImageGen" disabled /></label>}
+              {form.imageProvider!=='mock'&&<label>{c.imageSize}<Select value={form.imageSize} onValueChange={(value)=>update('imageSize',value)}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent><SelectItem value="1536x1024">1536 × 1024</SelectItem><SelectItem value="1024x1024">1024 × 1024</SelectItem><SelectItem value="1024x1536">1024 × 1536</SelectItem><SelectItem value="auto">Auto</SelectItem></SelectContent></Select></label>}
+              {form.imageProvider!=='mock'&&<label>{c.imageQuality}<Select value={form.imageQuality} onValueChange={(value)=>update('imageQuality',value)}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent><SelectItem value="low">Low</SelectItem><SelectItem value="medium">Medium</SelectItem><SelectItem value="high">High</SelectItem><SelectItem value="auto">Auto</SelectItem></SelectContent></Select></label>}
             </div>
           </div>
           <Separator/>
@@ -281,7 +291,7 @@ function SettingsDialog({open,onOpenChange,onSaved,c}){
           {message&&<div className={`settings-message ${message.type}`}>
             {message.type==='success'?<CheckCircle2/>:<CircleDot/>}<span>{message.text}</span>
           </div>}
-          <DialogFooter className="settings-footer"><Button type="button" variant="ghost" onClick={()=>onOpenChange(false)}>{c.close}</Button><Button type="button" variant="outline" disabled={saving||(form.textProvider==='codex'?!codexAuth.connected:form.textProvider==='openai'&&(form.clearApiKey||(!form.hasOpenAIKey&&!form.apiKey)))} onClick={()=>persist(true)}>{saving?<LoaderCircle className="spin"/>:<Activity/>}{c.saveTest}</Button><Button type="button" disabled={saving} onClick={()=>persist(false)}>{saving?<LoaderCircle className="spin"/>:<Save/>}{c.saveSettings}</Button></DialogFooter>
+          <DialogFooter className="settings-footer"><Button type="button" variant="ghost" onClick={()=>onOpenChange(false)}>{c.close}</Button><Button type="button" variant="outline" disabled={saving||codexSelected&&!codexAuth.connected||openAISelected&&(form.clearApiKey||(!form.hasOpenAIKey&&!form.apiKey))} onClick={()=>persist(true)}>{saving?<LoaderCircle className="spin"/>:<Activity/>}{c.saveTest}</Button><Button type="button" disabled={saving} onClick={()=>persist(false)}>{saving?<LoaderCircle className="spin"/>:<Save/>}{c.saveSettings}</Button></DialogFooter>
         </div>
       </div>}
     </DialogContent>

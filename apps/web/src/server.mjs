@@ -42,7 +42,7 @@ const readBody=(req)=>new Promise((resolve,reject)=>{let b='';req.on('data',d=>b
 const serve=(res,file,type)=>{const stream=fs.createReadStream(file);stream.on('error',()=>{if(!res.headersSent)res.writeHead(404);res.end();});res.writeHead(200,{'content-type':type});stream.pipe(res);};
 const mimeFor=(file)=>({'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.svg':'image/svg+xml','.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.webp':'image/webp','.ico':'image/x-icon'}[path.extname(file).toLowerCase()]||'application/octet-stream');
 const safeConfig=()=>({mockMode:cfg.mockMode,renderer:cfg.renderer,rendererNames,brollProviderNames,uiLanguage:cfg.uiLanguage,contentLanguage:cfg.contentLanguage,textProvider:cfg.textProvider,imageProvider:cfg.imageProvider,voiceProvider:cfg.voiceProvider,textModel:cfg.openaiTextModel,codexModel:cfg.codexModel,imageModel:cfg.openaiImageModel,imageSize:cfg.openaiImageSize,ttsModel:cfg.openaiTtsModel,ttsVoice:cfg.openaiTtsVoice,vivibeVoiceId:cfg.vivibeVoiceId,whiteboardAutoInstall:cfg.whiteboardAutoInstall,hasOpenAIKey:!!cfg.openaiApiKey,hasVivibeKey:!!cfg.vivibeApiKey,hasPexelsKey:!!cfg.pexelsApiKey,hasPixabayKey:!!cfg.pixabayApiKey});
-const safeSettings=()=>({hasOpenAIKey:!!cfg.openaiApiKey,hasVivibeKey:!!cfg.vivibeApiKey,hasPexelsKey:!!cfg.pexelsApiKey,hasPixabayKey:!!cfg.pixabayApiKey,rendererNames,brollProviderNames,uiLanguage:cfg.uiLanguage,contentLanguage:cfg.contentLanguage,textProvider:cfg.textProvider,enableOpenAI:!cfg.mockMode&&cfg.imageProvider==='openai',voiceProvider:cfg.voiceProvider,renderer:cfg.renderer,baseUrl:cfg.openaiBaseUrl,textModel:cfg.openaiTextModel,codexModel:cfg.codexModel,imageModel:cfg.openaiImageModel,imageSize:cfg.openaiImageSize,imageQuality:cfg.openaiImageQuality,ttsModel:cfg.openaiTtsModel,ttsVoice:cfg.openaiTtsVoice,ttsInstructions:cfg.openaiTtsInstructions,vivibeBaseUrl:cfg.vivibeBaseUrl,vivibeVoiceId:cfg.vivibeVoiceId,vivibeSpeed:cfg.vivibeSpeed});
+const safeSettings=()=>({hasOpenAIKey:!!cfg.openaiApiKey,hasVivibeKey:!!cfg.vivibeApiKey,hasPexelsKey:!!cfg.pexelsApiKey,hasPixabayKey:!!cfg.pixabayApiKey,rendererNames,brollProviderNames,uiLanguage:cfg.uiLanguage,contentLanguage:cfg.contentLanguage,textProvider:cfg.textProvider,imageProvider:cfg.imageProvider,voiceProvider:cfg.voiceProvider,renderer:cfg.renderer,baseUrl:cfg.openaiBaseUrl,textModel:cfg.openaiTextModel,codexModel:cfg.codexModel,imageModel:cfg.openaiImageModel,imageSize:cfg.openaiImageSize,imageQuality:cfg.openaiImageQuality,ttsModel:cfg.openaiTtsModel,ttsVoice:cfg.openaiTtsVoice,ttsInstructions:cfg.openaiTtsInstructions,vivibeBaseUrl:cfg.vivibeBaseUrl,vivibeVoiceId:cfg.vivibeVoiceId,vivibeSpeed:cfg.vivibeSpeed});
 const isLoopback=(address='')=>address==='127.0.0.1'||address==='::1'||address.startsWith('::ffff:127.');
 const settingString=(body,key,{fallback='',max=500}={})=>typeof body[key]==='string'?body[key].replace(/[\r\n]+/g,' ').trim().slice(0,max):fallback;
 const projectBusy=(id)=>legacyRunning.has(id)||jobQueue.activeProjectIds().includes(id);
@@ -115,12 +115,14 @@ function settingsUpdates(body) {
 
   const textProvider=settingString(body,'textProvider',{fallback:cfg.textProvider,max:30});
   if(!['openai','codex','mock'].includes(textProvider))throw new Error('Unsupported text provider.');
-  const enableOpenAI=typeof body.enableOpenAI==='boolean'?body.enableOpenAI:(!cfg.mockMode&&cfg.imageProvider==='openai');
+  const legacyImageProvider=typeof body.enableOpenAI==='boolean'?(body.enableOpenAI?'openai':'mock'):cfg.imageProvider;
+  const imageProvider=settingString(body,'imageProvider',{fallback:legacyImageProvider,max:30});
+  if(!['openai','codex','mock'].includes(imageProvider))throw new Error('Unsupported image provider.');
   updates.TEXT_PROVIDER=textProvider;
-  updates.IMAGE_PROVIDER=enableOpenAI?'openai':'mock';
-  updates.MOCK_MODE=textProvider==='mock'&&!enableOpenAI&&voiceProvider==='mock'?'1':'0';
+  updates.IMAGE_PROVIDER=imageProvider;
+  updates.MOCK_MODE=textProvider==='mock'&&imageProvider==='mock'&&voiceProvider==='mock'?'1':'0';
   const willHaveKey=updates.OPENAI_API_KEY!==undefined?!!updates.OPENAI_API_KEY:!!cfg.openaiApiKey;
-  if((textProvider==='openai'||enableOpenAI||voiceProvider==='openai')&&!willHaveKey)throw new Error('Add an OpenAI API key before enabling an OpenAI provider.');
+  if([textProvider,imageProvider,voiceProvider].includes('openai')&&!willHaveKey)throw new Error('Add an OpenAI API key before enabling an OpenAI provider.');
   const willHaveVivibeKey=updates.VIVIBE_API_KEY!==undefined?!!updates.VIVIBE_API_KEY:!!cfg.vivibeApiKey;
   if(voiceProvider==='vivibe'&&!willHaveVivibeKey)throw new Error('Add a Vivibe API key before selecting Vivibe voice.');
   if(voiceProvider==='vivibe'&&!updates.VIVIBE_VOICE_ID)throw new Error('Choose or enter a Vivibe Voice ID.');
@@ -150,9 +152,9 @@ const server=http.createServer(async (req,res)=>{
       if(req.method==='PATCH'){
         if(activeIds().length)return json(res,409,{error:'Wait for the active job to finish before changing settings.'});
         const updates=settingsUpdates(await readBody(req));
-        if(updates.TEXT_PROVIDER==='codex'){
+        if(updates.TEXT_PROVIDER==='codex'||updates.IMAGE_PROVIDER==='codex'){
           const status=await codexAccount.status();
-          if(!status.connected)return json(res,400,{error:'Connect a ChatGPT subscription before selecting the Codex text provider.'});
+          if(!status.connected)return json(res,400,{error:'Connect a ChatGPT subscription before selecting a Codex provider.'});
         }
         updateEnvFile(envFile,updates);
         for(const [key,value] of Object.entries(updates))process.env[key]=value;
@@ -162,17 +164,19 @@ const server=http.createServer(async (req,res)=>{
     }
     if(req.method==='POST'&&url.pathname==='/api/settings/test') {
       if(!isLoopback(req.socket.remoteAddress))return json(res,403,{error:'Settings are only available from this machine.'});
-      if(cfg.textProvider==='codex'){
+      const usesCodex=cfg.textProvider==='codex'||cfg.imageProvider==='codex';
+      const usesOpenAI=[cfg.textProvider,cfg.imageProvider,cfg.voiceProvider].includes('openai');
+      if(usesCodex){
         const status=await codexAccount.status({refresh:true});
-        if(!status.connected)return json(res,400,{error:'Connect a ChatGPT subscription before testing the Codex text provider.'});
-        return json(res,200,{ok:true,provider:'codex',model:cfg.codexModel||'account default',planType:status.planType});
+        if(!status.connected)return json(res,400,{error:'Connect a ChatGPT subscription before testing a Codex provider.'});
+        if(!usesOpenAI)return json(res,200,{ok:true,provider:'codex',codex:true,model:cfg.codexModel||'account default',imageModel:cfg.imageProvider==='codex'?'gpt-image-2':null,planType:status.planType});
       }
       if(cfg.textProvider==='mock'&&cfg.imageProvider==='mock'&&cfg.voiceProvider==='mock')return json(res,200,{ok:true,provider:'mock',model:'offline'});
       if(!cfg.openaiApiKey)return json(res,400,{error:'No OpenAI API key is configured.'});
       const endpoint=`${cfg.openaiBaseUrl}/models/${encodeURIComponent(cfg.openaiTextModel)}`;
       const response=await fetch(endpoint,{headers:{authorization:`Bearer ${cfg.openaiApiKey}`}});
       if(!response.ok){const detail=await response.json().catch(()=>({}));return json(res,response.status,{error:detail.error?.message||`OpenAI returned HTTP ${response.status}.`});}
-      return json(res,200,{ok:true,model:cfg.openaiTextModel,requestId:response.headers.get('x-request-id')||null});
+      return json(res,200,{ok:true,provider:usesCodex?'mixed':'openai',codex:usesCodex,model:cfg.openaiTextModel,requestId:response.headers.get('x-request-id')||null});
     }
     if(req.method==='POST'&&url.pathname==='/api/voice-providers/vivibe/voices') {
       if(!isLoopback(req.socket.remoteAddress))return json(res,403,{error:'Voice provider settings are only available from this machine.'});

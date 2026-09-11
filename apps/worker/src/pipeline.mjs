@@ -11,7 +11,7 @@ import { run } from '../../../packages/core/src/process.mjs';
 import { containVideoFilter } from '../../../packages/core/src/video-fit.mjs';
 import { markArtifactForReview, normalizeWorkflow, requireApproved } from '../../../packages/core/src/workflow.mjs';
 import { createTakeTarget, recordTake } from '../../../packages/core/src/takes.mjs';
-import { generateImageOpenAI } from '../../../packages/providers/src/openai.mjs';
+import { generateImage, imageCacheConfig } from '../../../packages/providers/src/image.mjs';
 import { synthesizeVoice, voiceCacheConfig } from '../../../packages/providers/src/voice.mjs';
 import { getRenderer, resolveRendererName } from '../../../packages/renderers/src/registry.mjs';
 
@@ -50,13 +50,12 @@ async function ensureImage(scene, project, cfg, force=false,signal=null) {
     return prepared.file;
   }
   const provider=effectiveProvider(cfg.imageProvider,cfg);
-  const key=sha256({prompt:scene.visualPrompt,provider,model:provider==='openai'?cfg.openaiImageModel:null,size:provider==='openai'?cfg.openaiImageSize:null,quality:provider==='openai'?cfg.openaiImageQuality:null});
+  const key=sha256({prompt:scene.visualPrompt,provider,...imageCacheConfig(provider,cfg)});
   const current=artifactFile(scene,project,cfg,'visual');
   if (!force && scene.cache.image===key && (provider==='mock' || fileExists(current))) return provider==='mock' ? null : current;
   if (provider==='mock') { scene.cache.image=key; recordTake(scene,'visual',{cacheKey:key,provider,label:`Mock take ${scene.takes?.visual?.length+1||1}`}); markArtifactForReview(scene,'visual'); saveProject(project,cfg); return null; }
-  if (provider!=='openai') throw new Error(`Unsupported IMAGE_PROVIDER=${provider}`);
   const target=createTakeTarget(dir,'visual','png',key),file=target.file;
-  log('image:start',{scene:scene.id,provider}); await generateImageOpenAI(scene.visualPrompt,file,cfg,{signal});
+  log('image:start',{scene:scene.id,provider}); await generateImage({provider,prompt:scene.visualPrompt,outputFile:file,cfg,signal});
   scene.cache.image=key; recordTake(scene,'visual',{id:target.id,path:path.relative(projectDir(cfg,project.id),file),cacheKey:key,provider}); scene.status='visual-ready'; markArtifactForReview(scene,'visual'); saveProject(project,cfg); log('image:done',{scene:scene.id}); return file;
 }
 

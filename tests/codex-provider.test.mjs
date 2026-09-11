@@ -2,7 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import { PassThrough, Writable } from 'node:stream';
-import { parseCodexJsonl, runCodexPrompt } from '../packages/providers/src/codex.mjs';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { generateImageCodex, parseCodexJsonl, runCodexPrompt } from '../packages/providers/src/codex.mjs';
 import { CodexAccountClient, safeCodexAccountStatus } from '../apps/web/src/codex-account.mjs';
 
 test('Codex JSONL parser returns the final agent message and reports failures',()=>{
@@ -35,6 +38,30 @@ test('Codex provider sends prompts over stdin in a read-only ephemeral run',asyn
   assert.ok(invocation.args.includes('--ephemeral'));
   assert.deepEqual(invocation.args.slice(-3),['--model','model-test','-']);
   assert.equal(prompt,'Write a test\n');
+});
+
+test('Codex ImageGen runs in an isolated writable directory and promotes a validated PNG',async()=>{
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'cutroom-codex-image-'));
+  const outputFile=path.join(root,'visual-take.png');
+  let invocation,prompt='';
+  const spawnImpl=(bin,args,options)=>{
+    invocation={bin,args,options};
+    const child=new EventEmitter(),stdout=new PassThrough(),stderr=new PassThrough();
+    child.stdout=stdout;child.stderr=stderr;child.kill=()=>{};
+    child.stdin=new Writable({write(chunk,_encoding,done){prompt+=chunk.toString();done();},final(done){
+      fs.writeFileSync(path.join(options.cwd,'generated.png'),Buffer.from([0x89,0x50,0x4e,0x47,0x0d,0x0a,0x1a,0x0a]));
+      queueMicrotask(()=>{stdout.end(`${JSON.stringify({type:'item.completed',item:{type:'agent_message',text:'generated.png'}})}\n`);child.emit('close',0);});done();
+    }});
+    return child;
+  };
+  const cfg={codexBin:'codex-test',codexModel:'',codexTimeoutMs:1000,openaiImageSize:'1536x1024',openaiImageQuality:'medium'};
+  await generateImageCodex('A paper boat on calm water',outputFile,cfg,{spawnImpl});
+  assert.ok(fs.existsSync(outputFile));
+  assert.ok(invocation.args.includes('workspace-write'));
+  assert.match(path.basename(invocation.options.cwd),/^cutroom-codex-imagegen-/);
+  assert.match(prompt,/\$imagegen/);
+  assert.match(prompt,/not the OpenAI API or any API key/);
+  assert.deepEqual(fs.readdirSync(root),['visual-take.png']);
 });
 
 test('Codex App Server client completes the handshake and exposes safe ChatGPT status',async()=>{

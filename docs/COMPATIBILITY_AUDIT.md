@@ -12,7 +12,7 @@ Default model: `gpt-5.6-luna`.
 
 ## OpenAI image generation
 
-The workflow uses `POST /v1/images/generations`.
+The `openai` image provider uses `POST /v1/images/generations`.
 
 Current integration fields were checked against the OpenAI API reference:
 
@@ -23,6 +23,8 @@ Current integration fields were checked against the OpenAI API reference:
 - response handling: `data[0].b64_json` with URL fallback
 
 The final video is 16:9 while the generated landscape image is 3:2. Scene prompts explicitly reserve a centered 16:9 safe area and FFmpeg performs the final crop.
+
+The alternative `codex` image provider invokes the built-in `$imagegen` skill through the owner's authenticated ChatGPT/Codex session. It generates into an isolated writable directory, validates the PNG output, and promotes only that image into the selected scene take. This path uses Codex plan limits rather than API credit.
 
 ## OpenAI speech generation
 

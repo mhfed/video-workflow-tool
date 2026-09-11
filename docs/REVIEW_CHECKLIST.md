@@ -18,7 +18,7 @@ OPENAI_API_KEY=<your OpenAI API key>
 
 Do not commit `.env`.
 
-For a private single-owner install, writing can instead use a ChatGPT subscription: start the web app, choose **Provider settings → Writing & direction AI → ChatGPT subscription**, then complete **Connect ChatGPT**. This replaces only `TEXT_PROVIDER`; image and voice settings remain independent.
+For a private single-owner install, writing and images can instead use a ChatGPT subscription: start the web app, choose **ChatGPT subscription** for writing and/or **ChatGPT subscription · ImageGen** for images, then complete **Connect ChatGPT**. Text, image, and voice providers remain independently selectable.
 
 ### Recommended defaults — no change required
 
