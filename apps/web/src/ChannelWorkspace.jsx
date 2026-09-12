@@ -8,7 +8,9 @@ import './channel-workspace.css';
 
 export const contentApi = async (url, options = {}) => {
   const response = await fetch(url, { ...options, headers: { 'content-type': 'application/json' } });
-  const body = await response.json();
+  const text = await response.text();
+  let body = {};
+  if (text) { try { body = JSON.parse(text); } catch { body = { error: text }; } }
   if (!response.ok) throw new Error(body.error || response.statusText);
   return body;
 };
@@ -115,9 +117,9 @@ function IdeaEditor({ idea, channel, onSaved, onClose, c }) {
   </form>;
 }
 
-export default function ChannelWorkspace({ channels, channelId, onChannelChange, projects, onSelect, onCreate, onRefresh, onManageVideo, c }) {
+export default function ChannelWorkspace({ channels, channelId, section, onSectionChange, onChannelChange, projects, onSelect, onCreate, onRefresh, onManageVideo, c }) {
   const channel = channels.find((item) => item.id === channelId), missing = !!channelId && !channel;
-  const [tab, setTab] = useState(channel ? 'overview' : 'videos');
+  const tab = channel ? section : 'videos', setTab = onSectionChange;
   const [ideas, setIdeas] = useState([]), [ideaEditor, setIdeaEditor] = useState(null), [creating, setCreating] = useState(false), [error, setError] = useState('');
   const [channelName, setChannelName] = useState(''), [savingChannel, setSavingChannel] = useState(false);
   const refreshIdeas = async () => { if (channel) setIdeas(await contentApi(`/api/channels/${channel.id}/ideas`)); };
@@ -134,7 +136,6 @@ export default function ChannelWorkspace({ channels, channelId, onChannelChange,
   return <section className="channel-workspace">
     <div className="channel-toolbar"><label><Youtube size={18}/><select aria-label={tr(c, 'Chọn kênh', 'Choose channel')} value={channelId || ''} onChange={(event) => onChannelChange(event.target.value || null)}><option value="">{tr(c, 'Chưa phân kênh', 'Unassigned')}</option>{channels.map((item) => <option key={item.id} value={item.id}>{item.identity.name}</option>)}{missing && <option value={channelId}>{tr(c, 'Kênh không khả dụng', 'Channel unavailable')}</option>}</select></label><Button variant="outline" onClick={() => setCreating(true)}><Plus/>{tr(c, 'Tạo kênh', 'New channel')}</Button></div>
     <header className="channel-masthead"><div><span className="content-eyebrow">YOUTUBE CONTENT OS / {channel ? `REV ${String(channel.revision).padStart(2, '0')}` : 'LOCAL STUDIO'}</span><h1>{channel?.identity.name || (missing ? tr(c, 'Kênh không khả dụng', 'Channel unavailable') : tr(c, 'Chưa phân kênh', 'Unassigned'))}</h1><p>{channel?.strategy.channelPromise || channel?.identity.description || (channel ? tr(c, 'Từ một ý tưởng tốt đến những video mang dấu ấn của bạn.', 'From a good idea to videos with a voice of their own.') : tr(c, 'Các video độc lập của bạn. Gán kênh khi sẵn sàng; cấu hình hiện tại được giữ nguyên.', 'Your independent videos. Assign a channel when ready; current settings are preserved.'))}</p></div><Button onClick={() => onCreate()}><Plus/>{tr(c, 'Video mới', 'New video')}</Button></header>
-    <nav className="channel-tabs" aria-label={tr(c, 'Nội dung kênh', 'Channel sections')}>{(channel ? [['overview', 'Tổng quan', 'Overview'], ['videos', 'Video', 'Videos'], ['ideas', 'Ý tưởng', 'Ideas'], ['profile', 'Hồ sơ & thương hiệu', 'Profile & brand']] : [['videos', 'Video', 'Videos']]).map(([key, vi, en]) => <button key={key} aria-current={tab === key ? 'page' : undefined} className={tab === key ? 'active' : ''} onClick={() => setTab(key)}>{tr(c, vi, en)}{key === 'videos' && <span>{projects.length}</span>}{key === 'ideas' && <span>{ideas.length}</span>}</button>)}</nav>
     {error && <p role="alert" className="content-error">{error}</p>}
     {tab === 'overview' && channel ? <><div className="channel-overview"><section className="channel-strategy-card"><span className="content-eyebrow">{tr(c, 'ĐỊNH HƯỚNG KÊNH', 'CHANNEL DIRECTION')}</span><h2>{channel.strategy.niche || tr(c, 'Xây nền cho câu chuyện của bạn.', 'Give your stories a foundation.')}</h2><p>{channel.strategy.targetAudience || tr(c, 'Xác định khán giả và lời hứa của kênh để mỗi video có một điểm xuất phát rõ ràng.', 'Define the audience and channel promise to give every video a clear starting point.')}</p><div className="content-pillars">{channel.strategy.contentPillars.map((pillar) => <span key={pillar}>{pillar}</span>)}</div><button onClick={() => setTab('profile')}>{tr(c, 'Chỉnh hồ sơ kênh', 'Edit channel profile')}<ArrowRight size={16}/></button></section><section className="channel-idea-card"><Lightbulb/><span className="content-eyebrow">IDEA BANK</span><strong>{ideas.filter((idea) => !['converted-to-video', 'archived'].includes(idea.status)).length}</strong><p>{tr(c, 'ý tưởng đang chờ phát triển', 'ideas waiting to become stories')}</p><Button variant="outline" onClick={() => { setTab('ideas'); setIdeaEditor({}); }}><Plus/>{tr(c, 'Ghi lại ý tưởng', 'Capture an idea')}</Button></section></div><div className="content-section-heading"><h2>{tr(c, 'Video trong kênh', 'Channel videos')}</h2><span>{projects.length}</span></div>{videoList}</> : tab === 'profile' && channel ? <ProfileEditor key={`${channel.id}-${channel.revision}`} channel={channel} onSaved={onRefresh} c={c}/> : tab === 'ideas' && channel ? <>
       <div className="content-section-heading"><p>{tr(c, 'Ghi lại góc nhìn. Phát triển Brief. Đưa ý tưởng vào phòng dựng.', 'Capture an angle. Develop a brief. Bring the idea into production.')}</p><Button onClick={() => setIdeaEditor({})}><Plus/>{tr(c, 'Thêm ý tưởng', 'New idea')}</Button></div>

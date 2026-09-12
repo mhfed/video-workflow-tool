@@ -270,9 +270,11 @@ function SettingsDialog({open,onOpenChange,onSaved,c}){
 export default function App(){
   const [projects,setProjects]=useState([]);
   const [channels,setChannels]=useState([]);
-  const [contentNavigation,setContentNavigation]=usePersistentState('cutroom:channel-navigation',{channelId:null});
+  const [contentNavigation,setContentNavigation]=usePersistentState('cutroom:channel-navigation',{channelId:null,section:'videos'});
   const channelId=typeof contentNavigation.channelId==='string'?contentNavigation.channelId:null;
-  const setChannelId=(id)=>setContentNavigation({channelId:id});
+  const storedSection=['overview','videos','ideas','profile'].includes(contentNavigation.section)?contentNavigation.section:'videos';
+  const contentSection=channelId?storedSection:'videos';
+  const setChannelId=(id)=>setContentNavigation({channelId:id,section:id?'overview':'videos'});
   const [ideaToCreate,setIdeaToCreate]=useState(null);
   const [contextVideo,setContextVideo]=useState(null);
   const [current,setCurrent]=useState(null);
@@ -302,10 +304,11 @@ export default function App(){
   const refreshProjects=async()=>setProjects(await api('/api/projects'));
   const refreshChannels=async()=>setChannels(await api('/api/channels'));
   const refreshContent=()=>Promise.all([refreshProjects(),refreshChannels()]);
-  const load=async(id)=>{const project=await api(`/api/projects/${encodeURIComponent(id)}`);setCurrent(project);setChannelId(project.channelId||null);await Promise.all([refreshProjects(),refreshHealth(),refreshChannels()]);};
+  const load=async(id)=>{const project=await api(`/api/projects/${encodeURIComponent(id)}`);setCurrent(project);setContentNavigation({channelId:project.channelId||null,section:'videos'});await Promise.all([refreshProjects(),refreshHealth(),refreshChannels()]);};
   const openNewVideo=(idea=null)=>{setIdeaToCreate(idea);setError('');setNavDrawer(null);setDialogOpen(true);};
   const chooseChannel=(id)=>{setChannelId(id);setCurrent(null);setNavDrawer(null);};
-  const contextSaved=async(project)=>{if(current?.id===project.id){setCurrent(project);setChannelId(project.channelId||null);}await refreshContent();};
+  const openContentSection=(section)=>{if(section!=='videos'&&!selectedChannel)return;setContentNavigation({channelId,section});setCurrent(null);setNavDrawer(null);};
+  const contextSaved=async(project)=>{if(current?.id===project.id){setCurrent(project);setContentNavigation({channelId:project.channelId||null,section:'videos'});}await refreshContent();};
 
   useEffect(()=>{Promise.all([refreshProjects(),refreshHealth(),refreshChannels()]).catch((cause)=>setError(cause.message));},[]);
   useEffect(()=>{const openPalette=(event)=>{if((event.metaKey||event.ctrlKey)&&event.key.toLowerCase()==='k'){event.preventDefault();setPaletteOpen((value)=>!value);}};window.addEventListener('keydown',openPalette);return()=>window.removeEventListener('keydown',openPalette);},[]);
@@ -353,7 +356,7 @@ export default function App(){
   const saveDrawRevealPath=async(sceneId,path)=>{setBusy(true);setError('');try{const result=await api(`/api/projects/${encodeURIComponent(current.id)}/scenes/${encodeURIComponent(sceneId)}/draw-reveal/path`,{method:'PATCH',body:JSON.stringify({path})});setCurrent(result.project);await refreshProjects();return result;}catch(cause){setError(cause.message);throw cause;}finally{setBusy(false);}};
   const loadRoughCut=async()=>api(`/api/projects/${encodeURIComponent(current.id)}/rough-cut`);
   const cancelJob=async(jobId)=>{setError('');try{const result=await api(`/api/projects/${encodeURIComponent(current.id)}/jobs/${encodeURIComponent(jobId)}/cancel`,{method:'POST'});setCurrent(result.project);return result;}catch(cause){setError(cause.message);return null;}};
-  const historyAction=async(action)=>{setBusy(true);setError('');try{const project=await api(`/api/projects/${encodeURIComponent(current.id)}/history/${action}`,{method:'POST'});setCurrent(project);setChannelId(project.channelId||null);await refreshProjects();return project;}catch(cause){setError(cause.message);return null;}finally{setBusy(false);}};
+  const historyAction=async(action)=>{setBusy(true);setError('');try{const project=await api(`/api/projects/${encodeURIComponent(current.id)}/history/${action}`,{method:'POST'});setCurrent(project);setContentNavigation({channelId:project.channelId||null,section:'videos'});await refreshProjects();return project;}catch(cause){setError(cause.message);return null;}finally{setBusy(false);}};
   const selectSceneTake=async(sceneId,kind,takeId)=>{setBusy(true);setError('');try{const project=await api(`/api/projects/${encodeURIComponent(current.id)}/scenes/${encodeURIComponent(sceneId)}/takes/${encodeURIComponent(kind)}/${encodeURIComponent(takeId)}/select`,{method:'POST'});setCurrent(project);await refreshProjects();return project;}catch(cause){setError(cause.message);return null;}finally{setBusy(false);}};
   const runQuality=async(sceneIds=null)=>!!await enqueueJob('quality',sceneIds?{sceneIds}:{});
   const getRepairPlan=async()=>api(`/api/projects/${encodeURIComponent(current.id)}/quality/repair-plan`);
@@ -381,14 +384,14 @@ export default function App(){
     </header>}
 
     <div className={`workspace-grid ${current?'project-open':''}`}>
-      <ApplicationNavigation current={current} projects={channelProjects} drawer={navDrawer} onDrawer={setNavDrawer} onHome={()=>{setNavDrawer(null);setCurrent(null);refreshChannels().catch((cause)=>setError(cause.message));}} onCreate={()=>openNewVideo()} onSelect={load} onDelete={(project)=>{setDeleteProjectError('');setProjectToDelete(project);}} onSettings={()=>{setNavDrawer(null);setSettingsOpen(true);}} health={health} c={c}/>
+      <ApplicationNavigation current={current} projects={channelProjects} section={contentSection} onSection={openContentSection} channelAvailable={!!selectedChannel} drawer={navDrawer} onDrawer={setNavDrawer} onCreate={()=>openNewVideo()} onSelect={load} onDelete={(project)=>{setDeleteProjectError('');setProjectToDelete(project);}} onSettings={()=>{setNavDrawer(null);setSettingsOpen(true);}} health={health} c={c}/>
 
       <main className={`main-stage ${current?'director-shell-stage with-video-context':''}`}>
         {(error||showProjectError)&&<div className="app-alert-stack" aria-live="assertive">
           {error&&<Alert variant="destructive" className="app-alert"><TriangleAlert/><div className="app-alert-copy"><AlertTitle>{c.needsAttention}</AlertTitle><AlertDescription>{error}</AlertDescription></div><Button variant="ghost" size="icon-sm" aria-label={c.dismiss} onClick={()=>setError('')}><X/></Button></Alert>}
           {showProjectError&&<Alert variant="destructive" className="app-alert"><TriangleAlert/><div className="app-alert-copy"><AlertTitle>{c.lastRunStopped}</AlertTitle><AlertDescription>{current.error.message}</AlertDescription></div><Button variant="ghost" size="icon-sm" aria-label={c.dismiss} onClick={()=>setDismissedProjectError(projectErrorKey)}><X/></Button></Alert>}
         </div>}
-        {!current?<ChannelWorkspace key={channelId||'unassigned'} channels={channels} channelId={channelId} onChannelChange={chooseChannel} projects={channelProjects} onSelect={load} onCreate={openNewVideo} onRefresh={refreshContent} onManageVideo={setContextVideo} c={c}/>:<>
+        {!current?<ChannelWorkspace key={channelId||'unassigned'} channels={channels} channelId={channelId} section={contentSection} onSectionChange={openContentSection} onChannelChange={chooseChannel} projects={channelProjects} onSelect={load} onCreate={openNewVideo} onRefresh={refreshContent} onManageVideo={setContextVideo} c={c}/>:<>
           <div className="video-context-toolbar"><button onClick={()=>{setCurrent(null);refreshChannels().catch((cause)=>setError(cause.message));}}><ArrowRight style={{transform:'rotate(180deg)'}}/>{selectedChannel?.identity.name||(current.channelId?(c.language==='en'?'Channel unavailable':'Kênh không khả dụng'):(c.language==='en'?'Unassigned':'Chưa phân kênh'))}</button>{current.channelRevision&&<span>{c.language==='en'?'Inherited':'Đã nhận'} r{current.channelRevision}{selectedChannel&&selectedChannel.revision!==current.channelRevision?` · ${c.language==='en'?'Channel':'Kênh'} r${selectedChannel.revision}`:''}</span>}<button disabled={busy||running} onClick={()=>setContextVideo(current)}><Settings2/>{c.language==='en'?'Channel & Brief':'Kênh & Brief'}</button></div>
           <DirectorWorkspace key={current.id} project={current} running={busy||running} keyboardLocked={paletteOpen||dialogOpen||settingsOpen||!!contextVideo||!!projectToDelete||!!navDrawer} activeJob={activeJob} command={workspaceCommand} onContextChange={setWorkspaceContext} onCreate={()=>openNewVideo()} onCancelJob={cancelJob} onUndo={()=>historyAction('undo')} onRedo={()=>historyAction('redo')} onSelectTake={selectSceneTake} onRunQuality={runQuality} onGetRepairPlan={getRepairPlan} onApplyRepairs={applyRepairs} onSave={saveScene} onRunStage={runStage} onReview={reviewStage} onReviewBulk={reviewBulk} onRunAll={run} onLoadRoughCut={loadRoughCut} onUpdateProject={updateProject} onSceneAction={editSceneStructure} onInsertScene={insertNewScene} onDirectorPlan={planDirection} onSearchBroll={searchBroll} onSelectBroll={selectBroll} onUploadArtwork={uploadArtwork} onLoadDrawRevealPath={loadDrawRevealPath} onSaveDrawRevealPath={saveDrawRevealPath} brollProviders={{names:config?.brollProviderNames||['pexels','pixabay'],configured:{pexels:!!config?.hasPexelsKey,pixabay:!!config?.hasPixabayKey}}} rendererNames={config?.rendererNames||[]} c={c}/>
         </>}

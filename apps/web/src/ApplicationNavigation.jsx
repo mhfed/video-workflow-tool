@@ -1,23 +1,29 @@
 import { useEffect, useState } from 'react';
-import { Activity, Clapperboard, Grid2X2, ListChecks, Plus, Search, Settings2, Trash2, X } from 'lucide-react';
+import { Activity, BookOpen, Clapperboard, Grid2X2, Lightbulb, ListChecks, Plus, Search, Settings2, Trash2, X } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
 const statusLabel=(status,c)=>c.status[status]||status||c.status.draft;
 
-export default function ApplicationNavigation({current,projects,drawer,onDrawer,onHome,onCreate,onSelect,onDelete,onSettings,health,c}){
+export default function ApplicationNavigation({current,projects,section,onSection,channelAvailable,drawer,onDrawer,onCreate,onSelect,onDelete,onSettings,health,c}){
   const [query,setQuery]=useState('');
   useEffect(()=>{if(drawer!=='projects')setQuery('');},[drawer]);
   useEffect(()=>{if(!drawer)return;const close=(event)=>{if(event.key==='Escape')onDrawer(null);};window.addEventListener('keydown',close);return()=>window.removeEventListener('keydown',close);},[drawer,onDrawer]);
   const visible=projects.filter((project)=>project.title.toLowerCase().includes(query.trim().toLowerCase()));
   const activity=projects.flatMap((project)=>(project.jobs||[]).map((job)=>({project,job}))).sort((a,b)=>String(b.job.createdAt||'').localeCompare(String(a.job.createdAt||''))).slice(0,30);
-  const navButton=(id,label,Icon,onClick,active=false,badge=null)=><Tooltip key={id}><TooltipTrigger asChild><button className={`nav-rail-button ${active?'active':''}`} aria-label={label} onClick={onClick}><Icon/><span>{label}</span>{badge!==null&&badge>0&&<b>{badge}</b>}</button></TooltipTrigger><TooltipContent side="right">{label}</TooltipContent></Tooltip>;
+  const navButton=(id,label,Icon,onClick,active=false,badge=null,disabled=false)=><Tooltip key={id}><TooltipTrigger asChild><button className={`nav-rail-button ${active?'active':''}`} aria-label={label} aria-current={active?'page':undefined} disabled={disabled} onClick={onClick}><Icon/><span>{label}</span>{badge!==null&&badge>0&&<b>{badge}</b>}</button></TooltipTrigger><TooltipContent side="right">{label}</TooltipContent></Tooltip>;
   return <>
     <aside className="app-nav-rail" aria-label={c.mainNavigation}>
       <Tooltip><TooltipTrigger asChild><button className="nav-create" aria-label={c.newProduction} onClick={onCreate}><Plus/><span>{c.create}</span></button></TooltipTrigger><TooltipContent side="right">{c.newProduction}</TooltipContent></Tooltip>
-      <nav className="nav-stack">
-        {navButton('home',c.home,Grid2X2,onHome,!current&&!drawer)}
-        {navButton('projects',c.projectLibrary,Clapperboard,()=>onDrawer(drawer==='projects'?null:'projects'),drawer==='projects',projects.length)}
+      <nav className="nav-stack content-nav">
+        {navButton('overview',c.channelOverview,Grid2X2,()=>onSection('overview'),section==='overview'&&!drawer,null,!channelAvailable)}
+        {navButton('videos',c.projectLibrary,Clapperboard,()=>onSection('videos'),section==='videos'&&!drawer,projects.length)}
+        {navButton('ideas',c.ideaBank,Lightbulb,()=>onSection('ideas'),section==='ideas'&&!drawer,null,!channelAvailable)}
+        {navButton('profile',c.channelProfile,BookOpen,()=>onSection('profile'),section==='profile'&&!drawer,null,!channelAvailable)}
+      </nav>
+      <div className="nav-rail-rule"/>
+      <nav className="nav-stack utility-nav">
+        {navButton('projects',c.searchVideoLibrary,Search,()=>onDrawer(drawer==='projects'?null:'projects'),drawer==='projects')}
         {navButton('activity',c.activityCenter,ListChecks,()=>onDrawer(drawer==='activity'?null:'activity'),drawer==='activity',activity.filter(({job})=>['queued','running','cancelling','failed'].includes(job.status)).length)}
       </nav>
       <div className="nav-rail-spacer"/>
