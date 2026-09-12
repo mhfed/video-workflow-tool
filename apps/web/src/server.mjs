@@ -24,6 +24,7 @@ import { ProjectJobQueue } from '../../worker/src/job-queue.mjs';
 import { runQualityChecks, runRepairActions } from '../../worker/src/quality.mjs';
 import { getRenderer, rendererNames, resolveRendererName } from '../../../packages/renderers/src/registry.mjs';
 import { rendererInputError } from './renderer-input.mjs';
+import { applyPenAppearance } from './project-settings.mjs';
 import { mediaTypeFor, serveMedia } from './media.mjs';
 import { assignDownloadedBroll, downloadBrollAsset } from './broll-media.mjs';
 import { assignUploadedArtwork, resolveArtworkFile, storeArtworkUpload } from './artwork-media.mjs';
@@ -311,6 +312,9 @@ const server=http.createServer(async (req,res)=>{
         if(typeof b.format==='string'){
           if(!SUPPORTED_VIDEO_FORMATS.has(b.format))return json(res,400,{error:'Unsupported video format.'});
           if(p.settings.format!==b.format){Object.assign(p.settings,videoFormatSettings(b.format,cfg));for(const scene of p.scenes){const prompt=visualPromptFor(scene.text,{...cfg,format:b.format,memory:p.memory},scene.visualIntent);const promptChanged=prompt!==scene.visualPrompt;scene.visualPrompt=prompt;invalidateScene(p,scene,{promptChanged});}}
+        }
+        if(b.pen!==undefined){
+          applyPenAppearance(p,b.pen,cfg);
         }
         if(b.memory&&typeof b.memory==='object'){
           p.memory=projectMemory(b.memory);

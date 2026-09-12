@@ -7,6 +7,7 @@ import { normalizeLanguage } from './languages.mjs';
 import { normalizeWorkflow } from './workflow.mjs';
 import { normalizeVideoFormat, videoFormatSettings } from './video-format.mjs';
 import { invalidateFinal, invalidateScene } from './invalidation.mjs';
+import { DEFAULT_PEN_APPEARANCE } from './pen-settings.mjs';
 
 export function projectDir(cfg, id) { return path.join(cfg.workspaceDir, id); }
 export function projectFile(cfg, id) { return path.join(projectDir(cfg, id), 'project.json'); }
@@ -29,7 +30,7 @@ export function createProject({ title, sourceText, sourceType = 'script', topic 
     return item;
   });
   const language=normalizeLanguage(cfg.contentLanguage);
-  const project = { version: 6, id, title: title.trim(), createdAt: nowIso(), updatedAt: nowIso(), source: { type: sourceType, text: sourceText, topic: topic || null }, settings: { renderer: cfg.renderer, workflowMode, ...videoFormatSettings(format,cfg), fps: cfg.fps, language, captions: true, captionLanguage: language }, memory, scenes, artifacts: {}, jobs:[], history:{undo:[],redo:[]}, quality:{status:'unchecked'}, status: 'planned' };
+  const project = { version: 7, id, title: title.trim(), createdAt: nowIso(), updatedAt: nowIso(), source: { type: sourceType, text: sourceText, topic: topic || null }, settings: { renderer: cfg.renderer, workflowMode, ...videoFormatSettings(format,cfg), fps: cfg.fps, language, captions: true, captionLanguage: language, pen:{...DEFAULT_PEN_APPEARANCE} }, memory, scenes, artifacts: {}, jobs:[], history:{undo:[],redo:[]}, quality:{status:'unchecked'}, status: 'planned' };
   normalizeWorkflow(project);
   ensureDir(projectDir(cfg,id)); ensureDir(path.join(projectDir(cfg,id),'scenes'));
   fs.writeFileSync(path.join(projectDir(cfg,id), sourceType === 'srt' ? 'source.srt' : 'script.md'), sourceText);

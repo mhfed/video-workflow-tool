@@ -2,15 +2,14 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { run } from '../../core/src/process.mjs';
 import { probeVideoSize } from '../../core/src/media.mjs';
 import { ensureDir, fileExists, sha256 } from '../../core/src/utils.mjs';
 import { captionFor, escapeFilterValue, renderCaptionPng, supportsFilter } from './cinematic-broll.mjs';
+import { createPenAsset, penAppearanceSignature } from './pen-appearance.mjs';
 
 const IMAGE_EXTENSIONS=new Set(['.png','.jpg','.jpeg']);
 const AUDIO_EXTENSIONS=new Set(['.aac','.flac','.m4a','.mp3','.ogg','.wav']);
-const defaultHand=fileURLToPath(new URL('../assets/drawing-hand-vi.png',import.meta.url));
 
 function finiteNumber(value,fallback,{min=-Infinity,max=Infinity}={}) {
   const number=Number(value);
@@ -158,13 +157,13 @@ function coordinateExpression(points,axis,width,height,duration) {
   return expression;
 }
 
-function handFileFor(scene,project,projectRoot) {
+function customHandFileFor(scene,project,projectRoot) {
   const configured=settingsFor(scene,project).handAsset;
-  return configured?assertRelativeAsset(configured,'handAsset',scene.id,projectRoot,IMAGE_EXTENSIONS):defaultHand;
+  return configured?assertRelativeAsset(configured,'handAsset',scene.id,projectRoot,IMAGE_EXTENSIONS):null;
 }
 
-export function drawRevealHandSignature() {
-  return fileExists(defaultHand)?crypto.createHash('sha256').update(fs.readFileSync(defaultHand)).digest('hex'):null;
+export async function drawRevealHandSignature() {
+  return null;
 }
 
 export async function prepareDrawRevealVisual({scene,projectRoot}) {
@@ -173,13 +172,13 @@ export async function prepareDrawRevealVisual({scene,projectRoot}) {
 }
 
 export async function drawRevealRenderInputs({scene,project,projectRoot}) {
-  const settings=settingsFor(scene,project),hand=handFileFor(scene,project,projectRoot);
+  const settings=settingsFor(scene,project),hand=customHandFileFor(scene,project,projectRoot);
   return {
     path:settings.path==null?null:drawRevealPath(settings),
     pathRows:Math.round(finiteNumber(settings.pathRows,9,{min:3,max:24})),
     pathMode:settings.path==null?'contour-v1':'explicit',
     handAsset:settings.handAsset||null,
-    handContent:settings.handAsset?await fileIdentity(hand):null,
+    handContent:settings.handAsset?await fileIdentity(hand):penAppearanceSignature(project),
     handScale:finiteNumber(settings.handScale,.3,{min:.12,max:.6}),
     handAnchorX:finiteNumber(settings.handAnchorX,.105,{min:0,max:1}),
     handAnchorY:finiteNumber(settings.handAnchorY,.045,{min:0,max:1}),
@@ -209,7 +208,7 @@ export async function drawRevealClipInputs({scene,project,projectRoot}) {
 
 export async function renderDrawRevealScene({scene,project,projectRoot,imageFile,outputFile,durationSec,cfg,signal}) {
   const artwork=imageFile||assertRelativeAsset(scene.artwork,'artwork',scene.id,projectRoot,IMAGE_EXTENSIONS);
-  const hand=handFileFor(scene,project,projectRoot),options=await drawRevealRenderInputs({scene,project,projectRoot,cfg,signal});
+  const hand=customHandFileFor(scene,project,projectRoot)||await createPenAsset({project,outputFile:`${outputFile}.pen.png`}),options=await drawRevealRenderInputs({scene,project,projectRoot,cfg,signal});
   const drawPath=options.path||(await generateDrawRevealPath({artwork,outputFile,pathRows:options.pathRows,cfg,signal})).path;
   const duration=Math.max(.04,finiteNumber(durationSec,0,{min:.04})),revealDuration=duration*options.revealPortion;
   const maskFile=`${outputFile}.reveal.pgm`,textFile=`${outputFile}.caption.txt`,captionFile=`${outputFile}.caption.png`;

@@ -7,7 +7,7 @@ const adapters=new Map([
   ['simple',Object.freeze({
     name:'simple',
     render:renderSimpleScene,
-    cacheSignature:()=>null
+    cacheSignature:async()=>null
   })],
   ['whiteboard',Object.freeze({
     name:'whiteboard',
@@ -17,7 +17,7 @@ const adapters=new Map([
   ['cinematic-broll',Object.freeze({
     name:'cinematic-broll',
     render:renderCinematicBrollScene,
-    cacheSignature:()=>null,
+    cacheSignature:async()=>null,
     prepareVisual:prepareCinematicVisual,
     renderCacheInputs:cinematicRenderInputs,
     clipCacheInputs:cinematicClipInputs,

@@ -72,7 +72,7 @@ async function ensureVideo(scene, project, cfg, imageFile, force=false,signal=nu
   const dir=ensureDir(sceneDir(cfg,project.id,scene.id));
   const renderer=resolveRendererName(scene,project,cfg);
   const adapter=getRenderer(renderer);
-  const keyParts={renderer,renderContract:RENDER_CONTRACT,durationMs:scene.durationMs,image:scene.cache.image,text:scene.text,width:cfg.width,height:cfg.height,fps:cfg.fps,hand:adapter.cacheSignature(cfg)};
+  const keyParts={renderer,renderContract:RENDER_CONTRACT,durationMs:scene.durationMs,image:scene.cache.image,text:scene.text,width:cfg.width,height:cfg.height,fps:cfg.fps,hand:await adapter.cacheSignature({scene,project,projectRoot:projectDir(cfg,project.id),cfg})};
   if(adapter.renderCacheInputs)keyParts.rendererInputs=await adapter.renderCacheInputs({scene,project,projectRoot:projectDir(cfg,project.id),cfg,signal});
   const key=sha256(keyParts);
   const current=artifactFile(scene,project,cfg,'video');

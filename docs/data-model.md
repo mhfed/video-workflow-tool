@@ -8,7 +8,7 @@ Representative shape:
 
 ```json
 {
-  "version": 4,
+  "version": 7,
   "id": "why-habits-work-a1b2c3",
   "title": "Why habits work",
   "createdAt": "2026-09-09T00:00:00.000Z",
@@ -24,7 +24,11 @@ Representative shape:
     "workflowMode": "studio",
     "width": 1920,
     "height": 1080,
-    "fps": 30
+    "fps": 30,
+    "pen": {
+      "label": "NÉT VIỆT",
+      "color": "#FFFFFF"
+    }
   },
   "scenes": [],
   "artifacts": {
@@ -92,6 +96,8 @@ assembly or the directly changed scene dependencies.
 
 `settings.format` is `landscape` (16:9) or `short` (9:16). Short projects use 1080 × 1920. These dimensions are canonical project state and override environment defaults while rendering. Changing only the format invalidates rendered scene video, synchronized clips, and the final cut; voice and generated visuals remain reusable.
 
+`settings.pen` controls the generated marker used by Whiteboard and Draw Reveal. `label` is at most 18 characters and may be blank; `color` is a `#RRGGBB` value. Changing it invalidates only rendered video and clips that use the generated marker. Voice, source visuals, simple/cinematic scenes, and Draw Reveal scenes with a custom `handAsset` remain reusable.
+
 Studio dependency gates are:
 
 ```text
@@ -106,7 +112,7 @@ For SRT imports, `sourceStartMs` and `sourceEndMs` retain the source cue timing.
 
 - `voice` hash: narration + speech provider/model/voice/instructions.
 - `image` hash: visual prompt + image provider/model/size/quality.
-- `video` hash: renderer + scene duration + visual hash + video settings.
+- `video` hash: renderer + scene duration + visual hash + video settings + generated pen appearance when applicable.
 - `clip` hash: rendered video + voice + normalized output dimensions/FPS.
 
 If a matching hash exists and its file exists, that step is reused.

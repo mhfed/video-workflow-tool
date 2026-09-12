@@ -1,4 +1,5 @@
 import { normalizeTakes } from './takes.mjs';
+import { normalizePenAppearance } from './pen-settings.mjs';
 
 export const WORKFLOW_MODES = new Set(['auto','studio']);
 export const REVIEW_STAGES = ['script','voice','visual','clip'];
@@ -14,9 +15,10 @@ function normalizeMemory(memory={}) {
 }
 
 export function normalizeWorkflow(project) {
-  project.version=Math.max(Number(project.version)||1,6);
+  project.version=Math.max(Number(project.version)||1,7);
   project.settings ||= {};
   if (!WORKFLOW_MODES.has(project.settings.workflowMode)) project.settings.workflowMode='studio';
+  project.settings.pen=normalizePenAppearance(project.settings.pen);
   project.memory=normalizeMemory(project.memory);
   project.jobs=Array.isArray(project.jobs)?project.jobs:[];
   project.history ||= {undo:[],redo:[]};
