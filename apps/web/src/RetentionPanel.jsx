@@ -1,0 +1,115 @@
+import { useEffect, useMemo, useState } from 'react';
+import {
+  AlertTriangle, ArrowRight, Check, CheckCircle2, Clock3, LoaderCircle,
+  RefreshCw, Save, Sparkles, Target, WandSparkles,
+} from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+
+const EDITABLE_FIELDS = ['targetViewer', 'viewerQuestion', 'promise', 'hook', 'payoff'];
+
+function formatTime(ms = 0) {
+  const seconds = Math.max(0, Math.floor(ms / 1000));
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+}
+
+function PlanField({ label, name, value, onChange, multiline = false }) {
+  const Field = multiline ? Textarea : Input;
+  return <label className="retention-field"><span>{label}</span><Field rows={multiline ? 3 : undefined} value={value || ''} onChange={(event) => onChange(name, event.target.value)} /></label>;
+}
+
+export default function RetentionPanel({
+  report, loading, error, running, onRefresh, onPlan, onSave, onSelectHook, onOpenScene, c,
+}) {
+  const plan = report?.plan;
+  const preflight = report?.preflight;
+  const [draft, setDraft] = useState({});
+  const [working, setWorking] = useState('');
+  const [message, setMessage] = useState('');
+
+  useEffect(() => {
+    if (!plan) return;
+    setDraft(Object.fromEntries(EDITABLE_FIELDS.map((key) => [key, plan[key] || ''])));
+  }, [plan]);
+
+  const dirty = useMemo(() => !!plan && EDITABLE_FIELDS.some((key) => (draft[key] || '') !== (plan[key] || '')), [draft, plan]);
+  const run = async (kind, task) => {
+    setWorking(kind);
+    setMessage('');
+    try {
+      const result = await task();
+      if (result) setMessage(kind === 'save' ? c.retentionSaved : '');
+    } catch (cause) {
+      setMessage(cause.message);
+    } finally {
+      setWorking('');
+    }
+  };
+  const edit = (name, value) => setDraft((current) => ({ ...current, [name]: value }));
+
+  return <div className="director-panel-body retention-panel">
+    <header className="retention-head">
+      <div><span><Target />{c.viewerJourney}</span><p>{c.retentionPlanBody}</p></div>
+      {preflight && <Badge className={`retention-${preflight.status}`}>{preflight.status === 'pass' ? c.qaPass : `${preflight.summary.warnings} ${c.warnings}`}</Badge>}
+    </header>
+
+    {loading && !report ? <div className="retention-loading"><LoaderCircle className="spin" /><span>{c.loadingRetention}</span></div> : null}
+    {!loading && !report ? <section className="retention-empty"><Sparkles /><h3>{c.retentionEmpty}</h3><p>{c.retentionEmptyBody}</p><Button disabled={running || !!working} onClick={() => run('plan', onPlan)}>{working === 'plan' ? <LoaderCircle className="spin" /> : <WandSparkles />}{c.prepareRetention}</Button></section> : null}
+
+    {plan && <>
+      <section className="retention-contract">
+        <div className="retention-contract-label"><span>01</span><strong>{c.audienceContract}</strong></div>
+        <PlanField label={c.targetViewer} name="targetViewer" value={draft.targetViewer} onChange={edit} />
+        <PlanField label={c.viewerQuestion} name="viewerQuestion" value={draft.viewerQuestion} onChange={edit} multiline />
+        <div className="retention-value-chain">
+          <label><span>{c.promise}</span><Textarea rows={3} value={draft.promise || ''} onChange={(event) => edit('promise', event.target.value)} /></label>
+          <ArrowRight />
+          <label><span>{c.payoff}</span><Textarea rows={3} value={draft.payoff || ''} onChange={(event) => edit('payoff', event.target.value)} /></label>
+        </div>
+        <PlanField label={c.openingHook} name="hook" value={draft.hook} onChange={edit} multiline />
+        <Button className="retention-save" disabled={running || !!working || !dirty} onClick={() => run('save', () => onSave(draft))}>{working === 'save' ? <LoaderCircle className="spin" /> : <Save />}{c.saveRetentionPlan}</Button>
+      </section>
+
+      <section className="retention-section retention-journey">
+        <header><span><Clock3 />{c.viewerJourney}</span><small>{formatTime(preflight?.summary?.durationMs)}</small></header>
+        <div className="retention-beat-list">{(preflight?.journey || []).map((beat, index) => <button key={beat.sceneId} className={beat.status} onClick={() => onOpenScene(beat.sceneId)}>
+          <i><span>{String(index + 1).padStart(2, '0')}</span><b /></i>
+          <span><small>{formatTime(beat.startMs)} · {beat.narrativeRole}</small><strong>{beat.newInformation || c.missingNewInformation}</strong>{beat.visualChangeReason && <em>{c.whyVisualChanges}: {beat.visualChangeReason}</em>}</span>
+          <ArrowRight />
+        </button>)}</div>
+      </section>
+
+      <section className="retention-section hook-lab">
+        <header><span><Sparkles />{c.hookLab}</span><small>{c.hookLabBody}</small></header>
+        <div>{(plan.hookLab?.variants || []).map((variant) => {
+          const selected = plan.hookLab.selectedVariantId === variant.id;
+          return <article key={variant.id} className={selected ? 'selected' : ''}>
+            <header><strong>{variant.label}</strong>{selected && <Badge><Check />{c.selectedHook}</Badge>}</header>
+            <p>{variant.hook}</p>
+            <small>{variant.reason}</small>
+            <Button variant="outline" disabled={running || !!working || selected} onClick={() => run(`hook-${variant.id}`, () => onSelectHook(variant.id))}>{working === `hook-${variant.id}` ? <LoaderCircle className="spin" /> : <Check />}{selected ? c.selectedHook : c.chooseHook}</Button>
+          </article>;
+        })}</div>
+      </section>
+
+      <section className="retention-section retention-checks">
+        <header><span><CheckCircle2 />{c.retentionChecks}</span><small>{preflight?.summary?.checks || 0}</small></header>
+        <div>{(preflight?.findings || []).map((item) => <button key={item.id} className={item.status} disabled={!item.sceneIds?.length} onClick={() => item.sceneIds?.[0] && onOpenScene(item.sceneIds[0])}>
+          <i>{item.status === 'pass' ? <Check /> : <AlertTriangle />}</i>
+          <span><strong>{item.label}</strong><small>{item.note}</small></span>
+          {!!item.sceneIds?.length && <ArrowRight />}
+        </button>)}</div>
+      </section>
+
+      <footer className="retention-actions">
+        <Button variant="outline" disabled={running || !!working || loading} onClick={() => run('refresh', onRefresh)}>{working === 'refresh' || loading ? <LoaderCircle className="spin" /> : <RefreshCw />}{c.refreshRetention}</Button>
+        <Button disabled={running || !!working} onClick={() => run('plan', onPlan)}>{working === 'plan' ? <LoaderCircle className="spin" /> : <WandSparkles />}{c.replanRetention}</Button>
+      </footer>
+    </>}
+
+    {(error || message) && <div className={`retention-message ${error || message !== c.retentionSaved ? 'error' : 'success'}`}><AlertTriangle /><span>{error || message}</span></div>}
+    <p className="retention-disclaimer">{c.retentionDisclaimer}</p>
+  </div>;
+}

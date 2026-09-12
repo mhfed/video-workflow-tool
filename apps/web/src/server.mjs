@@ -32,6 +32,8 @@ import { CodexAccountClient, safeCodexAccountStatus } from './codex-account.mjs'
 import { routeContentApi } from './content-api.mjs';
 import { createVideo } from '../../worker/src/create-video.mjs';
 import { normalizeBrief, normalizeMemory } from '../../../packages/core/src/content-contract.mjs';
+import { applyHookVariant, buildRetentionPreflight, normalizeEngagementPlan, normalizeEngagementProposal } from '../../../packages/core/src/engagement.mjs';
+import { planEngagementText } from '../../../packages/providers/src/text.mjs';
 
 let cfg=config();
 const here=path.dirname(fileURLToPath(import.meta.url));
@@ -231,6 +233,24 @@ const server=http.createServer(async (req,res)=>{
         const job=jobQueue.cancel(id,decodeURIComponent(parts[4]));return json(res,200,{job,project:loadProject(id,cfg)});
       }
       if(req.method==='GET'&&parts[3]==='rough-cut'&&parts.length===4)return json(res,200,buildRoughCutManifest(loadProject(id,cfg)));
+      if(req.method==='GET'&&parts[3]==='retention'&&parts.length===4){
+        const p=loadProject(id,cfg);return json(res,200,{plan:p.engagementPlan,preflight:buildRetentionPreflight(p)});
+      }
+      if(req.method==='POST'&&parts[3]==='retention'&&parts[4]==='plan'&&parts.length===5){
+        if(projectBusy(id))return json(res,409,{error:'Wait for the active job before planning viewer retention.'});
+        const p=loadProject(id,cfg),proposal=await planEngagementText(p,cfg);recordHistory(p,'Prepare viewer retention plan');p.engagementPlan=normalizeEngagementProposal(proposal,p);saveProject(p,cfg);
+        return json(res,200,{project:p,plan:p.engagementPlan,preflight:buildRetentionPreflight(p)});
+      }
+      if(req.method==='PATCH'&&parts[3]==='retention'&&parts.length===4){
+        if(projectBusy(id))return json(res,409,{error:'Wait for the active job before editing viewer retention.'});
+        const body=await readBody(req),p=loadProject(id,cfg);recordHistory(p,'Update viewer retention plan');p.engagementPlan=normalizeEngagementPlan({...p.engagementPlan,...body,hookLab:p.engagementPlan?.hookLab},p);saveProject(p,cfg);
+        return json(res,200,{project:p,plan:p.engagementPlan,preflight:buildRetentionPreflight(p)});
+      }
+      if(req.method==='POST'&&parts[3]==='retention'&&parts[4]==='hooks'&&parts[5]==='select'&&parts.length===6){
+        if(projectBusy(id))return json(res,409,{error:'Wait for the active job before selecting a hook.'});
+        const body=await readBody(req),p=loadProject(id,cfg);recordHistory(p,'Select opening hook');applyHookVariant(p,String(body.variantId||''),cfg,{invalidateScene,visualPromptFor});saveProject(p,cfg);
+        return json(res,200,{project:p,plan:p.engagementPlan,preflight:buildRetentionPreflight(p)});
+      }
       if(req.method==='GET'&&parts[3]==='quality'&&parts[4]==='repair-plan')return json(res,200,buildRepairPlan(loadProject(id,cfg)));
       if(req.method==='POST'&&parts[3]==='quality'&&parts[4]==='repair'){
         const b=await readBody(req),plan=buildRepairPlan(loadProject(id,cfg)),selected=Array.isArray(b.actions)?b.actions:plan.actions;
