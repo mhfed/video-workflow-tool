@@ -307,6 +307,7 @@ export default function App(){
   const load=async(id)=>{const project=await api(`/api/projects/${encodeURIComponent(id)}`);setCurrent(project);setContentNavigation({channelId:project.channelId||null,section:'videos'});await Promise.all([refreshProjects(),refreshHealth(),refreshChannels()]);};
   const openNewVideo=(idea=null)=>{setIdeaToCreate(idea);setError('');setNavDrawer(null);setDialogOpen(true);};
   const chooseChannel=(id)=>{setChannelId(id);setCurrent(null);setNavDrawer(null);};
+  const createChannelFromNavigation=async(name)=>{const channel=await api('/api/channels',{method:'POST',body:JSON.stringify({identity:{name}})});await refreshContent();chooseChannel(channel.id);return channel;};
   const openContentSection=(section)=>{if(section!=='videos'&&!selectedChannel)return;setContentNavigation({channelId,section});setCurrent(null);setNavDrawer(null);};
   const contextSaved=async(project)=>{if(current?.id===project.id){setCurrent(project);setContentNavigation({channelId:project.channelId||null,section:'videos'});}await refreshContent();};
 
@@ -384,7 +385,7 @@ export default function App(){
     </header>}
 
     <div className={`workspace-grid ${current?'project-open':''}`}>
-      <ApplicationNavigation current={current} projects={channelProjects} section={contentSection} onSection={openContentSection} channelAvailable={!!selectedChannel} drawer={navDrawer} onDrawer={setNavDrawer} onCreate={()=>openNewVideo()} onSelect={load} onDelete={(project)=>{setDeleteProjectError('');setProjectToDelete(project);}} onSettings={()=>{setNavDrawer(null);setSettingsOpen(true);}} health={health} c={c}/>
+      <ApplicationNavigation current={current} projects={channelProjects} allProjects={projects} channels={channels} channelId={channelId} section={contentSection} onSection={openContentSection} onChannelChange={chooseChannel} onCreateChannel={createChannelFromNavigation} channelAvailable={!!selectedChannel} drawer={navDrawer} onDrawer={setNavDrawer} onCreate={()=>openNewVideo()} onSelect={load} onDelete={(project)=>{setDeleteProjectError('');setProjectToDelete(project);}} onSettings={()=>{setNavDrawer(null);setSettingsOpen(true);}} health={health} c={c}/>
 
       <main className={`main-stage ${current?'director-shell-stage with-video-context':''}`}>
         {(error||showProjectError)&&<div className="app-alert-stack" aria-live="assertive">
