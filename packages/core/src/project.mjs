@@ -41,6 +41,13 @@ export function createProject({ title, sourceText, sourceType = 'script', topic 
 export function saveProject(project, cfg) { normalizeWorkflow(project); normalizeVideoFormat(project.settings,cfg); project.updatedAt = nowIso(); writeJson(projectFile(cfg,project.id), project); return project; }
 export function loadProject(id,cfg) { const project=normalizeWorkflow(readJson(projectFile(cfg,id))); normalizeVideoFormat(project.settings,cfg); return project; }
 export function listProjects(cfg) { ensureDir(cfg.workspaceDir); return fs.readdirSync(cfg.workspaceDir,{withFileTypes:true}).filter((e)=>e.isDirectory()).map((e)=>{ try { return loadProject(e.name,cfg); } catch { return null; } }).filter(Boolean).sort((a,b)=>b.updatedAt.localeCompare(a.updatedAt)); }
+export function deleteProject(id,cfg) {
+  const workspace=path.resolve(cfg.workspaceDir),target=path.resolve(workspace,String(id||''));
+  if(target===workspace||path.dirname(target)!==workspace)throw new Error('Invalid project id.');
+  const project=loadProject(id,cfg);
+  fs.rmSync(target,{recursive:true,force:false});
+  return project;
+}
 export function updateTimeline(project) { let cursor=0; for (const scene of project.scenes) { scene.startMs=cursor; scene.endMs=cursor+scene.durationMs; cursor=scene.endMs; } return project; }
 
 function nextSceneId(project) {

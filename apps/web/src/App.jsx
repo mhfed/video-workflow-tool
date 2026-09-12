@@ -29,6 +29,8 @@ import {
   ShieldCheck,
   SlidersHorizontal,
   Sparkles,
+  Trash2,
+  TriangleAlert,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -112,6 +114,27 @@ function NewProjectDialog({open,onOpenChange,onCreate,busy,defaultRenderer='simp
         <div className="mode-picker"><button type="button" className={workflowMode==='studio'?'active':''} onClick={()=>setWorkflowMode('studio')}><SlidersHorizontal/><span><strong>{c.studioMode}</strong><small>{c.studioModeBody}</small></span></button><button type="button" className={workflowMode==='auto'?'active':''} onClick={()=>setWorkflowMode('auto')}><Bot/><span><strong>{c.autoMode}</strong><small>{c.autoModeBody}</small></span></button></div>
         <DialogFooter><Button type="button" variant="ghost" onClick={()=>onOpenChange(false)}>{c.cancel}</Button><Button type="submit" disabled={busy}>{busy?<LoaderCircle className="spin"/>:<Clapperboard/>}{c.createProduction}</Button></DialogFooter>
       </form>
+    </DialogContent>
+  </Dialog>;
+}
+
+function DeleteProjectDialog({project,busy,blocked,error,onOpenChange,onConfirm,c}){
+  const [confirmation,setConfirmation]=useState('');
+  useEffect(()=>{setConfirmation('');},[project?.id]);
+  const confirmed=!!project&&confirmation===project.title;
+  return <Dialog open={!!project} onOpenChange={(open)=>{if(!open&&!busy)onOpenChange(false);}}>
+    <DialogContent className="delete-project-dialog">
+      <div className="delete-project-warning"><TriangleAlert/></div>
+      <DialogHeader>
+        <div className="dialog-index">{c.dangerZone}</div>
+        <DialogTitle>{c.deleteProject}</DialogTitle>
+        <DialogDescription>{c.deleteProjectBody}</DialogDescription>
+      </DialogHeader>
+      <div className="delete-project-target"><span>{c.projectTitle}</span><strong>{project?.title}</strong><small>{project?.scenes?.length||0} {c.scenes}</small></div>
+      {blocked&&<div className="delete-project-error"><CircleDot/><span>{c.deleteProjectBusy}</span></div>}
+      {error&&<div className="delete-project-error"><CircleDot/><span>{error}</span></div>}
+      <label className="delete-project-confirm">{c.typeProjectName}<Input autoFocus value={confirmation} onChange={(event)=>setConfirmation(event.target.value)} placeholder={project?.title||''} disabled={busy}/></label>
+      <DialogFooter><Button type="button" variant="ghost" disabled={busy} onClick={()=>onOpenChange(false)}>{c.cancel}</Button><Button type="button" variant="destructive" disabled={!confirmed||busy||blocked} onClick={onConfirm}>{busy?<LoaderCircle className="spin"/>:<Trash2/>}{busy?c.deletingProject:c.deletePermanently}</Button></DialogFooter>
     </DialogContent>
   </Dialog>;
 }
@@ -247,6 +270,9 @@ export default function App(){
   const [error,setError]=useState('');
   const [dialogOpen,setDialogOpen]=useState(false);
   const [settingsOpen,setSettingsOpen]=useState(false);
+  const [projectToDelete,setProjectToDelete]=useState(null);
+  const [deletingProjectId,setDeletingProjectId]=useState(null);
+  const [deleteProjectError,setDeleteProjectError]=useState('');
   const [navDrawer,setNavDrawer]=useState(null);
   const [paletteOpen,setPaletteOpen]=useState(false);
   const [workspaceContext,setWorkspaceContext]=useState(null);
@@ -275,6 +301,17 @@ export default function App(){
     catch(cause){setError(cause.message);}finally{setBusy(false);}
   };
   const createDemo=()=>createProject(config?.contentLanguage==='en'?{title:'Small Habits — Test Cut',sourceType:'script',sourceText:'Small habits feel insignificant at first, but repetition gives them power. Each action becomes a vote for the person you want to become. Make the next step obvious, easy, and satisfying, then let consistency do the heavy lifting.',minutes:1,language:'en'}:{title:'Thói quen nhỏ — Bản thử',sourceType:'script',sourceText:'Những thói quen nhỏ ban đầu có vẻ không đáng kể, nhưng sự lặp lại tạo cho chúng sức mạnh. Mỗi hành động là một lá phiếu cho con người bạn muốn trở thành. Hãy làm cho bước tiếp theo thật rõ ràng, dễ dàng và thú vị, rồi để sự kiên trì tạo nên khác biệt.',minutes:1,language:'vi'});
+  const deleteSelectedProject=async()=>{
+    if(!projectToDelete)return false;
+    const id=projectToDelete.id;setDeletingProjectId(id);setDeleteProjectError('');setError('');
+    try{
+      await api(`/api/projects/${encodeURIComponent(id)}`,{method:'DELETE'});
+      setProjects((items)=>items.filter((project)=>project.id!==id));
+      if(current?.id===id)setCurrent(null);
+      setProjectToDelete(null);setNavDrawer(null);await refreshHealth();return true;
+    }catch(cause){setDeleteProjectError(cause.message);return false;}
+    finally{setDeletingProjectId(null);}
+  };
   const saveScene=async(sceneId,payload)=>{setBusy(true);setError('');try{const project=await api(`/api/projects/${encodeURIComponent(current.id)}/scenes/${encodeURIComponent(sceneId)}`,{method:'PATCH',body:JSON.stringify(payload)});setCurrent(project);await refreshProjects();return project;}catch(cause){setError(cause.message);return null;}finally{setBusy(false);}};
   const updateProject=async(payload)=>{setBusy(true);setError('');try{const project=await api(`/api/projects/${encodeURIComponent(current.id)}`,{method:'PATCH',body:JSON.stringify(payload)});setCurrent(project);await refreshProjects();return project;}catch(cause){setError(cause.message);return null;}finally{setBusy(false);}};
   const changeRenderer=async(renderer)=>{if(!current||renderer===current.settings?.renderer)return;await updateProject({renderer});};
@@ -323,17 +360,18 @@ export default function App(){
     </header>}
 
     <div className={`workspace-grid ${current?'project-open':''}`}>
-      <ApplicationNavigation current={current} projects={projects} drawer={navDrawer} onDrawer={setNavDrawer} onHome={()=>{setNavDrawer(null);setCurrent(null);}} onCreate={()=>{setNavDrawer(null);setDialogOpen(true);}} onSelect={load} onSettings={()=>{setNavDrawer(null);setSettingsOpen(true);}} health={health} c={c}/>
+      <ApplicationNavigation current={current} projects={projects} drawer={navDrawer} onDrawer={setNavDrawer} onHome={()=>{setNavDrawer(null);setCurrent(null);}} onCreate={()=>{setNavDrawer(null);setDialogOpen(true);}} onSelect={load} onDelete={(project)=>{setDeleteProjectError('');setProjectToDelete(project);}} onSettings={()=>{setNavDrawer(null);setSettingsOpen(true);}} health={health} c={c}/>
 
       <main className={`main-stage ${current?'director-shell-stage':''}`}>
         {error&&<div className="error-banner"><CircleDot/><span>{error}</span><button onClick={()=>setError('')}>{c.dismiss}</button></div>}
         {!current?<EmptyState onCreate={()=>setDialogOpen(true)} onDemo={createDemo} c={c}/>:<>
           {current.error&&<div className="project-error"><strong>{c.lastRunStopped}</strong><span>{current.error.message}</span></div>}
-          <DirectorWorkspace key={current.id} project={current} running={busy||running} keyboardLocked={paletteOpen||dialogOpen||settingsOpen||!!navDrawer} activeJob={activeJob} command={workspaceCommand} onContextChange={setWorkspaceContext} onCreate={()=>setDialogOpen(true)} onCancelJob={cancelJob} onUndo={()=>historyAction('undo')} onRedo={()=>historyAction('redo')} onSelectTake={selectSceneTake} onRunQuality={runQuality} onGetRepairPlan={getRepairPlan} onApplyRepairs={applyRepairs} onSave={saveScene} onRunStage={runStage} onReview={reviewStage} onReviewBulk={reviewBulk} onRunAll={run} onLoadRoughCut={loadRoughCut} onUpdateProject={updateProject} onSceneAction={editSceneStructure} onInsertScene={insertNewScene} onDirectorPlan={planDirection} onSearchBroll={searchBroll} onSelectBroll={selectBroll} onUploadArtwork={uploadArtwork} onLoadDrawRevealPath={loadDrawRevealPath} onSaveDrawRevealPath={saveDrawRevealPath} brollProviders={{names:config?.brollProviderNames||['pexels','pixabay'],configured:{pexels:!!config?.hasPexelsKey,pixabay:!!config?.hasPixabayKey}}} rendererNames={config?.rendererNames||[]} c={c}/>
+          <DirectorWorkspace key={current.id} project={current} running={busy||running} keyboardLocked={paletteOpen||dialogOpen||settingsOpen||!!projectToDelete||!!navDrawer} activeJob={activeJob} command={workspaceCommand} onContextChange={setWorkspaceContext} onCreate={()=>setDialogOpen(true)} onCancelJob={cancelJob} onUndo={()=>historyAction('undo')} onRedo={()=>historyAction('redo')} onSelectTake={selectSceneTake} onRunQuality={runQuality} onGetRepairPlan={getRepairPlan} onApplyRepairs={applyRepairs} onSave={saveScene} onRunStage={runStage} onReview={reviewStage} onReviewBulk={reviewBulk} onRunAll={run} onLoadRoughCut={loadRoughCut} onUpdateProject={updateProject} onSceneAction={editSceneStructure} onInsertScene={insertNewScene} onDirectorPlan={planDirection} onSearchBroll={searchBroll} onSelectBroll={selectBroll} onUploadArtwork={uploadArtwork} onLoadDrawRevealPath={loadDrawRevealPath} onSaveDrawRevealPath={saveDrawRevealPath} brollProviders={{names:config?.brollProviderNames||['pexels','pixabay'],configured:{pexels:!!config?.hasPexelsKey,pixabay:!!config?.hasPixabayKey}}} rendererNames={config?.rendererNames||[]} c={c}/>
         </>}
       </main>
     </div>
     <NewProjectDialog open={dialogOpen} onOpenChange={setDialogOpen} onCreate={createProject} busy={busy} defaultRenderer={config?.renderer||'simple'} rendererNames={config?.rendererNames||[]} defaultLanguage={config?.contentLanguage||'vi'} c={c}/>
+    <DeleteProjectDialog project={projectToDelete} busy={deletingProjectId===projectToDelete?.id} blocked={!!projectToDelete&&(projectToDelete.jobs||[]).some((job)=>['queued','running','cancelling'].includes(job.status))||!!projectToDelete&&health?.running?.includes(projectToDelete.id)} error={deleteProjectError} onOpenChange={(open)=>{if(!open){setProjectToDelete(null);setDeleteProjectError('');}}} onConfirm={deleteSelectedProject} c={c}/>
     <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} onSaved={refreshHealth} c={c}/>
     <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} items={paletteItems} c={c}/>
   </div>;

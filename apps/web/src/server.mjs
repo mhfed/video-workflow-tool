@@ -4,7 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { config } from '../../../packages/core/src/env.mjs';
 import { updateEnvFile } from '../../../packages/core/src/env-file.mjs';
-import { createProject, duplicateScene, insertScene, listProjects, loadProject, mergeSceneWithNext, moveScene, removeScene, saveProject, splitScene, projectDir } from '../../../packages/core/src/project.mjs';
+import { createProject, deleteProject, duplicateScene, insertScene, listProjects, loadProject, mergeSceneWithNext, moveScene, removeScene, saveProject, splitScene, projectDir } from '../../../packages/core/src/project.mjs';
 import { invalidateRenderedMedia, invalidateScene } from '../../../packages/core/src/invalidation.mjs';
 import { visualPromptFor } from '../../../packages/core/src/scene-plan.mjs';
 import { SUPPORTED_RENDERERS } from '../../../packages/core/src/validate-config.mjs';
@@ -231,6 +231,11 @@ const server=http.createServer(async (req,res)=>{
     if(parts[0]==='api'&&parts[1]==='projects'&&parts[2]) {
       const id=decodeURIComponent(parts[2]);
       if(req.method==='GET'&&parts.length===3) return json(res,200,loadProject(id,cfg));
+      if(req.method==='DELETE'&&parts.length===3) {
+        if(!isLoopback(req.socket.remoteAddress))return json(res,403,{error:'Project deletion is only available from this machine.'});
+        if(projectBusy(id))return json(res,409,{error:'Wait for this project job to finish before deleting it.'});
+        const deleted=deleteProject(id,cfg);return json(res,200,{deleted:true,id:deleted.id});
+      }
       if(req.method==='GET'&&parts[3]==='jobs'&&parts.length===4)return json(res,200,{items:loadProject(id,cfg).jobs||[]});
       if(req.method==='POST'&&parts[3]==='jobs'&&parts.length===4){
         const b=await readBody(req),type=b.type||'render',request=b.request||Object.fromEntries(Object.entries(b).filter(([key])=>key!=='type'));
