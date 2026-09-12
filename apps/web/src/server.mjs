@@ -4,7 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { config } from '../../../packages/core/src/env.mjs';
 import { updateEnvFile } from '../../../packages/core/src/env-file.mjs';
-import { createProject, deleteProject, duplicateScene, insertScene, listProjects, loadProject, mergeSceneWithNext, moveScene, removeScene, saveProject, splitScene, projectDir } from '../../../packages/core/src/project.mjs';
+import { deleteProject, duplicateScene, insertScene, listProjects, loadProject, mergeSceneWithNext, moveScene, removeScene, saveProject, splitScene, projectDir } from '../../../packages/core/src/project.mjs';
 import { invalidateRenderedMedia, invalidateScene } from '../../../packages/core/src/invalidation.mjs';
 import { visualPromptFor } from '../../../packages/core/src/scene-plan.mjs';
 import { SUPPORTED_RENDERERS } from '../../../packages/core/src/validate-config.mjs';
@@ -15,7 +15,6 @@ import { buildRoughCutManifest } from '../../../packages/core/src/rough-cut.mjs'
 import { buildRepairPlan } from '../../../packages/core/src/repair-plan.mjs';
 import { recordHistory, redoProject, undoProject } from '../../../packages/core/src/history.mjs';
 import { selectTake } from '../../../packages/core/src/takes.mjs';
-import { generateScriptText, planNarrativeBeatsText, textProviderName } from '../../../packages/providers/src/text.mjs';
 import { listVivibeVoices } from '../../../packages/providers/src/vivibe.mjs';
 import { planSceneDirection } from '../../../packages/providers/src/director.mjs';
 import { brollProviderNames, searchBroll } from '../../../packages/providers/src/broll.mjs';
@@ -30,6 +29,9 @@ import { assignDownloadedBroll, downloadBrollAsset } from './broll-media.mjs';
 import { assignUploadedArtwork, resolveArtworkFile, storeArtworkUpload } from './artwork-media.mjs';
 import { assignDrawRevealPath, drawRevealPathChanged, normalizeDrawRevealPathUpdate } from './draw-reveal-path.mjs';
 import { CodexAccountClient, safeCodexAccountStatus } from './codex-account.mjs';
+import { routeContentApi } from './content-api.mjs';
+import { createVideo } from '../../worker/src/create-video.mjs';
+import { normalizeBrief, normalizeMemory } from '../../../packages/core/src/content-contract.mjs';
 
 let cfg=config();
 const here=path.dirname(fileURLToPath(import.meta.url));
@@ -48,15 +50,6 @@ const isLoopback=(address='')=>address==='127.0.0.1'||address==='::1'||address.s
 const settingString=(body,key,{fallback='',max=500}={})=>typeof body[key]==='string'?body[key].replace(/[\r\n]+/g,' ').trim().slice(0,max):fallback;
 const projectBusy=(id)=>legacyRunning.has(id)||jobQueue.activeProjectIds().includes(id);
 const activeIds=()=>[...new Set([...legacyRunning,...jobQueue.activeProjectIds()])];
-
-function projectMemory(value={}){
-  return {
-    characters:Array.isArray(value.characters)?value.characters.map((item)=>String(item).trim()).filter(Boolean).slice(0,30):[],
-    palette:Array.isArray(value.palette)?value.palette.map((item)=>String(item).trim()).filter(Boolean).slice(0,12):[],
-    artDirection:typeof value.artDirection==='string'?value.artDirection.trim().slice(0,3000):'',
-    pronunciations:Array.isArray(value.pronunciations)?value.pronunciations.map((item)=>String(item).trim()).filter(Boolean).slice(0,50):[]
-  };
-}
 
 function settingsUpdates(body) {
   const updates={};
@@ -133,6 +126,8 @@ function settingsUpdates(body) {
 const server=http.createServer(async (req,res)=>{
   try {
     const url=new URL(req.url,`http://${req.headers.host}`); const parts=url.pathname.split('/').filter(Boolean);
+    const contentResult=await routeContentApi({method:req.method,parts,readBody:()=>readBody(req),cfg,projectBusy});
+    if(contentResult)return json(res,contentResult.status,contentResult.body);
     if(req.method==='GET'&&url.pathname==='/api/health') return json(res,200,{ok:true,running:activeIds(),config:safeConfig()});
     if(url.pathname.startsWith('/api/codex/')){
       if(!isLoopback(req.socket.remoteAddress))return json(res,403,{error:'ChatGPT connection is only available from this machine.'});
@@ -215,19 +210,9 @@ const server=http.createServer(async (req,res)=>{
         return serveMedia(req,res,path.join(projectDir(cfg,p.id),rel),mediaTypeFor(kind));
       }
     }
-    if(req.method==='GET' && url.pathname==='/api/projects') return json(res,200,listProjects(cfg));
+    if(req.method==='GET' && url.pathname==='/api/projects') return json(res,200,listProjects(cfg,url.searchParams.has('channelId')?{channelId:url.searchParams.get('channelId')}:{}));
     if(req.method==='POST' && url.pathname==='/api/projects') {
-      const b=await readBody(req);let sourceText=b.sourceText||'',sourceType=b.sourceType||'script',topic='',plannedScenes=null;
-      const renderer=typeof b.renderer==='string'?b.renderer:cfg.renderer,language=typeof b.language==='string'?b.language:cfg.contentLanguage,format=typeof b.format==='string'?b.format:'landscape',workflowMode=WORKFLOW_MODES.has(b.workflowMode)?b.workflowMode:'studio';
-      if(!SUPPORTED_RENDERERS.has(renderer))return json(res,400,{error:'Unsupported video renderer.'});
-      if(!SUPPORTED_LANGUAGES.has(language))return json(res,400,{error:'Unsupported project language.'});
-      if(!SUPPORTED_VIDEO_FORMATS.has(format))return json(res,400,{error:'Unsupported video format.'});
-      if(sourceType==='topic'){topic=String(b.topic||b.sourceText||'').trim();if(!topic)throw new Error('topic is required');sourceText=await generateScriptText(topic,cfg,{minutes:Number(b.minutes||cfg.scriptMinutes),language});}
-      if(sourceType!=='srt'&&textProviderName(cfg)!=='mock'){
-        try{plannedScenes=await planNarrativeBeatsText(sourceText,{...cfg,contentLanguage:language},{language,format});}
-        catch(error){console.warn(`Semantic planner fallback: ${error.message}`);}
-      }
-      return json(res,201,createProject({title:b.title||topic,sourceText,sourceType,topic,workflowMode,format,plannedScenes},{...cfg,renderer,contentLanguage:language}));
+      return json(res,201,await createVideo(await readBody(req),cfg));
     }
     if(parts[0]==='api'&&parts[1]==='projects'&&parts[2]) {
       const id=decodeURIComponent(parts[2]);
@@ -301,6 +286,7 @@ const server=http.createServer(async (req,res)=>{
         const b=await readBody(req);
         recordHistory(p,'Update project settings');
         if(typeof b.title==='string'&&b.title.trim())p.title=b.title.trim().slice(0,160);
+        if(b.brief!==undefined)p.brief=normalizeBrief(b.brief);
         if(typeof b.renderer==='string'){
           if(!SUPPORTED_RENDERERS.has(b.renderer))return json(res,400,{error:'Unsupported video renderer.'});
           if(p.settings.renderer!==b.renderer){p.settings.renderer=b.renderer;invalidateRenderedMedia(p);}
@@ -317,7 +303,7 @@ const server=http.createServer(async (req,res)=>{
           applyPenAppearance(p,b.pen,cfg);
         }
         if(b.memory&&typeof b.memory==='object'){
-          p.memory=projectMemory(b.memory);
+          p.memory=normalizeMemory({...p.memory,...b.memory});
           for(const scene of p.scenes){const prompt=visualPromptFor(scene.text,{...cfg,format:p.settings?.format,memory:p.memory},scene.visualIntent);const promptChanged=prompt!==scene.visualPrompt;scene.visualPrompt=prompt;invalidateScene(p,scene,{promptChanged});}
         }
         saveProject(p,cfg);
@@ -391,7 +377,7 @@ const server=http.createServer(async (req,res)=>{
       if(file.startsWith(`${pub}${path.sep}`)&&fs.existsSync(file)&&fs.statSync(file).isFile()) return serve(res,file,mimeFor(file));
     }
     res.writeHead(404).end('Not found');
-  } catch(e) { json(res,500,{error:e.message,stack:process.env.NODE_ENV==='development'?e.stack:undefined}); }
+  } catch(e) { json(res,e.status||500,{error:e.message,stack:process.env.NODE_ENV==='development'?e.stack:undefined}); }
 });
 server.listen(cfg.webPort,cfg.webHost,()=>{console.log(`Video Workflow Tool: http://${cfg.webHost}:${cfg.webPort}`);jobQueue.start();});
 const shutdown=()=>{codexAccount.close();server.close(()=>process.exit(0));setTimeout(()=>process.exit(0),2000).unref();};

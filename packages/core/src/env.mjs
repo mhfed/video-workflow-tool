@@ -27,6 +27,7 @@ export function config() {
     renderer: env.VIDEO_RENDERER || 'simple',
     imageProvider: env.IMAGE_PROVIDER || (env.OPENAI_API_KEY ? 'openai' : 'mock'),
     voiceProvider: env.VOICE_PROVIDER || (env.OPENAI_API_KEY ? 'openai' : 'mock'),
+    voiceDefaults: { mock: '', openai: env.OPENAI_TTS_VOICE || 'marin', vivibe: env.VIVIBE_VOICE_ID || '' },
     textProvider: env.TEXT_PROVIDER || (env.OPENAI_API_KEY ? 'openai' : 'mock'),
     codexBin: env.CODEX_BIN || 'codex',
     codexModel: env.CODEX_MODEL || '',

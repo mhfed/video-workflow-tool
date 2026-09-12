@@ -8,19 +8,19 @@ export function invalidateFinal(project) {
   return project;
 }
 
-export function invalidateScene(project, scene, { textChanged=false, promptChanged=false, rendererChanged=false, visualChanged=false }={}) {
-  if (!textChanged && !promptChanged && !rendererChanged && !visualChanged) return project;
+export function invalidateScene(project, scene, { textChanged=false, promptChanged=false, rendererChanged=false, visualChanged=false, voiceChanged=false }={}) {
+  if (!textChanged && !promptChanged && !rendererChanged && !visualChanged && !voiceChanged) return project;
   scene.cache ||= {};
   scene.artifacts ||= {};
   scene.selectedTakes ||= {};
 
-  if (textChanged) {
+  if (textChanged || voiceChanged) {
     drop(scene.cache,'voice');
     drop(scene.artifacts,'voice');
     drop(scene.selectedTakes,'voice');
     drop(scene.operations,'voice');
     scene.review ||= {};
-    scene.review.script='pending';
+    if (textChanged) scene.review.script='pending';
     scene.review.voice='stale';
   }
   if (promptChanged || visualChanged) {
@@ -30,7 +30,7 @@ export function invalidateScene(project, scene, { textChanged=false, promptChang
     scene.review ||= {};
     scene.review.visual='stale';
   }
-  if (textChanged || promptChanged || rendererChanged || visualChanged) {
+  if (textChanged || promptChanged || rendererChanged || visualChanged || voiceChanged) {
     for (const key of ['video','clip']) drop(scene.cache,key);
     for (const key of ['video','clip']) drop(scene.artifacts,key);
     for (const key of ['video','clip']) drop(scene.selectedTakes,key);

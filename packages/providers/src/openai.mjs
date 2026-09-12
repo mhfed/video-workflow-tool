@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { ensureDir } from '../../core/src/utils.mjs';
 import { languageInfo, normalizeLanguage } from '../../core/src/languages.mjs';
+import { scriptContext, sceneContext } from './content-context.mjs';
 
 async function openaiFetch(cfg, endpoint, init, attempts = 3) {
   if (!cfg.openaiApiKey) throw new Error('OPENAI_API_KEY is required for the OpenAI provider');
@@ -28,10 +29,10 @@ function responseJson(data) {
   const text=responseText(data).replace(/^```(?:json)?\s*/i,'').replace(/\s*```$/,'').trim();
   try{return JSON.parse(text);}catch{throw new Error('OpenAI director response was not valid JSON');}
 }
-export async function generateScriptOpenAI(topic, cfg, {minutes=cfg.scriptMinutes,language=cfg.contentLanguage,signal=null}={}) {
+export async function generateScriptOpenAI(topic, cfg, {minutes=cfg.scriptMinutes,language=cfg.contentLanguage,signal=null,brief=null,context=null}={}) {
   const outputLanguage=languageInfo(normalizeLanguage(language)).promptName;
   const prompt = `Write a complete YouTube explainer narration in ${outputLanguage}. Topic: ${topic}\nTarget duration: about ${minutes} minutes. Start with a strong hook, build a clear logical story, use concrete examples, keep sentences natural for voice-over, and end with a memorable conclusion. Do not use markdown headings, bullet lists, citations, stage directions, or image instructions. Return only the narration script in ${outputLanguage}.`;
-  const res = await openaiFetch(cfg, '/responses', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ model: cfg.openaiTextModel, input: prompt }),signal });
+  const res = await openaiFetch(cfg, '/responses', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ model: cfg.openaiTextModel, input: prompt + scriptContext({brief,context}) }),signal });
   const text=responseText(await res.json()); if(!text) throw new Error('OpenAI Responses API returned no narration text'); return text;
 }
 export async function generateImageOpenAI(prompt, outputFile, cfg,{signal=null}={}) {
@@ -72,13 +73,13 @@ export async function synthesizeSpeechOpenAI(text, outputFile, cfg,{signal=null}
 
 const normalizedWords=(value)=>String(value||'').normalize('NFKD').toLowerCase().replace(/[^a-z0-9\p{L}\p{N}]+/gu,' ').trim();
 
-export async function planNarrativeBeatsOpenAI(script,cfg,{language=cfg.contentLanguage,format='landscape',signal=null}={}) {
+export async function planNarrativeBeatsOpenAI(script,cfg,{language=cfg.contentLanguage,format='landscape',signal=null,brief=null,context=null}={}) {
   const outputLanguage=languageInfo(normalizeLanguage(language)).promptName;
   const prompt=`Act as a video story editor. Partition the complete narration below into semantic visual beats, not arbitrary sentence chunks. Preserve every word and its original order exactly once. Prefer hook, setup, example, turn, explanation, and resolution beats of roughly ${cfg.sceneMinSec}-${cfg.sceneMaxSec} seconds.
 
 Return JSON only: {"beats":[{"text":"verbatim contiguous narration","visualIntent":"one concrete visual direction in ${outputLanguage}","narrativeRole":"hook|setup|example|turn|explanation|resolution"}]}
 Format: ${format}. Narration: ${JSON.stringify(script)}`;
-  const res=await openaiFetch(cfg,'/responses',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:cfg.openaiTextModel,input:prompt}),signal});
+  const res=await openaiFetch(cfg,'/responses',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:cfg.openaiTextModel,input:prompt+sceneContext({brief,context})}),signal});
   const data=responseJson(await res.json()),beats=Array.isArray(data.beats)?data.beats:[];
   if(!beats.length||normalizedWords(beats.map((beat)=>beat.text).join(' '))!==normalizedWords(script))throw new Error('Semantic scene plan did not preserve the complete narration');
   return beats.map((beat)=>{

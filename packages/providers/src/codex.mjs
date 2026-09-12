@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { languageInfo, normalizeLanguage } from '../../core/src/languages.mjs';
+import { scriptContext, sceneContext } from './content-context.mjs';
 
 const MAX_OUTPUT_BYTES=2*1024*1024;
 const normalizedWords=(value)=>String(value||'').normalize('NFKD').toLowerCase().replace(/[^a-z0-9\p{L}\p{N}]+/gu,' ').trim();
@@ -85,15 +86,15 @@ export async function generateImageCodex(prompt,outputFile,cfg,{signal=null,spaw
   }
 }
 
-export async function generateScriptCodex(topic,cfg,{minutes=cfg.scriptMinutes,language=cfg.contentLanguage,signal=null}={}) {
+export async function generateScriptCodex(topic,cfg,{minutes=cfg.scriptMinutes,language=cfg.contentLanguage,signal=null,brief=null,context=null}={}) {
   const outputLanguage=languageInfo(normalizeLanguage(language)).promptName;
-  return runCodexPrompt(`You are a narration writer operating as a text-only provider. Do not inspect files, run commands, browse, or use tools. Write a complete YouTube explainer narration in ${outputLanguage}. Topic: ${topic}\nTarget duration: about ${minutes} minutes. Start with a strong hook, build a clear logical story, use concrete examples, keep sentences natural for voice-over, and end with a memorable conclusion. Do not use markdown headings, bullet lists, citations, stage directions, or image instructions. Return only the narration script in ${outputLanguage}.`,cfg,{signal});
+  return runCodexPrompt(`You are a narration writer operating as a text-only provider. Do not inspect files, run commands, browse, or use tools. Write a complete YouTube explainer narration in ${outputLanguage}. Topic: ${topic}\nTarget duration: about ${minutes} minutes. Start with a strong hook, build a clear logical story, use concrete examples, keep sentences natural for voice-over, and end with a memorable conclusion. Do not use markdown headings, bullet lists, citations, stage directions, or image instructions. Return only the narration script in ${outputLanguage}.`+scriptContext({brief,context}),cfg,{signal});
 }
 
-export async function planNarrativeBeatsCodex(script,cfg,{language=cfg.contentLanguage,format='landscape',signal=null}={}) {
+export async function planNarrativeBeatsCodex(script,cfg,{language=cfg.contentLanguage,format='landscape',signal=null,brief=null,context=null}={}) {
   const outputLanguage=languageInfo(normalizeLanguage(language)).promptName;
   const prompt=`You are a video story editor operating as a text-only provider. Do not inspect files, run commands, browse, or use tools. Partition the complete narration below into semantic visual beats, not arbitrary sentence chunks. Preserve every word and its original order exactly once. Prefer hook, setup, example, turn, explanation, and resolution beats of roughly ${cfg.sceneMinSec}-${cfg.sceneMaxSec} seconds.\n\nReturn JSON only: {"beats":[{"text":"verbatim contiguous narration","visualIntent":"one concrete visual direction in ${outputLanguage}","narrativeRole":"hook|setup|example|turn|explanation|resolution"}]}\nFormat: ${format}. Narration: ${JSON.stringify(script)}`;
-  const data=cleanJson(await runCodexPrompt(prompt,cfg,{signal}),'Codex scene plan'),beats=Array.isArray(data.beats)?data.beats:[];
+  const data=cleanJson(await runCodexPrompt(prompt+sceneContext({brief,context}),cfg,{signal}),'Codex scene plan'),beats=Array.isArray(data.beats)?data.beats:[];
   if(!beats.length||normalizedWords(beats.map((beat)=>beat.text).join(' '))!==normalizedWords(script))throw new Error('Semantic scene plan did not preserve the complete narration');
   return beats.map((beat)=>{
     const wordCount=String(beat.text).trim().split(/\s+/).filter(Boolean).length;

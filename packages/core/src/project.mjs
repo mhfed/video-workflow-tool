@@ -8,17 +8,23 @@ import { normalizeWorkflow } from './workflow.mjs';
 import { normalizeVideoFormat, videoFormatSettings } from './video-format.mjs';
 import { invalidateFinal, invalidateScene } from './invalidation.mjs';
 import { DEFAULT_PEN_APPEARANCE } from './pen-settings.mjs';
+import { loadChannel } from './channel.mjs';
+import { projectChannelFields, snapshotChannel } from './channel-inheritance.mjs';
+import { normalizeBrief, normalizeMemory } from './content-contract.mjs';
 
 export function projectDir(cfg, id) { return path.join(cfg.workspaceDir, id); }
 export function projectFile(cfg, id) { return path.join(projectDir(cfg, id), 'project.json'); }
 export function sceneDir(cfg, id, sceneId) { return path.join(projectDir(cfg, id), 'scenes', sceneId); }
 
-export function createProject({ title, sourceText, sourceType = 'script', topic = '', workflowMode = 'studio', format = 'landscape', plannedScenes = null }, cfg) {
+export function createProject({ title, sourceText, sourceType = 'script', topic = '', workflowMode = 'studio', format, plannedScenes = null, channelId = null, channel = null, channelSnapshot = null, brief = null, ideaId = null, ideaSource = null, memory: videoMemory = {}, productionSettings = {} }, cfg) {
   if (!title?.trim()) throw new Error('title is required');
   if (!sourceText?.trim()) throw new Error('source text is required');
   const id = `${slugify(title)}-${crypto.randomBytes(3).toString('hex')}`;
-  const planCfg={...cfg,format};
-  const memory={characters:[],palette:[],artDirection:'',pronunciations:[]};
+  const inherited = channelSnapshot || (channel || channelId ? snapshotChannel(channel || loadChannel(channelId, cfg), cfg) : null);
+  const contentBrief = normalizeBrief(brief);
+  format ||= contentBrief?.format || inherited?.resolved.settings.format || 'landscape';
+  const memory=normalizeMemory({...inherited?.resolved.memory,...videoMemory});
+  const planCfg={...cfg,format,memory};
   const planned = Array.isArray(plannedScenes)&&plannedScenes.length?plannedScenes:sourceType === 'srt' ? planSrtScenes(sourceText, planCfg) : planScriptScenes(sourceText, planCfg);
   if (!planned.length) throw new Error('No scenes were generated');
   let cursor = 0;
@@ -29,8 +35,10 @@ export function createProject({ title, sourceText, sourceType = 'script', topic 
     cursor += durationMs;
     return item;
   });
-  const language=normalizeLanguage(cfg.contentLanguage);
-  const project = { version: 7, id, title: title.trim(), createdAt: nowIso(), updatedAt: nowIso(), source: { type: sourceType, text: sourceText, topic: topic || null }, settings: { renderer: cfg.renderer, workflowMode, ...videoFormatSettings(format,cfg), fps: cfg.fps, language, captions: true, captionLanguage: language, pen:{...DEFAULT_PEN_APPEARANCE} }, memory, scenes, artifacts: {}, jobs:[], history:{undo:[],redo:[]}, quality:{status:'unchecked'}, status: 'planned' };
+  const language=normalizeLanguage(productionSettings.language || inherited?.resolved.settings.language || cfg.contentLanguage);
+  const settings = { renderer: cfg.renderer, workflowMode, fps: cfg.fps, language, captions: true, captionLanguage: language, pen:{...DEFAULT_PEN_APPEARANCE}, ...inherited?.resolved.settings, ...productionSettings, ...videoFormatSettings(format,cfg) };
+  if (contentBrief?.targetDurationSec && productionSettings.targetDurationSec === undefined) settings.targetDurationSec = contentBrief.targetDurationSec;
+  const project = { version: 7, id, title: title.trim(), createdAt: nowIso(), updatedAt: nowIso(), source: { type: sourceType, text: sourceText, topic: topic || null }, settings, memory, scenes, artifacts: {}, jobs:[], history:{undo:[],redo:[]}, quality:{status:'unchecked'}, status: 'planned', ...projectChannelFields(inherited), brief: contentBrief, ideaId, ideaSource };
   normalizeWorkflow(project);
   ensureDir(projectDir(cfg,id)); ensureDir(path.join(projectDir(cfg,id),'scenes'));
   fs.writeFileSync(path.join(projectDir(cfg,id), sourceType === 'srt' ? 'source.srt' : 'script.md'), sourceText);
@@ -41,7 +49,7 @@ export function createProject({ title, sourceText, sourceType = 'script', topic 
 
 export function saveProject(project, cfg) { normalizeWorkflow(project); normalizeVideoFormat(project.settings,cfg); project.updatedAt = nowIso(); writeJson(projectFile(cfg,project.id), project); return project; }
 export function loadProject(id,cfg) { const project=normalizeWorkflow(readJson(projectFile(cfg,id))); normalizeVideoFormat(project.settings,cfg); return project; }
-export function listProjects(cfg) { ensureDir(cfg.workspaceDir); return fs.readdirSync(cfg.workspaceDir,{withFileTypes:true}).filter((e)=>e.isDirectory()).map((e)=>{ try { return loadProject(e.name,cfg); } catch { return null; } }).filter(Boolean).sort((a,b)=>b.updatedAt.localeCompare(a.updatedAt)); }
+export function listProjects(cfg, { channelId } = {}) { ensureDir(cfg.workspaceDir); return fs.readdirSync(cfg.workspaceDir,{withFileTypes:true}).filter((e)=>e.isDirectory()&&!e.name.startsWith('.')).map((e)=>{ try { return loadProject(e.name,cfg); } catch { return null; } }).filter((project)=>project&&(channelId===undefined||project.channelId===(channelId||null))).sort((a,b)=>b.updatedAt.localeCompare(a.updatedAt)); }
 export function deleteProject(id,cfg) {
   const workspace=path.resolve(cfg.workspaceDir),target=path.resolve(workspace,String(id||''));
   if(target===workspace||path.dirname(target)!==workspace)throw new Error('Invalid project id.');

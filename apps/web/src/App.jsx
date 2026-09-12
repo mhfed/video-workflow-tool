@@ -46,6 +46,8 @@ import { copyFor, UI_LANGUAGES } from './i18n';
 import ApplicationNavigation from './ApplicationNavigation';
 import CommandPalette from './CommandPalette';
 import DirectorWorkspace from './DirectorWorkspace';
+import ChannelWorkspace, { BriefFields, VideoContextDialog } from './ChannelWorkspace';
+import { usePersistentState } from './hooks/usePersistentState';
 
 const api=async(url,options={})=>{
   const response=await fetch(url,{headers:{'content-type':'application/json',...(options.headers||{})},...options});
@@ -85,36 +87,40 @@ function EmptyState({onCreate,onDemo,c}){
   </div>;
 }
 
-function NewProjectDialog({open,onOpenChange,onCreate,busy,defaultRenderer='simple',rendererNames,defaultLanguage='vi',c}){
+function NewProjectDialog({open,onOpenChange,onCreate,busy,defaultRenderer='simple',rendererNames,defaultLanguage='vi',channel=null,idea=null,error='',c}){
   const [sourceType,setSourceType]=useState('topic');
   const [renderer,setRenderer]=useState(defaultRenderer);
   const [language,setLanguage]=useState(defaultLanguage);
   const [workflowMode,setWorkflowMode]=useState('studio');
   const [format,setFormat]=useState('landscape');
-  useEffect(()=>{if(open){setRenderer(defaultRenderer);setLanguage(defaultLanguage);setWorkflowMode('studio');setFormat('landscape');}},[open,defaultRenderer,defaultLanguage]);
-  const submit=(event)=>{event.preventDefault();const data=Object.fromEntries(new FormData(event.currentTarget));onCreate({...data,sourceType,renderer,language,workflowMode,format});};
+  const [brief,setBrief]=useState({});
+  useEffect(()=>{if(open){setRenderer(channel?.productionDefaults.renderer||channel?.visualIdentity.preferredRenderer||defaultRenderer);setLanguage(channel?.productionDefaults.language||defaultLanguage);setWorkflowMode('studio');setFormat(idea?.brief?.format||channel?.productionDefaults.format||'landscape');setSourceType('topic');setBrief({targetViewer:channel?.strategy.targetAudience||'',...(idea?{pillar:idea.pillar,angle:idea.angle,viewerQuestion:idea.viewerQuestion,hook:idea.hook,corePromise:idea.corePromise,...Object.fromEntries(Object.entries(idea.brief||{}).filter(([,value])=>value!==null&&value!==''))}:{})});}},[open,defaultRenderer,defaultLanguage,channel?.id,idea?.id]);
+  const submit=(event)=>{event.preventDefault();const data=Object.fromEntries(new FormData(event.currentTarget));const hasBrief=Object.values(brief).some(Boolean);onCreate({...data,sourceType,renderer,language,workflowMode,format,ideaId:idea?.id||null,brief:hasBrief?{...brief,topic:sourceType==='topic'?data.sourceText:brief.topic||'',format,targetDurationSec:Number(data.minutes)*60}:null});};
   return <Dialog open={open} onOpenChange={onOpenChange}>
     <DialogContent className="new-project-dialog">
       <DialogHeader>
         <div className="dialog-index">{c.newIndex}</div>
-        <DialogTitle>{c.startProduction}</DialogTitle>
+        <DialogTitle>{c.language==='en'?'Start a new video':'Bắt đầu video mới'}</DialogTitle>
         <DialogDescription>{c.startDescription}</DialogDescription>
       </DialogHeader>
       <form onSubmit={submit} className="new-project-form">
+        {channel&&<div className="new-video-channel-note">{channel.identity.name} · {c.language==='en'?'Channel revision':'Phiên bản kênh'} {channel.revision}</div>}
         <div className="field-row">
-          <label>{c.projectTitle}<Input name="title" placeholder={c.titlePlaceholder} required/></label>
+          <label>{c.projectTitle}<Input name="title" defaultValue={idea?.title||''} placeholder={c.titlePlaceholder} required/></label>
           <label>{c.startingPoint}<Select value={sourceType} onValueChange={setSourceType}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent><SelectItem value="topic">{c.topicAuto}</SelectItem><SelectItem value="script">{c.preparedScript}</SelectItem><SelectItem value="srt">{c.srtSubtitles}</SelectItem></SelectContent></Select></label>
         </div>
         <label>{sourceType==='topic'?c.explainPrompt:sourceType==='srt'?c.pasteSrt:c.pasteScript}
-          <Textarea name="sourceText" rows={10} placeholder={sourceType==='topic'?c.topicPlaceholder:sourceType==='srt'?'1\n00:00:00,000 --> 00:00:04,000\n…':c.scriptPlaceholder} required/>
+          <Textarea name="sourceText" rows={5} defaultValue={idea?.topic||idea?.title||''} placeholder={sourceType==='topic'?c.topicPlaceholder:sourceType==='srt'?'1\n00:00:00,000 --> 00:00:04,000\n…':c.scriptPlaceholder} required/>
         </label>
+        <details className="brief-disclosure" open={!!idea}><summary>{c.language==='en'?'Creative brief (optional)':'Brief sáng tạo (không bắt buộc)'}</summary><BriefFields value={brief} onChange={setBrief} c={c}/></details>
         <div className="production-options">
           <label>{c.videoFormat}<Select value={format} onValueChange={setFormat}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent><SelectItem value="landscape">{c.landscapeFormat}</SelectItem><SelectItem value="short">{c.shortFormat}</SelectItem></SelectContent></Select><small>{format==='short'?c.shortFormatHint:c.landscapeFormatHint}</small></label>
           <label>{c.renderStyle}<Select value={renderer} onValueChange={setRenderer}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent>{rendererOptions(rendererNames,c)}</SelectContent></Select><small>{c.rendererHint}</small></label>
           <label>{c.contentLanguage}<Select value={language} onValueChange={setLanguage}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent>{UI_LANGUAGES.map((item)=><SelectItem key={item.code} value={item.code}>{item.label}</SelectItem>)}</SelectContent></Select></label>
-          <label className="minutes-field">{c.targetLength}<Input name="minutes" type="number" min="1" max="60" defaultValue="6"/><span>{c.minutes}</span></label>
+          <label className="minutes-field">{c.targetLength}<Input name="minutes" type="number" min="0.1" step="0.1" max="240" defaultValue={(idea?.brief?.targetDurationSec||channel?.productionDefaults.targetDurationSec||360)/60}/><span>{c.minutes}</span></label>
         </div>
         <div className="mode-picker"><button type="button" className={workflowMode==='studio'?'active':''} onClick={()=>setWorkflowMode('studio')}><SlidersHorizontal/><span><strong>{c.studioMode}</strong><small>{c.studioModeBody}</small></span></button><button type="button" className={workflowMode==='auto'?'active':''} onClick={()=>setWorkflowMode('auto')}><Bot/><span><strong>{c.autoMode}</strong><small>{c.autoModeBody}</small></span></button></div>
+        {error&&<p className="content-error" role="alert">{error}</p>}
         <DialogFooter><Button type="button" variant="ghost" onClick={()=>onOpenChange(false)}>{c.cancel}</Button><Button type="submit" disabled={busy}>{busy?<LoaderCircle className="spin"/>:<Clapperboard/>}{c.createProduction}</Button></DialogFooter>
       </form>
     </DialogContent>
@@ -263,6 +269,12 @@ function SettingsDialog({open,onOpenChange,onSaved,c}){
 
 export default function App(){
   const [projects,setProjects]=useState([]);
+  const [channels,setChannels]=useState([]);
+  const [contentNavigation,setContentNavigation]=usePersistentState('cutroom:channel-navigation',{channelId:null});
+  const channelId=typeof contentNavigation.channelId==='string'?contentNavigation.channelId:null;
+  const setChannelId=(id)=>setContentNavigation({channelId:id});
+  const [ideaToCreate,setIdeaToCreate]=useState(null);
+  const [contextVideo,setContextVideo]=useState(null);
   const [current,setCurrent]=useState(null);
   const [health,setHealth]=useState(null);
   const [busy,setBusy]=useState(false);
@@ -284,11 +296,18 @@ export default function App(){
   const showProjectError=!!current?.error&&dismissedProjectError!==projectErrorKey;
   const config=health?.config;
   const c=copyFor(config?.uiLanguage||'vi');
+  const selectedChannel=channels.find((channel)=>channel.id===channelId)||null;
+  const channelProjects=projects.filter((project)=>(project.channelId||null)===channelId);
   const refreshHealth=async()=>setHealth(await api('/api/health'));
   const refreshProjects=async()=>setProjects(await api('/api/projects'));
-  const load=async(id)=>{const project=await api(`/api/projects/${encodeURIComponent(id)}`);setCurrent(project);await Promise.all([refreshProjects(),refreshHealth()]);};
+  const refreshChannels=async()=>setChannels(await api('/api/channels'));
+  const refreshContent=()=>Promise.all([refreshProjects(),refreshChannels()]);
+  const load=async(id)=>{const project=await api(`/api/projects/${encodeURIComponent(id)}`);setCurrent(project);setChannelId(project.channelId||null);await Promise.all([refreshProjects(),refreshHealth(),refreshChannels()]);};
+  const openNewVideo=(idea=null)=>{setIdeaToCreate(idea);setError('');setNavDrawer(null);setDialogOpen(true);};
+  const chooseChannel=(id)=>{setChannelId(id);setCurrent(null);setNavDrawer(null);};
+  const contextSaved=async(project)=>{if(current?.id===project.id){setCurrent(project);setChannelId(project.channelId||null);}await refreshContent();};
 
-  useEffect(()=>{Promise.all([refreshProjects(),refreshHealth()]).catch((cause)=>setError(cause.message));},[]);
+  useEffect(()=>{Promise.all([refreshProjects(),refreshHealth(),refreshChannels()]).catch((cause)=>setError(cause.message));},[]);
   useEffect(()=>{const openPalette=(event)=>{if((event.metaKey||event.ctrlKey)&&event.key.toLowerCase()==='k'){event.preventDefault();setPaletteOpen((value)=>!value);}};window.addEventListener('keydown',openPalette);return()=>window.removeEventListener('keydown',openPalette);},[]);
   useEffect(()=>{
     if(!current?.id||!activeJob)return;
@@ -299,7 +318,7 @@ export default function App(){
 
   const createProject=async(payload)=>{
     setBusy(true);setError('');
-    try{const project=await api('/api/projects',{method:'POST',body:JSON.stringify(payload)});setDialogOpen(false);await load(project.id);}
+    try{const project=await api('/api/projects',{method:'POST',body:JSON.stringify({...payload,channelId})});setDialogOpen(false);setIdeaToCreate(null);await load(project.id);}
     catch(cause){setError(cause.message);}finally{setBusy(false);}
   };
   const createDemo=()=>createProject(config?.contentLanguage==='en'?{title:'Small Habits — Test Cut',sourceType:'script',sourceText:'Small habits feel insignificant at first, but repetition gives them power. Each action becomes a vote for the person you want to become. Make the next step obvious, easy, and satisfying, then let consistency do the heavy lifting.',minutes:1,language:'en'}:{title:'Thói quen nhỏ — Bản thử',sourceType:'script',sourceText:'Những thói quen nhỏ ban đầu có vẻ không đáng kể, nhưng sự lặp lại tạo cho chúng sức mạnh. Mỗi hành động là một lá phiếu cho con người bạn muốn trở thành. Hãy làm cho bước tiếp theo thật rõ ràng, dễ dàng và thú vị, rồi để sự kiên trì tạo nên khác biệt.',minutes:1,language:'vi'});
@@ -334,7 +353,7 @@ export default function App(){
   const saveDrawRevealPath=async(sceneId,path)=>{setBusy(true);setError('');try{const result=await api(`/api/projects/${encodeURIComponent(current.id)}/scenes/${encodeURIComponent(sceneId)}/draw-reveal/path`,{method:'PATCH',body:JSON.stringify({path})});setCurrent(result.project);await refreshProjects();return result;}catch(cause){setError(cause.message);throw cause;}finally{setBusy(false);}};
   const loadRoughCut=async()=>api(`/api/projects/${encodeURIComponent(current.id)}/rough-cut`);
   const cancelJob=async(jobId)=>{setError('');try{const result=await api(`/api/projects/${encodeURIComponent(current.id)}/jobs/${encodeURIComponent(jobId)}/cancel`,{method:'POST'});setCurrent(result.project);return result;}catch(cause){setError(cause.message);return null;}};
-  const historyAction=async(action)=>{setBusy(true);setError('');try{const project=await api(`/api/projects/${encodeURIComponent(current.id)}/history/${action}`,{method:'POST'});setCurrent(project);await refreshProjects();return project;}catch(cause){setError(cause.message);return null;}finally{setBusy(false);}};
+  const historyAction=async(action)=>{setBusy(true);setError('');try{const project=await api(`/api/projects/${encodeURIComponent(current.id)}/history/${action}`,{method:'POST'});setCurrent(project);setChannelId(project.channelId||null);await refreshProjects();return project;}catch(cause){setError(cause.message);return null;}finally{setBusy(false);}};
   const selectSceneTake=async(sceneId,kind,takeId)=>{setBusy(true);setError('');try{const project=await api(`/api/projects/${encodeURIComponent(current.id)}/scenes/${encodeURIComponent(sceneId)}/takes/${encodeURIComponent(kind)}/${encodeURIComponent(takeId)}/select`,{method:'POST'});setCurrent(project);await refreshProjects();return project;}catch(cause){setError(cause.message);return null;}finally{setBusy(false);}};
   const runQuality=async(sceneIds=null)=>!!await enqueueJob('quality',sceneIds?{sceneIds}:{});
   const getRepairPlan=async()=>api(`/api/projects/${encodeURIComponent(current.id)}/quality/repair-plan`);
@@ -342,7 +361,7 @@ export default function App(){
   const commandSceneId=workspaceContext?.sceneId||current?.scenes?.[0]?.id;
   const sendWorkspaceCommand=(type,payload={})=>setWorkspaceCommand({type,...payload,id:Date.now()});
   const paletteItems=[
-    {id:'new',group:c.commandGroups.navigation,label:c.newProduction,meta:c.commandNewBody,icon:Plus,run:()=>setDialogOpen(true)},
+    {id:'new',group:c.commandGroups.navigation,label:c.newProduction,meta:c.commandNewBody,icon:Plus,run:()=>openNewVideo()},
     {id:'settings',group:c.commandGroups.navigation,label:c.settingsNav,meta:c.providerSettings,icon:Settings2,run:()=>setSettingsOpen(true)},
     ...projects.map((project)=>({id:`project-${project.id}`,group:c.commandGroups.projects,label:project.title,meta:`${project.scenes.length} ${c.scenes}`,icon:Clapperboard,run:()=>load(project.id)})),
     ...(current?.scenes||[]).map((scene,index)=>({id:`scene-${scene.id}`,group:c.commandGroups.scenes,label:`${c.sceneLabel} ${String(index+1).padStart(2,'0')} · ${scene.text.split(/[.!?]/)[0]}`,meta:`${(scene.durationMs/1000).toFixed(1)} ${c.seconds}`,icon:FileText,run:()=>sendWorkspaceCommand('scene',{sceneId:scene.id})})),
@@ -351,30 +370,32 @@ export default function App(){
   ];
   return <div className={`app-shell ${current?'editing':''}`}>
     {!current&&<header className="app-header">
-      <button className="brand" onClick={()=>setCurrent(null)}><BrandMark/><span><strong>CUTROOM</strong><small>{c.brandSubtitle}</small></span></button>
+      <button className="brand" onClick={()=>setCurrent(null)}><BrandMark/><span><strong>CUTROOM</strong><small>YouTube Content OS</small></span></button>
       <div className="header-rule"/>
       <div className="runtime-status">
         <span className={`status-light ${health?'online':''}`}/>
         <div><strong>{health?c.systemReady:c.connecting}</strong><small>{config?`${config.mockMode?'Mock':'Live'} · ${config.renderer}`:c.localRuntime}</small></div>
       </div>
       <button className="command-trigger" onClick={()=>setPaletteOpen(true)}><Command/><span>{c.quickActions}</span><kbd>⌘ K</kbd></button>
-      <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onClick={()=>Promise.all([refreshProjects(),refreshHealth()])}><RefreshCw/></Button></TooltipTrigger><TooltipContent>{c.refreshWorkspace}</TooltipContent></Tooltip>
+      <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onClick={()=>Promise.all([refreshContent(),refreshHealth()]).catch((cause)=>setError(cause.message))}><RefreshCw/></Button></TooltipTrigger><TooltipContent>{c.refreshWorkspace}</TooltipContent></Tooltip>
     </header>}
 
     <div className={`workspace-grid ${current?'project-open':''}`}>
-      <ApplicationNavigation current={current} projects={projects} drawer={navDrawer} onDrawer={setNavDrawer} onHome={()=>{setNavDrawer(null);setCurrent(null);}} onCreate={()=>{setNavDrawer(null);setDialogOpen(true);}} onSelect={load} onDelete={(project)=>{setDeleteProjectError('');setProjectToDelete(project);}} onSettings={()=>{setNavDrawer(null);setSettingsOpen(true);}} health={health} c={c}/>
+      <ApplicationNavigation current={current} projects={channelProjects} drawer={navDrawer} onDrawer={setNavDrawer} onHome={()=>{setNavDrawer(null);setCurrent(null);refreshChannels().catch((cause)=>setError(cause.message));}} onCreate={()=>openNewVideo()} onSelect={load} onDelete={(project)=>{setDeleteProjectError('');setProjectToDelete(project);}} onSettings={()=>{setNavDrawer(null);setSettingsOpen(true);}} health={health} c={c}/>
 
-      <main className={`main-stage ${current?'director-shell-stage':''}`}>
+      <main className={`main-stage ${current?'director-shell-stage with-video-context':''}`}>
         {(error||showProjectError)&&<div className="app-alert-stack" aria-live="assertive">
           {error&&<Alert variant="destructive" className="app-alert"><TriangleAlert/><div className="app-alert-copy"><AlertTitle>{c.needsAttention}</AlertTitle><AlertDescription>{error}</AlertDescription></div><Button variant="ghost" size="icon-sm" aria-label={c.dismiss} onClick={()=>setError('')}><X/></Button></Alert>}
           {showProjectError&&<Alert variant="destructive" className="app-alert"><TriangleAlert/><div className="app-alert-copy"><AlertTitle>{c.lastRunStopped}</AlertTitle><AlertDescription>{current.error.message}</AlertDescription></div><Button variant="ghost" size="icon-sm" aria-label={c.dismiss} onClick={()=>setDismissedProjectError(projectErrorKey)}><X/></Button></Alert>}
         </div>}
-        {!current?<EmptyState onCreate={()=>setDialogOpen(true)} onDemo={createDemo} c={c}/>:<>
-          <DirectorWorkspace key={current.id} project={current} running={busy||running} keyboardLocked={paletteOpen||dialogOpen||settingsOpen||!!projectToDelete||!!navDrawer} activeJob={activeJob} command={workspaceCommand} onContextChange={setWorkspaceContext} onCreate={()=>setDialogOpen(true)} onCancelJob={cancelJob} onUndo={()=>historyAction('undo')} onRedo={()=>historyAction('redo')} onSelectTake={selectSceneTake} onRunQuality={runQuality} onGetRepairPlan={getRepairPlan} onApplyRepairs={applyRepairs} onSave={saveScene} onRunStage={runStage} onReview={reviewStage} onReviewBulk={reviewBulk} onRunAll={run} onLoadRoughCut={loadRoughCut} onUpdateProject={updateProject} onSceneAction={editSceneStructure} onInsertScene={insertNewScene} onDirectorPlan={planDirection} onSearchBroll={searchBroll} onSelectBroll={selectBroll} onUploadArtwork={uploadArtwork} onLoadDrawRevealPath={loadDrawRevealPath} onSaveDrawRevealPath={saveDrawRevealPath} brollProviders={{names:config?.brollProviderNames||['pexels','pixabay'],configured:{pexels:!!config?.hasPexelsKey,pixabay:!!config?.hasPixabayKey}}} rendererNames={config?.rendererNames||[]} c={c}/>
+        {!current?<ChannelWorkspace key={channelId||'unassigned'} channels={channels} channelId={channelId} onChannelChange={chooseChannel} projects={channelProjects} onSelect={load} onCreate={openNewVideo} onRefresh={refreshContent} onManageVideo={setContextVideo} c={c}/>:<>
+          <div className="video-context-toolbar"><button onClick={()=>{setCurrent(null);refreshChannels().catch((cause)=>setError(cause.message));}}><ArrowRight style={{transform:'rotate(180deg)'}}/>{selectedChannel?.identity.name||(current.channelId?(c.language==='en'?'Channel unavailable':'Kênh không khả dụng'):(c.language==='en'?'Unassigned':'Chưa phân kênh'))}</button>{current.channelRevision&&<span>{c.language==='en'?'Inherited':'Đã nhận'} r{current.channelRevision}{selectedChannel&&selectedChannel.revision!==current.channelRevision?` · ${c.language==='en'?'Channel':'Kênh'} r${selectedChannel.revision}`:''}</span>}<button disabled={busy||running} onClick={()=>setContextVideo(current)}><Settings2/>{c.language==='en'?'Channel & Brief':'Kênh & Brief'}</button></div>
+          <DirectorWorkspace key={current.id} project={current} running={busy||running} keyboardLocked={paletteOpen||dialogOpen||settingsOpen||!!contextVideo||!!projectToDelete||!!navDrawer} activeJob={activeJob} command={workspaceCommand} onContextChange={setWorkspaceContext} onCreate={()=>openNewVideo()} onCancelJob={cancelJob} onUndo={()=>historyAction('undo')} onRedo={()=>historyAction('redo')} onSelectTake={selectSceneTake} onRunQuality={runQuality} onGetRepairPlan={getRepairPlan} onApplyRepairs={applyRepairs} onSave={saveScene} onRunStage={runStage} onReview={reviewStage} onReviewBulk={reviewBulk} onRunAll={run} onLoadRoughCut={loadRoughCut} onUpdateProject={updateProject} onSceneAction={editSceneStructure} onInsertScene={insertNewScene} onDirectorPlan={planDirection} onSearchBroll={searchBroll} onSelectBroll={selectBroll} onUploadArtwork={uploadArtwork} onLoadDrawRevealPath={loadDrawRevealPath} onSaveDrawRevealPath={saveDrawRevealPath} brollProviders={{names:config?.brollProviderNames||['pexels','pixabay'],configured:{pexels:!!config?.hasPexelsKey,pixabay:!!config?.hasPixabayKey}}} rendererNames={config?.rendererNames||[]} c={c}/>
         </>}
       </main>
     </div>
-    <NewProjectDialog open={dialogOpen} onOpenChange={setDialogOpen} onCreate={createProject} busy={busy} defaultRenderer={config?.renderer||'simple'} rendererNames={config?.rendererNames||[]} defaultLanguage={config?.contentLanguage||'vi'} c={c}/>
+    <NewProjectDialog key={`${channelId||'unassigned'}-${ideaToCreate?.id||'new'}`} open={dialogOpen} onOpenChange={setDialogOpen} onCreate={createProject} busy={busy} defaultRenderer={config?.renderer||'simple'} rendererNames={config?.rendererNames||[]} defaultLanguage={config?.contentLanguage||'vi'} channel={selectedChannel} idea={ideaToCreate} error={error} c={c}/>
+    {contextVideo&&<VideoContextDialog key={contextVideo.id} video={contextVideo} channels={channels} onClose={()=>setContextVideo(null)} onSaved={contextSaved} c={c}/>}
     <DeleteProjectDialog project={projectToDelete} busy={deletingProjectId===projectToDelete?.id} blocked={!!projectToDelete&&(projectToDelete.jobs||[]).some((job)=>['queued','running','cancelling'].includes(job.status))||!!projectToDelete&&health?.running?.includes(projectToDelete.id)} error={deleteProjectError} onOpenChange={(open)=>{if(!open){setProjectToDelete(null);setDeleteProjectError('');}}} onConfirm={deleteSelectedProject} c={c}/>
     <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} onSaved={refreshHealth} c={c}/>
     <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} items={paletteItems} c={c}/>

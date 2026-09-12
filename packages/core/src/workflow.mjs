@@ -1,20 +1,13 @@
 import { normalizeTakes } from './takes.mjs';
 import { normalizePenAppearance } from './pen-settings.mjs';
+import { normalizeContentProject, normalizeMemory } from './content-contract.mjs';
 
 export const WORKFLOW_MODES = new Set(['auto','studio']);
 export const REVIEW_STAGES = ['script','voice','visual','clip'];
 export const REVIEW_DECISIONS = new Set(['pending','approved','changes-requested','stale']);
 
-function normalizeMemory(memory={}) {
-  return {
-    characters:Array.isArray(memory.characters)?memory.characters.map(String).filter(Boolean).slice(0,30):[],
-    palette:Array.isArray(memory.palette)?memory.palette.map(String).filter(Boolean).slice(0,12):[],
-    artDirection:typeof memory.artDirection==='string'?memory.artDirection:'',
-    pronunciations:Array.isArray(memory.pronunciations)?memory.pronunciations.map(String).filter(Boolean).slice(0,50):[]
-  };
-}
-
 export function normalizeWorkflow(project) {
+  normalizeContentProject(project);
   project.version=Math.max(Number(project.version)||1,7);
   project.settings ||= {};
   if (!WORKFLOW_MODES.has(project.settings.workflowMode)) project.settings.workflowMode='studio';

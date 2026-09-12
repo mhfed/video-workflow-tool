@@ -172,6 +172,38 @@ npm run cli -- run --project <project-id> --force
 
 ## Workspace layout
 
+### Channel → Idea / Brief → Video
+
+CUTROOM now includes a local Channel workspace with strategy, editorial direction,
+visual identity, reusable memory, production defaults and packaging guidance.
+Choose a channel, capture an idea, develop an optional brief, and create a video
+in the existing Director workspace. Legacy projects appear under **Unassigned**.
+
+Every new video receives an independent snapshot of its channel revision.
+Editing a channel never changes existing videos or their caches. **Channel &
+Brief** lets you assign an existing video while keeping its settings, review a
+three-way diff, and explicitly apply selected or all pending changes. These
+actions support normal project undo/redo. A video remains usable without its
+channel file.
+
+Channel data lives in `workspace/.channels/<channel-id>/channel.json`, with ideas
+under `ideas/`. Video directories and media paths remain unchanged. YouTube IDs
+and publication fields are reserved metadata; OAuth, upload, analytics and
+automatic scoring are not part of this phase.
+
+```bash
+npm run cli -- create --channel <channel-id> --topic "Why small habits work"
+npm run cli -- create --channel <channel-id> --idea <idea-id>
+npm run cli -- create --channel <channel-id> --brief brief.json
+```
+
+A brief JSON file can contain `topic`, `pillar`, `targetViewer`, `viewerQuestion`,
+`angle`, `corePromise`, `hook`, `targetDurationSec`, `format`, `desiredTakeaway`,
+and `narrativeDirection`. Existing Topic, Script and SRT inputs still work without
+a channel or brief. See [the data contract and decisions](docs/decisions/0002-channel-content-os.md).
+
+### Video files
+
 ```text
 workspace/<project-id>/
 ├── project.json

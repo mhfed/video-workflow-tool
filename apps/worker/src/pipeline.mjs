@@ -12,7 +12,7 @@ import { containVideoFilter } from '../../../packages/core/src/video-fit.mjs';
 import { markArtifactForReview, normalizeWorkflow, requireApproved } from '../../../packages/core/src/workflow.mjs';
 import { createTakeTarget, recordTake } from '../../../packages/core/src/takes.mjs';
 import { generateImage, imageCacheConfig } from '../../../packages/providers/src/image.mjs';
-import { synthesizeVoice, voiceCacheConfig } from '../../../packages/providers/src/voice.mjs';
+import { projectVoiceConfig, synthesizeVoice, voiceCacheConfig } from '../../../packages/providers/src/voice.mjs';
 import { getRenderer, resolveRendererName } from '../../../packages/renderers/src/registry.mjs';
 
 function log(event, detail={}) { console.log(JSON.stringify({time:new Date().toISOString(),event,...detail})); }
@@ -126,7 +126,8 @@ async function concatClips(project,cfg,clips,signal=null) {
 }
 
 export async function runPipeline(projectId,{force=false,sceneId=null,sceneIds=null,stage='all',signal=null,onProgress=null}={}) {
-  const baseCfg=config(); const project=normalizeWorkflow(loadProject(projectId,baseCfg));
+  const runtimeCfg=config(); const project=normalizeWorkflow(loadProject(projectId,runtimeCfg));
+  const baseCfg=projectVoiceConfig(project,runtimeCfg);
   const cfg={...baseCfg,width:project.settings.width,height:project.settings.height,fps:project.settings.fps,openaiImageSize:project.settings.format==='short'?'1024x1536':baseCfg.openaiImageSize}; const clips=[];
   const studio=project.settings.workflowMode==='studio';
   const targets=sceneId?[sceneId]:Array.isArray(sceneIds)?[...new Set(sceneIds)]:null;

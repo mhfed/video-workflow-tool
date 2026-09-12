@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import { nowIso } from './utils.mjs';
 
-const SNAPSHOT_KEYS=['title','source','settings','scenes','artifacts','status','error','memory','quality'];
+const SNAPSHOT_KEYS=['title','source','settings','scenes','artifacts','status','error','memory','quality','channelId','channelRevision','channelSnapshotAt','channelSnapshot','channelApplications','creativeContext','packagingDefaults','ideaId','ideaSource','brief','publish'];
 
 function snapshot(project) {
   return Object.fromEntries(SNAPSHOT_KEYS.filter((key)=>Object.prototype.hasOwnProperty.call(project,key)).map((key)=>[key,structuredClone(project[key])]));
