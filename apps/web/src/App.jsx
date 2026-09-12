@@ -36,7 +36,6 @@ import { CardDescription } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Separator } from '@/components/ui/separator';
 import { Textarea } from '@/components/ui/textarea';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { copyFor, UI_LANGUAGES } from './i18n';
@@ -119,6 +118,7 @@ function NewProjectDialog({open,onOpenChange,onCreate,busy,defaultRenderer='simp
 
 function SettingsDialog({open,onOpenChange,onSaved,c}){
   const [form,setForm]=useState(null);
+  const [activeTab,setActiveTab]=useState('general');
   const [showKey,setShowKey]=useState(false);
   const [showVivibeKey,setShowVivibeKey]=useState(false);
   const [vivibeVoices,setVivibeVoices]=useState([]);
@@ -132,7 +132,7 @@ function SettingsDialog({open,onOpenChange,onSaved,c}){
 
   useEffect(()=>{
     if(!open)return;
-    setForm(null);setMessage(null);setShowKey(false);setShowVivibeKey(false);setVivibeVoices([]);
+    setForm(null);setActiveTab('general');setMessage(null);setShowKey(false);setShowVivibeKey(false);setVivibeVoices([]);
     api('/api/settings').then((settings)=>setForm(hydrated(settings))).catch((cause)=>setMessage({type:'error',text:cause.message}));
   },[open]);
 
@@ -188,110 +188,51 @@ function SettingsDialog({open,onOpenChange,onSaved,c}){
 
   const codexSelected=!!form&&(form.textProvider==='codex'||form.imageProvider==='codex');
   const openAISelected=!!form&&[form.textProvider,form.imageProvider,form.voiceProvider].includes('openai');
+  const settingsTabs=[
+    {id:'general',label:c.settingsTabGeneral,description:c.settingsTabGeneralBody,icon:Settings2},
+    {id:'generation',label:c.settingsTabGeneration,description:c.settingsTabGenerationBody,icon:BrainCircuit},
+    {id:'broll',label:c.settingsTabBroll,description:c.settingsTabBrollBody,icon:Film},
+    {id:'voice',label:c.settingsTabVoice,description:c.settingsTabVoiceBody,icon:Mic2},
+    {id:'connection',label:c.settingsTabConnection,description:c.settingsTabConnectionBody,icon:Server},
+  ];
+  const activeTabMeta=settingsTabs.find((item)=>item.id===activeTab)||settingsTabs[0];
 
   return <Dialog open={open} onOpenChange={onOpenChange}>
     <DialogContent className="settings-dialog">
       {!form?<div className="settings-loading"><DialogTitle className="sr-only">{c.providerSettings}</DialogTitle><DialogDescription className="sr-only">{c.loadingConfig}</DialogDescription><LoaderCircle className="spin"/><span>{c.loadingConfig}</span></div>:<div className="settings-layout">
         <aside className="settings-aside">
-          <div><div className="dialog-index">{c.settingsIndex}</div><DialogTitle>{c.providerSettings}</DialogTitle><DialogDescription>{c.providerDescription}</DialogDescription></div>
-          <div className="security-card"><ShieldCheck/><div><strong>{c.serverSecrets}</strong><p>{c.serverSecretsBody}</p></div></div>
-          <div className="connection-state"><span className={`status-light ${(form.textProvider==='codex'?codexAuth.connected:form.textProvider==='mock'||form.hasOpenAIKey&&!form.clearApiKey)?'online':''}`}/><div><strong>{form.textProvider==='codex'?(codexAuth.connected?`ChatGPT ${codexAuth.planType||''}`.trim():c.codexNotConnected):form.textProvider==='openai'?(form.hasOpenAIKey?'OpenAI API':'No OpenAI key'):c.mockText}</strong><small>{c.textProviderLabel}</small></div></div>
-          <div className="connection-state"><span className={`status-light ${(form.imageProvider==='codex'?codexAuth.connected:form.imageProvider==='mock'||form.hasOpenAIKey&&!form.clearApiKey)?'online':''}`}/><div><strong>{form.imageProvider==='codex'?(codexAuth.connected?'ChatGPT ImageGen':c.codexNotConnected):form.imageProvider==='openai'?'OpenAI Image API':c.mockImages}</strong><small>{c.imageProviderLabel}</small></div></div>
-          <div className="connection-state"><span className={`status-light ${form.voiceProvider==='mock'||form.voiceProvider==='openai'&&form.hasOpenAIKey||form.voiceProvider==='vivibe'&&form.hasVivibeKey?'online':''}`}/><div><strong>{form.voiceProvider==='vivibe'?'Vivibe / LucyAI':form.voiceProvider==='openai'?'OpenAI voice':'Mock voice'}</strong><small>Active voice source</small></div></div>
-          <div className="settings-aside-foot"><KeyRound/><span>{c.independentVoice}</span></div>
+          <div className="settings-aside-head"><div className="dialog-index">{c.settingsIndex}</div><DialogTitle>{c.providerSettings}</DialogTitle><DialogDescription>{c.providerDescription}</DialogDescription></div>
+          <nav className="settings-tabs" aria-label={c.providerSettings}>
+            {settingsTabs.map((item)=>{const Icon=item.icon;return <button key={item.id} type="button" className={activeTab===item.id?'active':''} aria-current={activeTab===item.id?'page':undefined} onClick={()=>{setActiveTab(item.id);setMessage(null);}}><Icon/><span><strong>{item.label}</strong><small>{item.description}</small></span><ArrowRight/></button>;})}
+          </nav>
+          <div className="settings-provider-summary" aria-label={c.connectionsModels}>
+            <span className={(form.textProvider==='codex'?codexAuth.connected:form.textProvider==='mock'||form.hasOpenAIKey&&!form.clearApiKey)?'online':''}><i/>{c.textProviderLabel}</span>
+            <span className={(form.imageProvider==='codex'?codexAuth.connected:form.imageProvider==='mock'||form.hasOpenAIKey&&!form.clearApiKey)?'online':''}><i/>{c.imageProviderLabel}</span>
+            <span className={form.voiceProvider==='mock'||form.voiceProvider==='openai'&&form.hasOpenAIKey||form.voiceProvider==='vivibe'&&form.hasVivibeKey?'online':''}><i/>{c.voiceSource}</span>
+          </div>
         </aside>
 
         <div className="settings-main">
-          <DialogHeader><DialogTitle>{c.connectionsModels}</DialogTitle><DialogDescription>{c.connectionsBody}</DialogDescription></DialogHeader>
-          <div className="settings-section">
-            <div className="settings-section-title"><Settings2/><span><strong>{c.languageRegion}</strong><small>{c.languageRegionHint}</small></span></div>
-            <div className="settings-fields two-columns">
-              <label>{c.interfaceLanguage}<Select value={form.uiLanguage} onValueChange={(value)=>update('uiLanguage',value)}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent>{UI_LANGUAGES.map((item)=><SelectItem key={item.code} value={item.code}>{item.label}</SelectItem>)}</SelectContent></Select></label>
-              <label>{c.defaultVideoLanguage}<Select value={form.contentLanguage} onValueChange={(value)=>update('contentLanguage',value)}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent>{UI_LANGUAGES.map((item)=><SelectItem key={item.code} value={item.code}>{item.label}</SelectItem>)}</SelectContent></Select></label>
-            </div>
+          <DialogHeader className="settings-content-head"><div className="dialog-index">{c.settingsIndex}</div><DialogTitle>{activeTabMeta.label}</DialogTitle><DialogDescription>{activeTabMeta.description}</DialogDescription></DialogHeader>
+          <div className="settings-tab-content" key={activeTab}>
+            {activeTab==='general'&&<>
+              <section className="settings-section"><div className="settings-section-title"><Settings2/><span><strong>{c.languageRegion}</strong><small>{c.languageRegionHint}</small></span></div><div className="settings-fields two-columns"><label>{c.interfaceLanguage}<Select value={form.uiLanguage} onValueChange={(value)=>update('uiLanguage',value)}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent>{UI_LANGUAGES.map((item)=><SelectItem key={item.code} value={item.code}>{item.label}</SelectItem>)}</SelectContent></Select></label><label>{c.defaultVideoLanguage}<Select value={form.contentLanguage} onValueChange={(value)=>update('contentLanguage',value)}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent>{UI_LANGUAGES.map((item)=><SelectItem key={item.code} value={item.code}>{item.label}</SelectItem>)}</SelectContent></Select></label></div></section>
+              <section className="settings-section"><div className="settings-section-title"><Clapperboard/><span><strong>{c.defaultRenderer}</strong><small>{c.appliedNew}</small></span></div><div className="renderer-setting"><label>{c.renderStyle}<Select value={form.renderer} onValueChange={(value)=>update('renderer',value)}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent>{rendererOptions(form.rendererNames||[],c)}</SelectContent></Select></label><p><strong>{rendererSummary(form.renderer).title}</strong><span>{rendererSummary(form.renderer).body}</span></p></div></section>
+            </>}
+            {activeTab==='generation'&&<>
+              <section className="settings-section"><div className="settings-section-title"><FileText/><span><strong>{c.textProviderLabel}</strong><small>{c.textProviderHint}</small></span></div><div className="text-provider-row"><label>{c.provider}<Select value={form.textProvider} onValueChange={(value)=>update('textProvider',value)}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent><SelectItem value="codex">ChatGPT subscription</SelectItem><SelectItem value="openai">OpenAI API</SelectItem><SelectItem value="mock">Mock · offline</SelectItem></SelectContent></Select></label><p>{form.textProvider==='codex'?c.codexProviderBody:form.textProvider==='openai'?c.openaiTextProviderBody:c.mockTextProviderBody}</p></div></section>
+              <section className="settings-section"><div className="settings-section-title"><ImageIcon/><span><strong>{c.imageProviderLabel}</strong><small>{c.imageProviderHint}</small></span></div><div className="text-provider-row"><label>{c.provider}<Select value={form.imageProvider} onValueChange={(value)=>update('imageProvider',value)}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent><SelectItem value="codex">ChatGPT subscription · ImageGen</SelectItem><SelectItem value="openai">OpenAI Image API</SelectItem><SelectItem value="mock">Mock · offline</SelectItem></SelectContent></Select></label><p>{form.imageProvider==='codex'?c.codexImageProviderBody:form.imageProvider==='openai'?c.openaiImageProviderBody:c.mockImageProviderBody}</p></div></section>
+              <section className="settings-section"><div className="settings-section-title"><BrainCircuit/><span><strong>{c.generationStack}</strong><small>{c.modelsUsed}</small></span></div><div className="settings-fields two-columns">{form.textProvider==='openai'&&<label>{c.scriptModel}<Input value={form.textModel} onChange={(event)=>update('textModel',event.target.value)} /></label>}{form.imageProvider==='openai'&&<label>{c.imageModel}<Input value={form.imageModel} onChange={(event)=>update('imageModel',event.target.value)} /></label>}{form.imageProvider==='codex'&&<label>{c.imageModel}<Input value="gpt-image-2 · ImageGen" disabled /></label>}{form.imageProvider!=='mock'&&<label>{c.imageSize}<Select value={form.imageSize} onValueChange={(value)=>update('imageSize',value)}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent><SelectItem value="1536x1024">1536 × 1024</SelectItem><SelectItem value="1024x1024">1024 × 1024</SelectItem><SelectItem value="1024x1536">1024 × 1536</SelectItem><SelectItem value="auto">Auto</SelectItem></SelectContent></Select></label>}{form.imageProvider!=='mock'&&<label>{c.imageQuality}<Select value={form.imageQuality} onValueChange={(value)=>update('imageQuality',value)}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent><SelectItem value="low">Low</SelectItem><SelectItem value="medium">Medium</SelectItem><SelectItem value="high">High</SelectItem><SelectItem value="auto">Auto</SelectItem></SelectContent></Select></label>}</div></section>
+            </>}
+            {activeTab==='broll'&&<section className="settings-section"><div className="settings-section-title"><Film/><span><strong>{c.brollProviders}</strong><small>{c.brollProvidersHint}</small></span></div><div className="settings-fields two-columns"><label>Pexels API key<Input type="password" autoComplete="new-password" value={form.pexelsApiKey} onChange={(event)=>setForm((current)=>({...current,pexelsApiKey:event.target.value,clearPexelsApiKey:false}))} placeholder={form.hasPexelsKey?'Leave blank to keep saved key':'Pexels API key'}/>{form.hasPexelsKey&&<Button type="button" size="sm" variant="ghost" onClick={()=>setForm((current)=>({...current,clearPexelsApiKey:!current.clearPexelsApiKey,pexelsApiKey:''}))}>{form.clearPexelsApiKey?c.keepKey:c.removeKey}</Button>}</label><label>Pixabay API key<Input type="password" autoComplete="new-password" value={form.pixabayApiKey} onChange={(event)=>setForm((current)=>({...current,pixabayApiKey:event.target.value,clearPixabayApiKey:false}))} placeholder={form.hasPixabayKey?'Leave blank to keep saved key':'Pixabay API key'}/>{form.hasPixabayKey&&<Button type="button" size="sm" variant="ghost" onClick={()=>setForm((current)=>({...current,clearPixabayApiKey:!current.clearPixabayApiKey,pixabayApiKey:''}))}>{form.clearPixabayApiKey?c.keepKey:c.removeKey}</Button>}</label></div></section>}
+            {activeTab==='voice'&&<section className="settings-section voice-provider-section"><div className="settings-section-title"><Mic2/><span><strong>{c.voiceSource}</strong><small>{c.narrationProvider}</small></span></div><div className="voice-provider-head"><label>{c.provider}<Select value={form.voiceProvider} onValueChange={(value)=>{update('voiceProvider',value);setVivibeVoices([]);}}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent><SelectItem value="openai">OpenAI Speech</SelectItem><SelectItem value="vivibe">Vivibe / LucyAI</SelectItem><SelectItem value="mock">Mock</SelectItem></SelectContent></Select></label><p>{form.voiceProvider==='vivibe'?'Async Vietnamese voice generation via ttsLongText. Audio is normalized to MP3 before entering the timeline.':form.voiceProvider==='openai'?'Direct speech synthesis with model, voice, and delivery instructions.':'Offline silent MP3 for smoke tests and zero-cost development.'}</p></div>{form.voiceProvider==='openai'&&<><div className="settings-fields two-columns voice-fields"><label>Speech model<Input value={form.ttsModel} onChange={(event)=>update('ttsModel',event.target.value)} /></label><label>Voice<Input value={form.ttsVoice} onChange={(event)=>update('ttsVoice',event.target.value)} /></label></div><label className="instruction-field">Voice direction<Textarea rows={3} value={form.ttsInstructions} onChange={(event)=>update('ttsInstructions',event.target.value)} /></label></>}{form.voiceProvider==='vivibe'&&<div className="vivibe-panel"><div className="settings-fields two-columns"><label className="key-field">Vivibe API key<div className="key-input"><Input type={showVivibeKey?'text':'password'} autoComplete="new-password" value={form.vivibeApiKey} onChange={(event)=>setForm((current)=>({...current,vivibeApiKey:event.target.value,clearVivibeApiKey:false}))} placeholder={form.hasVivibeKey?'Leave blank to keep saved key':'Paste Vivibe API key'}/><button type="button" onClick={()=>setShowVivibeKey((value)=>!value)} aria-label={showVivibeKey?'Hide Vivibe API key':'Show Vivibe API key'}>{showVivibeKey?<EyeOff/>:<Eye/>}</button></div><small>{form.hasVivibeKey&&!form.clearVivibeApiKey?'A key is already stored.':'Created at vivibe.app/docs/api-keys.'}</small></label><label>JSON-RPC URL<Input value={form.vivibeBaseUrl} onChange={(event)=>update('vivibeBaseUrl',event.target.value)} /><small>Default: api.lucylab.io/json-rpc</small></label></div>{form.hasVivibeKey&&<Button type="button" size="sm" variant={form.clearVivibeApiKey?'secondary':'ghost'} className="remove-key" onClick={()=>setForm((current)=>({...current,clearVivibeApiKey:!current.clearVivibeApiKey,vivibeApiKey:''}))}>{form.clearVivibeApiKey?'Keep saved Vivibe key':'Remove saved Vivibe key'}</Button>}<div className="voice-identity-row"><label>Voice ID<Input value={form.vivibeVoiceId} onChange={(event)=>update('vivibeVoiceId',event.target.value)} placeholder="Your Vivibe voice ID"/></label><label>Speed<Input type="number" min="0.5" max="2" step="0.1" value={form.vivibeSpeed} onChange={(event)=>update('vivibeSpeed',event.target.value)}/></label><Button type="button" variant="outline" disabled={voiceLoading||form.clearVivibeApiKey||(!form.hasVivibeKey&&!form.vivibeApiKey)} onClick={loadVivibeVoices}>{voiceLoading?<LoaderCircle className="spin"/>:<RefreshCw/>}Load voices</Button></div>{vivibeVoices.length>0&&<label className="vivibe-voice-list">Available voices<Select value={form.vivibeVoiceId||undefined} onValueChange={(value)=>update('vivibeVoiceId',value)}><SelectTrigger><SelectValue placeholder="Choose a voice"/></SelectTrigger><SelectContent>{vivibeVoices.map((voice)=><SelectItem key={voice.id} value={voice.id}>{voice.name}</SelectItem>)}</SelectContent></Select><small>{vivibeVoices.length} active voices returned by getUserVoices.</small></label>}</div>}</section>}
+            {activeTab==='connection'&&<>
+              <div className="security-card"><ShieldCheck/><div><strong>{c.serverSecrets}</strong><p>{c.serverSecretsBody}</p></div></div>
+              {codexSelected&&<section className="settings-section"><div className="settings-section-title"><Sparkles/><span><strong>ChatGPT</strong><small>{c.codexConnectHint}</small></span></div><div className={`codex-connect-card ${codexAuth.connected?'connected':''}`}><div className="codex-connect-status"><span className="codex-mark">GPT</span><div><strong>{codexAuth.connected?c.codexConnected:c.codexNotConnected}</strong><small>{codexAuth.connected?[codexAuth.email,codexAuth.planType&&String(codexAuth.planType).toUpperCase()].filter(Boolean).join(' · '):codexAuth.error||c.codexConnectHint}</small></div></div><div className="codex-connect-actions"><label>{c.codexModel}<Input value={form.codexModel} onChange={(event)=>update('codexModel',event.target.value)} placeholder={c.codexModelPlaceholder}/></label>{codexAuth.connected?<Button type="button" variant="outline" disabled={authLoading} onClick={disconnectCodex}>{authLoading?<LoaderCircle className="spin"/>:<LogOut/>}{c.disconnect}</Button>:<Button type="button" disabled={authLoading||codexAuth.available===false} onClick={connectCodex}>{authLoading?<LoaderCircle className="spin"/>:<LogIn/>}{c.connectChatGPT}</Button>}</div></div></section>}
+              <section className="settings-section"><div className="settings-section-title"><Server/><span><strong>{c.connection}</strong><small>{c.credentialEndpoint}</small></span></div><div className="settings-fields two-columns"><label className="key-field">{c.apiKey}<div className="key-input"><Input type={showKey?'text':'password'} autoComplete="new-password" value={form.apiKey} onChange={(event)=>setForm((current)=>({...current,apiKey:event.target.value,clearApiKey:false}))} placeholder={form.hasOpenAIKey?'••••••••':'sk-proj-…'}/><button type="button" onClick={()=>setShowKey((value)=>!value)} aria-label={c.apiKey}>{showKey?<EyeOff/>:<Eye/>}</button></div></label><label>{c.baseUrl}<Input value={form.baseUrl} onChange={(event)=>update('baseUrl',event.target.value)} placeholder="https://api.openai.com/v1"/></label></div>{form.hasOpenAIKey&&<Button type="button" size="sm" variant={form.clearApiKey?'secondary':'ghost'} className="remove-key" onClick={()=>setForm((current)=>({...current,clearApiKey:!current.clearApiKey,apiKey:''}))}>{form.clearApiKey?'Keep saved key':'Remove saved key'}</Button>}</section>
+            </>}
           </div>
-          <Separator/>
-          <div className="settings-section">
-            <div className="settings-section-title"><BrainCircuit/><span><strong>{c.textProviderLabel}</strong><small>{c.textProviderHint}</small></span></div>
-            <div className="text-provider-row">
-              <label>{c.provider}<Select value={form.textProvider} onValueChange={(value)=>update('textProvider',value)}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent><SelectItem value="codex">ChatGPT subscription</SelectItem><SelectItem value="openai">OpenAI API</SelectItem><SelectItem value="mock">Mock · offline</SelectItem></SelectContent></Select></label>
-              <p>{form.textProvider==='codex'?c.codexProviderBody:form.textProvider==='openai'?c.openaiTextProviderBody:c.mockTextProviderBody}</p>
-            </div>
-          </div>
-          <Separator/>
-          <div className="settings-section">
-            <div className="settings-section-title"><ImageIcon/><span><strong>{c.imageProviderLabel}</strong><small>{c.imageProviderHint}</small></span></div>
-            <div className="text-provider-row">
-              <label>{c.provider}<Select value={form.imageProvider} onValueChange={(value)=>update('imageProvider',value)}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent><SelectItem value="codex">ChatGPT subscription · ImageGen</SelectItem><SelectItem value="openai">OpenAI Image API</SelectItem><SelectItem value="mock">Mock · offline</SelectItem></SelectContent></Select></label>
-              <p>{form.imageProvider==='codex'?c.codexImageProviderBody:form.imageProvider==='openai'?c.openaiImageProviderBody:c.mockImageProviderBody}</p>
-            </div>
-            {codexSelected&&<div className={`codex-connect-card ${codexAuth.connected?'connected':''}`}>
-              <div className="codex-connect-status"><span className="codex-mark">GPT</span><div><strong>{codexAuth.connected?c.codexConnected:c.codexNotConnected}</strong><small>{codexAuth.connected?[codexAuth.email,codexAuth.planType&&String(codexAuth.planType).toUpperCase()].filter(Boolean).join(' · '):codexAuth.error||c.codexConnectHint}</small></div></div>
-              <div className="codex-connect-actions"><label>{c.codexModel}<Input value={form.codexModel} onChange={(event)=>update('codexModel',event.target.value)} placeholder={c.codexModelPlaceholder}/></label>{codexAuth.connected?<Button type="button" variant="outline" disabled={authLoading} onClick={disconnectCodex}>{authLoading?<LoaderCircle className="spin"/>:<LogOut/>}{c.disconnect}</Button>:<Button type="button" disabled={authLoading||codexAuth.available===false} onClick={connectCodex}>{authLoading?<LoaderCircle className="spin"/>:<LogIn/>}{c.connectChatGPT}</Button>}</div>
-            </div>}
-          </div>
-          <Separator/>
-          <div className="settings-section">
-            <div className="settings-section-title"><Film/><span><strong>{c.brollProviders}</strong><small>{c.brollProvidersHint}</small></span></div>
-            <div className="settings-fields two-columns">
-              <label>Pexels API key<Input type="password" autoComplete="new-password" value={form.pexelsApiKey} onChange={(event)=>setForm((current)=>({...current,pexelsApiKey:event.target.value,clearPexelsApiKey:false}))} placeholder={form.hasPexelsKey?'Leave blank to keep saved key':'Pexels API key'}/>{form.hasPexelsKey&&<Button type="button" size="sm" variant="ghost" onClick={()=>setForm((current)=>({...current,clearPexelsApiKey:!current.clearPexelsApiKey,pexelsApiKey:''}))}>{form.clearPexelsApiKey?c.keepKey:c.removeKey}</Button>}</label>
-              <label>Pixabay API key<Input type="password" autoComplete="new-password" value={form.pixabayApiKey} onChange={(event)=>setForm((current)=>({...current,pixabayApiKey:event.target.value,clearPixabayApiKey:false}))} placeholder={form.hasPixabayKey?'Leave blank to keep saved key':'Pixabay API key'}/>{form.hasPixabayKey&&<Button type="button" size="sm" variant="ghost" onClick={()=>setForm((current)=>({...current,clearPixabayApiKey:!current.clearPixabayApiKey,pixabayApiKey:''}))}>{form.clearPixabayApiKey?c.keepKey:c.removeKey}</Button>}</label>
-            </div>
-          </div>
-          <Separator/>
-          <div className="settings-section">
-            <div className="settings-section-title"><Server/><span><strong>{c.connection}</strong><small>{c.credentialEndpoint}</small></span></div>
-            <div className="settings-fields two-columns">
-              <label className="key-field">{c.apiKey}<div className="key-input"><Input type={showKey?'text':'password'} autoComplete="new-password" value={form.apiKey} onChange={(event)=>setForm((current)=>({...current,apiKey:event.target.value,clearApiKey:false}))} placeholder={form.hasOpenAIKey?'••••••••':'sk-proj-…'}/><button type="button" onClick={()=>setShowKey((value)=>!value)} aria-label={c.apiKey}>{showKey?<EyeOff/>:<Eye/>}</button></div></label>
-              <label>{c.baseUrl}<Input value={form.baseUrl} onChange={(event)=>update('baseUrl',event.target.value)} placeholder="https://api.openai.com/v1"/></label>
-            </div>
-            {form.hasOpenAIKey&&<Button type="button" size="sm" variant={form.clearApiKey?'secondary':'ghost'} className="remove-key" onClick={()=>setForm((current)=>({...current,clearApiKey:!current.clearApiKey,apiKey:''}))}>{form.clearApiKey?'Keep saved key':'Remove saved key'}</Button>}
-          </div>
-          <Separator/>
-          <div className="settings-section">
-            <div className="settings-section-title"><Clapperboard/><span><strong>{c.defaultRenderer}</strong><small>{c.appliedNew}</small></span></div>
-            <div className="renderer-setting">
-              <label>{c.renderStyle}<Select value={form.renderer} onValueChange={(value)=>update('renderer',value)}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent>{rendererOptions(form.rendererNames||[],c)}</SelectContent></Select></label>
-              <p><strong>{rendererSummary(form.renderer).title}</strong><span>{rendererSummary(form.renderer).body}</span></p>
-            </div>
-          </div>
-          <Separator/>
-          <div className="settings-section">
-            <div className="settings-section-title"><BrainCircuit/><span><strong>{c.generationStack}</strong><small>{c.modelsUsed}</small></span></div>
-            <div className="settings-fields two-columns">
-              {form.textProvider==='openai'&&<label>{c.scriptModel}<Input value={form.textModel} onChange={(event)=>update('textModel',event.target.value)} /></label>}
-              {form.imageProvider==='openai'&&<label>{c.imageModel}<Input value={form.imageModel} onChange={(event)=>update('imageModel',event.target.value)} /></label>}
-              {form.imageProvider==='codex'&&<label>{c.imageModel}<Input value="gpt-image-2 · ImageGen" disabled /></label>}
-              {form.imageProvider!=='mock'&&<label>{c.imageSize}<Select value={form.imageSize} onValueChange={(value)=>update('imageSize',value)}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent><SelectItem value="1536x1024">1536 × 1024</SelectItem><SelectItem value="1024x1024">1024 × 1024</SelectItem><SelectItem value="1024x1536">1024 × 1536</SelectItem><SelectItem value="auto">Auto</SelectItem></SelectContent></Select></label>}
-              {form.imageProvider!=='mock'&&<label>{c.imageQuality}<Select value={form.imageQuality} onValueChange={(value)=>update('imageQuality',value)}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent><SelectItem value="low">Low</SelectItem><SelectItem value="medium">Medium</SelectItem><SelectItem value="high">High</SelectItem><SelectItem value="auto">Auto</SelectItem></SelectContent></Select></label>}
-            </div>
-          </div>
-          <Separator/>
-          <div className="settings-section voice-provider-section">
-            <div className="settings-section-title"><Mic2/><span><strong>{c.voiceSource}</strong><small>{c.narrationProvider}</small></span></div>
-            <div className="voice-provider-head">
-              <label>{c.provider}<Select value={form.voiceProvider} onValueChange={(value)=>{update('voiceProvider',value);setVivibeVoices([]);}}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent><SelectItem value="openai">OpenAI Speech</SelectItem><SelectItem value="vivibe">Vivibe / LucyAI</SelectItem><SelectItem value="mock">Mock</SelectItem></SelectContent></Select></label>
-              <p>{form.voiceProvider==='vivibe'?'Async Vietnamese voice generation via ttsLongText. Audio is normalized to MP3 before entering the timeline.':form.voiceProvider==='openai'?'Direct speech synthesis with model, voice, and delivery instructions.':'Offline silent MP3 for smoke tests and zero-cost development.'}</p>
-            </div>
-            {form.voiceProvider==='openai'&&<><div className="settings-fields two-columns voice-fields"><label>Speech model<Input value={form.ttsModel} onChange={(event)=>update('ttsModel',event.target.value)} /></label><label>Voice<Input value={form.ttsVoice} onChange={(event)=>update('ttsVoice',event.target.value)} /></label></div><label className="instruction-field">Voice direction<Textarea rows={3} value={form.ttsInstructions} onChange={(event)=>update('ttsInstructions',event.target.value)} /></label></>}
-            {form.voiceProvider==='vivibe'&&<div className="vivibe-panel">
-              <div className="settings-fields two-columns">
-                <label className="key-field">Vivibe API key<div className="key-input"><Input type={showVivibeKey?'text':'password'} autoComplete="new-password" value={form.vivibeApiKey} onChange={(event)=>setForm((current)=>({...current,vivibeApiKey:event.target.value,clearVivibeApiKey:false}))} placeholder={form.hasVivibeKey?'Leave blank to keep saved key':'Paste Vivibe API key'}/><button type="button" onClick={()=>setShowVivibeKey((value)=>!value)} aria-label={showVivibeKey?'Hide Vivibe API key':'Show Vivibe API key'}>{showVivibeKey?<EyeOff/>:<Eye/>}</button></div><small>{form.hasVivibeKey&&!form.clearVivibeApiKey?'A key is already stored.':'Created at vivibe.app/docs/api-keys.'}</small></label>
-                <label>JSON-RPC URL<Input value={form.vivibeBaseUrl} onChange={(event)=>update('vivibeBaseUrl',event.target.value)} /><small>Default: api.lucylab.io/json-rpc</small></label>
-              </div>
-              {form.hasVivibeKey&&<Button type="button" size="sm" variant={form.clearVivibeApiKey?'secondary':'ghost'} className="remove-key" onClick={()=>setForm((current)=>({...current,clearVivibeApiKey:!current.clearVivibeApiKey,vivibeApiKey:''}))}>{form.clearVivibeApiKey?'Keep saved Vivibe key':'Remove saved Vivibe key'}</Button>}
-              <div className="voice-identity-row">
-                <label>Voice ID<Input value={form.vivibeVoiceId} onChange={(event)=>update('vivibeVoiceId',event.target.value)} placeholder="Your Vivibe voice ID"/></label>
-                <label>Speed<Input type="number" min="0.5" max="2" step="0.1" value={form.vivibeSpeed} onChange={(event)=>update('vivibeSpeed',event.target.value)}/></label>
-                <Button type="button" variant="outline" disabled={voiceLoading||form.clearVivibeApiKey||(!form.hasVivibeKey&&!form.vivibeApiKey)} onClick={loadVivibeVoices}>{voiceLoading?<LoaderCircle className="spin"/>:<RefreshCw/>}Load voices</Button>
-              </div>
-              {vivibeVoices.length>0&&<label className="vivibe-voice-list">Available voices<Select value={form.vivibeVoiceId||undefined} onValueChange={(value)=>update('vivibeVoiceId',value)}><SelectTrigger><SelectValue placeholder="Choose a voice"/></SelectTrigger><SelectContent>{vivibeVoices.map((voice)=><SelectItem key={voice.id} value={voice.id}>{voice.name}</SelectItem>)}</SelectContent></Select><small>{vivibeVoices.length} active voices returned by getUserVoices.</small></label>}
-            </div>}
-          </div>
-          {message&&<div className={`settings-message ${message.type}`}>
-            {message.type==='success'?<CheckCircle2/>:<CircleDot/>}<span>{message.text}</span>
-          </div>}
-          <DialogFooter className="settings-footer"><Button type="button" variant="ghost" onClick={()=>onOpenChange(false)}>{c.close}</Button><Button type="button" variant="outline" disabled={saving||codexSelected&&!codexAuth.connected||openAISelected&&(form.clearApiKey||(!form.hasOpenAIKey&&!form.apiKey))} onClick={()=>persist(true)}>{saving?<LoaderCircle className="spin"/>:<Activity/>}{c.saveTest}</Button><Button type="button" disabled={saving} onClick={()=>persist(false)}>{saving?<LoaderCircle className="spin"/>:<Save/>}{c.saveSettings}</Button></DialogFooter>
+          <div className="settings-actions">{message&&<div className={`settings-message ${message.type}`}>{message.type==='success'?<CheckCircle2/>:<CircleDot/>}<span>{message.text}</span></div>}<DialogFooter className="settings-footer"><Button type="button" variant="ghost" onClick={()=>onOpenChange(false)}>{c.close}</Button><Button type="button" variant="outline" disabled={saving||codexSelected&&!codexAuth.connected||openAISelected&&(form.clearApiKey||(!form.hasOpenAIKey&&!form.apiKey))} onClick={()=>persist(true)}>{saving?<LoaderCircle className="spin"/>:<Activity/>}{c.saveTest}</Button><Button type="button" disabled={saving} onClick={()=>persist(false)}>{saving?<LoaderCircle className="spin"/>:<Save/>}{c.saveSettings}</Button></DialogFooter></div>
         </div>
       </div>}
     </DialogContent>
