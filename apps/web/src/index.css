@@ -1167,3 +1167,30 @@ body:has(.director-room.focus-mode){overflow:hidden}
 @container inspector (max-width:239px){
   .director-panel{grid-template-rows:minmax(0,1fr)!important}.director-panel>nav{display:flex!important;flex-direction:column;align-items:center;padding-top:8px!important;border:0!important}.director-panel>nav button{width:42px!important;height:42px!important;font-size:0!important}.director-panel>nav svg{width:16px!important}.director-panel-body{display:none!important}
 }
+
+/* Comfortable studio density: roughly matches a 110% browser zoom without scaling the canvas. */
+.director-room{--studio-type-primary:11px;--studio-type-secondary:10px;--studio-type-meta:9px;grid-template-rows:48px minmax(0,1fr) 46px}
+.director-room.has-job{grid-template-rows:48px minmax(0,1fr) 46px}
+.director-wordmark{font-size:11px}.director-wordmark svg{width:18px;height:18px}
+.director-project-title h1{font-size:14px}.director-project-title p{font-size:9px}
+.director-project-progress span{font-size:9px}.director-project-progress strong{font-size:10px}
+.director-project-actions [data-slot="button"]{height:32px;padding-inline:11px;font-size:10px}.director-project-actions .pipeline-tool,.history-buttons button{width:32px;height:32px}.director-project-actions .pipeline-tool svg,.history-buttons svg{width:15px;height:15px}
+
+.director-storyboard>header span{font-size:10px}.director-storyboard>header strong{font-size:9px}.director-storyboard>header button{width:30px;height:30px}
+.storyboard-card{grid-template-columns:58px minmax(0,1fr) 22px;gap:9px;min-height:64px;padding:6px}.storyboard-thumb{width:58px;height:52px}.storyboard-thumb>span{font-size:12px}.storyboard-thumb>i{width:18px;height:18px}.storyboard-thumb>i svg{width:10px}
+.storyboard-copy>div,.storyboard-copy footer{font-size:8px}.storyboard-copy>strong{font-size:11px;line-height:1.35}.scene-more{width:28px;height:28px}
+
+.director-stage{grid-template-rows:46px 38px minmax(0,1fr) 36px}
+.director-stage-head span{font-size:9px}.director-stage-head strong{font-size:12px}.director-stage-head [data-slot="badge"]{height:23px;padding-inline:9px;font-size:9px}.stage-head-actions>button{width:30px;height:30px}.stage-head-actions>button svg{width:16px;height:16px}
+.director-view-tabs button{gap:6px;padding-inline:11px;font-size:9px}.director-view-tabs button svg{width:15px;height:15px}
+.director-pager button{min-height:30px;font-size:9px}.director-pager>div{font-size:9px}.director-pager strong{font-size:11px}
+.take-switcher{padding:6px 8px}.take-switcher button{height:27px;font-size:9px}
+
+.director-panel{grid-template-rows:44px minmax(0,1fr)}.director-panel>nav{padding:6px}.director-panel>nav button{height:32px;font-size:9px}.director-panel>nav svg{width:15px;height:15px}
+.director-panel-body{padding:12px;font-size:var(--studio-type-secondary);line-height:1.5}.next-action-card{padding:15px}.next-action-card>span{font-size:9px}.next-action-card h2{font-size:15px}.next-action-card p{font-size:10px}.next-action-card [data-slot="button"]{height:32px;font-size:10px}
+.action-inbox>header,.director-command>header{min-height:34px}.action-inbox>header>span,.director-command>header>span{font-size:10px}.action-inbox>div>button{grid-template-columns:26px minmax(0,1fr) 14px;min-height:44px;padding:8px 3px}.action-inbox>div>button>i{width:24px;height:24px}.action-inbox strong{font-size:10px}.action-inbox small,.action-inbox em{font-size:9px}
+.director-command textarea,.edit-panel textarea,.memory-panel textarea,.memory-panel input{font-size:11px;line-height:1.5}.director-command form>[data-slot="button"],.edit-save [data-slot="button"],.memory-panel [data-slot="button"],.quality-actions [data-slot="button"]{height:32px;font-size:10px}.director-suggestions button{min-height:28px;font-size:9px}
+.field-title span,.director-advanced label>span,.quality-panel h3,.memory-panel>label>span{font-size:10px}.field-title small,.quality-checks small,.memory-panel>header p,.history-log small{font-size:9px}.quality-checks strong,.history-log p{font-size:10px}.director-advanced summary,.director-advanced [data-slot="select-trigger"]{font-size:10px}
+
+.director-timeline{grid-template-columns:96px minmax(0,1fr);height:46px}.director-timeline>div:first-child span{font-size:8px}.director-timeline>div:first-child strong{font-size:11px}.timeline-track{height:34px}.timeline-track button{height:19px;font-size:8px}.timeline-track button:hover,.timeline-track button.active{height:23px}
+[data-slot="tooltip-content"]{padding:6px 8px!important;font-size:10px!important}
