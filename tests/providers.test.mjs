@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { generateScriptOpenAI, generateImageOpenAI, inspectVisualOpenAI, planEngagementOpenAI, planNarrativeBeatsOpenAI, synthesizeSpeechOpenAI, transcribeAudioOpenAI } from '../packages/providers/src/openai.mjs';
+import { generateScriptOpenAI, generateImageOpenAI, inspectVisualOpenAI, planEngagementOpenAI, planNarrativeBeatsOpenAI, planPackagingOpenAI, synthesizeSpeechOpenAI, transcribeAudioOpenAI } from '../packages/providers/src/openai.mjs';
 import { listVivibeVoices, synthesizeSpeechVivibe } from '../packages/providers/src/vivibe.mjs';
 
 const cfg = {
@@ -87,6 +87,13 @@ test('OpenAI retention planner requests an explainable plan without predicted me
   const oldFetch=globalThis.fetch;let request;
   globalThis.fetch=async(url,init)=>{request={url,body:JSON.parse(init.body)};return new Response(JSON.stringify({output_text:JSON.stringify({promise:'A clear promise',beats:[{sceneId:'scene-001',newInformation:'One fact'}],hookVariants:[{id:'direct',hook:'Start here.'}]})}),{status:200});};
   try{const result=await planEngagementOpenAI({title:'Test',settings:{language:'en',format:'landscape'},brief:{},scenes:[{id:'scene-001',text:'Start here.',visualIntent:'A start',narrativeRole:'hook',durationMs:3000}]},cfg);assert.equal(result.promise,'A clear promise');assert.equal(result.beats[0].sceneId,'scene-001');assert.match(request.body.input,/Do not invent.*predicted retention scores/);}
+  finally{globalThis.fetch=oldFetch;}
+});
+
+test('OpenAI packaging planner creates concepts without invented performance claims',async()=>{
+  const oldFetch=globalThis.fetch;let request;
+  globalThis.fetch=async(url,init)=>{request=JSON.parse(init.body);return new Response(JSON.stringify({output_text:JSON.stringify({variants:[{id:'package-a',title:'One useful title',thumbnailDirection:'One focal subject'}]})}),{status:200});};
+  try{const result=await planPackagingOpenAI({title:'Test',settings:{language:'en',format:'landscape'},brief:{},engagementPlan:{promise:'Useful value'},scenes:[{id:'scene-001',text:'Start here.',narrativeRole:'hook'}]},cfg);assert.equal(result.variants[0].id,'package-a');assert.match(request.input,/Do not invent.*predicted click-through rates/);}
   finally{globalThis.fetch=oldFetch;}
 });
 

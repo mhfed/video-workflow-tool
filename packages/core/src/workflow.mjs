@@ -2,6 +2,7 @@ import { normalizeTakes } from './takes.mjs';
 import { normalizePenAppearance } from './pen-settings.mjs';
 import { normalizeContentProject, normalizeMemory } from './content-contract.mjs';
 import { normalizeEngagementPlan } from './engagement.mjs';
+import { normalizePackaging } from './packaging.mjs';
 
 export const WORKFLOW_MODES = new Set(['auto','studio']);
 export const REVIEW_STAGES = ['script','voice','visual','clip'];
@@ -27,6 +28,7 @@ export function normalizeWorkflow(project) {
     normalizeTakes(scene);
   }
   project.engagementPlan=normalizeEngagementPlan(project.engagementPlan,project);
+  project.packaging=normalizePackaging(project.packaging,project);
   return project;
 }
 

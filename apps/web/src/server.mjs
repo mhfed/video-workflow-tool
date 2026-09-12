@@ -33,7 +33,8 @@ import { routeContentApi } from './content-api.mjs';
 import { createVideo } from '../../worker/src/create-video.mjs';
 import { normalizeBrief, normalizeMemory } from '../../../packages/core/src/content-contract.mjs';
 import { applyHookVariant, buildRetentionPreflight, normalizeEngagementPlan, normalizeEngagementProposal } from '../../../packages/core/src/engagement.mjs';
-import { planEngagementText } from '../../../packages/providers/src/text.mjs';
+import { applyPackagingVariant, buildPackagingPreflight, normalizePackagingProposal, selectPackagingVariant } from '../../../packages/core/src/packaging.mjs';
+import { planEngagementText, planPackagingText } from '../../../packages/providers/src/text.mjs';
 
 let cfg=config();
 const here=path.dirname(fileURLToPath(import.meta.url));
@@ -52,6 +53,7 @@ const isLoopback=(address='')=>address==='127.0.0.1'||address==='::1'||address.s
 const settingString=(body,key,{fallback='',max=500}={})=>typeof body[key]==='string'?body[key].replace(/[\r\n]+/g,' ').trim().slice(0,max):fallback;
 const projectBusy=(id)=>legacyRunning.has(id)||jobQueue.activeProjectIds().includes(id);
 const activeIds=()=>[...new Set([...legacyRunning,...jobQueue.activeProjectIds()])];
+const viewerQualityPayload=(p)=>({plan:p.engagementPlan,preflight:buildRetentionPreflight(p),packaging:p.packaging,packagingPreflight:buildPackagingPreflight(p)});
 
 function settingsUpdates(body) {
   const updates={};
@@ -234,22 +236,40 @@ const server=http.createServer(async (req,res)=>{
       }
       if(req.method==='GET'&&parts[3]==='rough-cut'&&parts.length===4)return json(res,200,buildRoughCutManifest(loadProject(id,cfg)));
       if(req.method==='GET'&&parts[3]==='retention'&&parts.length===4){
-        const p=loadProject(id,cfg);return json(res,200,{plan:p.engagementPlan,preflight:buildRetentionPreflight(p)});
+        const p=loadProject(id,cfg);return json(res,200,viewerQualityPayload(p));
       }
       if(req.method==='POST'&&parts[3]==='retention'&&parts[4]==='plan'&&parts.length===5){
         if(projectBusy(id))return json(res,409,{error:'Wait for the active job before planning viewer retention.'});
         const p=loadProject(id,cfg),proposal=await planEngagementText(p,cfg);recordHistory(p,'Prepare viewer retention plan');p.engagementPlan=normalizeEngagementProposal(proposal,p);saveProject(p,cfg);
-        return json(res,200,{project:p,plan:p.engagementPlan,preflight:buildRetentionPreflight(p)});
+        return json(res,200,{project:p,...viewerQualityPayload(p)});
       }
       if(req.method==='PATCH'&&parts[3]==='retention'&&parts.length===4){
         if(projectBusy(id))return json(res,409,{error:'Wait for the active job before editing viewer retention.'});
         const body=await readBody(req),p=loadProject(id,cfg);recordHistory(p,'Update viewer retention plan');p.engagementPlan=normalizeEngagementPlan({...p.engagementPlan,...body,hookLab:p.engagementPlan?.hookLab},p);saveProject(p,cfg);
-        return json(res,200,{project:p,plan:p.engagementPlan,preflight:buildRetentionPreflight(p)});
+        return json(res,200,{project:p,...viewerQualityPayload(p)});
       }
       if(req.method==='POST'&&parts[3]==='retention'&&parts[4]==='hooks'&&parts[5]==='select'&&parts.length===6){
         if(projectBusy(id))return json(res,409,{error:'Wait for the active job before selecting a hook.'});
         const body=await readBody(req),p=loadProject(id,cfg);recordHistory(p,'Select opening hook');applyHookVariant(p,String(body.variantId||''),cfg,{invalidateScene,visualPromptFor});saveProject(p,cfg);
-        return json(res,200,{project:p,plan:p.engagementPlan,preflight:buildRetentionPreflight(p)});
+        return json(res,200,{project:p,...viewerQualityPayload(p)});
+      }
+      if(req.method==='GET'&&parts[3]==='packaging'&&parts.length===4){
+        const p=loadProject(id,cfg);return json(res,200,{packaging:p.packaging,preflight:buildPackagingPreflight(p)});
+      }
+      if(req.method==='POST'&&parts[3]==='packaging'&&parts[4]==='plan'&&parts.length===5){
+        if(projectBusy(id))return json(res,409,{error:'Wait for the active job before planning packaging.'});
+        const p=loadProject(id,cfg),proposal=await planPackagingText(p,cfg);recordHistory(p,'Prepare packaging concepts');p.packaging=normalizePackagingProposal(proposal,p);saveProject(p,cfg);
+        return json(res,200,{project:p,...viewerQualityPayload(p)});
+      }
+      if(req.method==='POST'&&parts[3]==='packaging'&&parts[4]==='select'&&parts.length===5){
+        if(projectBusy(id))return json(res,409,{error:'Wait for the active job before selecting packaging.'});
+        const body=await readBody(req),p=loadProject(id,cfg);recordHistory(p,'Select packaging concept');selectPackagingVariant(p,String(body.variantId||''));saveProject(p,cfg);
+        return json(res,200,{project:p,...viewerQualityPayload(p)});
+      }
+      if(req.method==='POST'&&parts[3]==='packaging'&&parts[4]==='apply'&&parts.length===5){
+        if(projectBusy(id))return json(res,409,{error:'Wait for the active job before applying packaging.'});
+        const body=await readBody(req),p=loadProject(id,cfg);recordHistory(p,'Apply packaging concept');applyPackagingVariant(p,String(body.variantId||''),cfg,{applyTitle:body.applyTitle!==false,applyHook:body.applyHook===true,invalidateScene,visualPromptFor});saveProject(p,cfg);
+        return json(res,200,{project:p,...viewerQualityPayload(p)});
       }
       if(req.method==='GET'&&parts[3]==='quality'&&parts[4]==='repair-plan')return json(res,200,buildRepairPlan(loadProject(id,cfg)));
       if(req.method==='POST'&&parts[3]==='quality'&&parts[4]==='repair'){

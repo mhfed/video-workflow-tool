@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  AlertTriangle, ArrowRight, Check, CheckCircle2, Clock3, LoaderCircle,
+  AlertTriangle, ArrowRight, Check, CheckCircle2, Clock3, Image as ImageIcon, LoaderCircle,
   RefreshCw, Save, Sparkles, Target, WandSparkles,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
@@ -20,8 +20,33 @@ function PlanField({ label, name, value, onChange, multiline = false }) {
   return <label className="retention-field"><span>{label}</span><Field rows={multiline ? 3 : undefined} value={value || ''} onChange={(event) => onChange(name, event.target.value)} /></label>;
 }
 
+function PackagingLab({packaging,preflight,running,working,run,onPlan,onSelect,onApply,c}) {
+  if(!packaging)return null;
+  return <section className="retention-section packaging-lab">
+    <header><span><ImageIcon />{c.packagingLab}</span><Button variant="ghost" disabled={running||!!working} onClick={()=>run('packaging-plan',onPlan)}>{working==='packaging-plan'?<LoaderCircle className="spin"/>:<RefreshCw/>}{c.newPackagingConcepts}</Button></header>
+    <p className="packaging-lab-intro">{c.packagingLabBody}</p>
+    <div className="packaging-variants">{packaging.variants.map((variant,index)=>{
+      const selected=packaging.selectedVariantId===variant.id;
+      return <article key={variant.id} className={selected?'selected':''}>
+        <div className="mobile-package-preview" aria-label={`${c.mobilePreview}: ${variant.title}`}>
+          <div><i>0{index+1}</i><span>{variant.thumbnailText}</span><small>{variant.focalPoint||variant.thumbnailDirection}</small></div>
+          <strong>{variant.title}</strong>
+        </div>
+        <header><span><strong>{variant.label}</strong><small>{variant.curiosityMechanism}</small></span>{selected&&<Badge><Check/>{c.selectedPackage}</Badge>}</header>
+        <p>{variant.thumbnailDirection}</p>
+        <div className="packaging-card-actions">
+          <Button variant="outline" disabled={running||!!working||selected} onClick={()=>run(`package-${variant.id}`,()=>onSelect(variant.id))}>{working===`package-${variant.id}`?<LoaderCircle className="spin"/>:<Check/>}{selected?c.selectedPackage:c.selectPackage}</Button>
+          {selected&&<Button disabled={running||!!working} onClick={()=>run(`apply-package-${variant.id}`,()=>onApply(variant.id))}>{working===`apply-package-${variant.id}`?<LoaderCircle className="spin"/>:<ArrowRight/>}{c.applyPackageAndHook}</Button>}
+        </div>
+        {selected&&preflight&&<div className="packaging-check-summary"><span className={preflight.status}>{preflight.status==='pass'?c.packagingAligned:`${preflight.summary.warnings} ${c.warnings}`}</span>{preflight.findings.filter((item)=>item.status==='warn').slice(0,2).map((item)=><small key={item.id}><AlertTriangle/>{item.note}</small>)}</div>}
+      </article>;
+    })}</div>
+    <small className="packaging-select-note">{c.packagingSelectNote}</small>
+  </section>;
+}
+
 export default function RetentionPanel({
-  report, loading, error, running, onRefresh, onPlan, onSave, onSelectHook, onOpenScene, c,
+  report, loading, error, running, onRefresh, onPlan, onSave, onSelectHook, onPlanPackaging, onSelectPackaging, onApplyPackaging, onOpenScene, c,
 }) {
   const plan = report?.plan;
   const preflight = report?.preflight;
@@ -59,6 +84,7 @@ export default function RetentionPanel({
     {!loading && !report ? <section className="retention-empty"><Sparkles /><h3>{c.retentionEmpty}</h3><p>{c.retentionEmptyBody}</p><Button disabled={running || !!working} onClick={() => run('plan', onPlan)}>{working === 'plan' ? <LoaderCircle className="spin" /> : <WandSparkles />}{c.prepareRetention}</Button></section> : null}
 
     {plan && <>
+      <PackagingLab packaging={report.packaging} preflight={report.packagingPreflight} running={running} working={working} run={run} onPlan={onPlanPackaging} onSelect={onSelectPackaging} onApply={onApplyPackaging} c={c}/>
       <section className="retention-contract">
         <div className="retention-contract-label"><span>01</span><strong>{c.audienceContract}</strong></div>
         <PlanField label={c.targetViewer} name="targetViewer" value={draft.targetViewer} onChange={edit} />
