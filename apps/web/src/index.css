@@ -239,10 +239,6 @@ video::cue { color: #fffdf8; background: rgba(22,21,18,.82); font-family: var(--
 @keyframes command-enter{from{opacity:0;transform:translateY(-10px) scale(.985)}to{opacity:1;transform:none}}
 
 .main-stage { min-width: 0; padding: 38px clamp(24px, 4vw, 64px) 80px; }
-.error-banner { position: sticky; z-index: 20; top: 86px; display: flex; align-items: center; gap: 10px; max-width: 1120px; margin: 0 auto 20px; padding: 11px 14px; color: #7b271a; background: #fff0eb; border: 1px solid #efb2a1; border-radius: 6px; font-size: 12px; box-shadow: 0 6px 16px rgb(70 30 20 / 8%); }
-.error-banner svg { width: 15px; }
-.error-banner span { flex: 1; }
-.error-banner button { color: inherit; background: none; border: 0; font-weight: 700; text-transform: uppercase; font-size: 9px; letter-spacing: .1em; }
 
 .empty-state { min-height: calc(100vh - 190px); max-width: 990px; margin: 0 auto; display: flex; flex-direction: column; justify-content: center; animation: lift-in .65s cubic-bezier(.2,.8,.2,1) both; }
 .empty-kicker, .eyebrow, .dialog-index { display: flex; align-items: center; gap: 7px; color: #c64a25; font-size: 10px; font-weight: 800; letter-spacing: .15em; text-transform: uppercase; }
@@ -276,8 +272,6 @@ video::cue { color: #fffdf8; background: rgba(22,21,18,.82); font-family: var(--
 .renderer-control { display: grid; gap: 5px; color: #777164; font-size: 8px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
 .renderer-control [data-slot="select-trigger"] { min-width: 158px; color: #302d27; background: #f8f5ed; border-color: #bdb5a7; font-size: 11px; font-weight: 650; letter-spacing: 0; text-transform: none; }
 .main-stage > [data-slot="separator"] { max-width: 1120px; margin: 0 auto; background: #aaa396; }
-.project-error { display: grid; gap: 4px; max-width: 1120px; margin: 18px auto; padding: 12px 15px; color: #7b271a; background: #fff0eb; border-left: 3px solid #c64a25; font-size: 12px; }
-.project-error span { color: #984838; }
 
 .final-awaiting, .final-card { max-width: 1120px; margin: 22px auto 48px; }
 .final-awaiting { display: flex; align-items: center; gap: 15px; padding: 18px 20px; color: #5f594e; background: rgb(255 253 247 / 52%); border: 1px dashed #aaa396; border-radius: 7px; }
@@ -377,7 +371,6 @@ video::cue { color: #fffdf8; background: rgba(22,21,18,.82); font-family: var(--
 .mode-switch.light button.active { color: #fff9ef; background: #2c2a25; }
 .compact-header .renderer-control > span { display: none; }
 .compact-header .renderer-control [data-slot="select-trigger"] { min-width: 132px; }
-.workbench-stage > .project-error { width: 100%; max-width: none; margin: 0; flex: 0 0 auto; }
 
 .project-overview { flex: 1; min-height: 0; display: grid; grid-template-columns: 1fr; grid-template-rows: 72px minmax(0,1fr); gap: 10px; }
 .overview-progress { grid-column: 1/-1; display: grid; grid-template-columns: repeat(4,1fr); overflow: hidden; background: #f8f5ed; border: 1px solid #c8c1b4; border-radius: 8px; box-shadow: 0 7px 20px rgb(57 48 36 / 7%); }
@@ -1093,6 +1086,9 @@ body:has(.director-room.focus-mode){overflow:hidden}
 .workspace-grid.project-open .nav-rail-button{color:#71717a}.workspace-grid.project-open .nav-rail-button:hover{color:#e4e4e7;background:#18181b}.workspace-grid.project-open .nav-rail-button.active{color:#fafafa;background:#27272a}
 .workspace-grid.project-open .nav-runtime{display:none}
 .main-stage.director-shell-stage { height:100vh;min-height:100vh;background:#09090b; }
+.app-alert-stack{position:fixed;z-index:70;top:60px;left:calc(50% + 24px);display:grid;gap:8px;width:min(640px,calc(100vw - 112px));pointer-events:none;transform:translateX(-50%)}
+.app-alert{display:grid;grid-template-columns:18px minmax(0,1fr) 28px;gap:11px;align-items:start;padding:12px 11px 12px 14px;color:#fecaca;background:#18181bf2;border:1px solid #7f1d1d;border-left:2px solid #f87171;border-radius:6px;box-shadow:0 16px 45px #000a;backdrop-filter:blur(14px);pointer-events:auto;animation:alert-drop .18s cubic-bezier(.2,.8,.2,1) both}.app-alert>svg{width:16px;height:16px;margin-top:1px;color:#f87171}.app-alert-copy{display:grid;min-width:0;gap:4px}.app-alert [data-slot="alert-title"]{color:#fee2e2;font-size:10px;font-weight:700;letter-spacing:.02em}.app-alert [data-slot="alert-description"]{overflow-wrap:anywhere;color:#fca5a5;font:9px/1.45 ui-monospace,monospace}.app-alert [data-slot="button"]{width:28px;height:28px;margin:-6px -5px 0 0;padding:0;color:#a1a1aa;background:transparent}.app-alert [data-slot="button"]:hover{color:#fff;background:#3f1d1d}.app-alert [data-slot="button"] svg{width:14px;height:14px}
+@keyframes alert-drop{from{opacity:0;transform:translateY(-7px) scale(.985)}to{opacity:1;transform:none}}
 
 .director-room { --studio-base:#09090b;--studio-panel:#121214;--studio-line:#27272a;--studio-primary:#f4f4f5;--studio-secondary:#a1a1aa;--studio-tertiary:#52525b;--studio-accent:#f25f36;height:100%;grid-template-rows:48px minmax(0,1fr) 42px;color:var(--studio-primary);background:var(--studio-base);animation:none; }
 .director-room.has-job { grid-template-rows:48px minmax(0,1fr) 42px; }
@@ -1178,6 +1174,7 @@ body:has(.director-room.focus-mode){overflow:hidden}
   .director-grid:not(.panel-collapsed) .director-panel{grid-template-rows:40px minmax(0,1fr)}.director-grid:not(.panel-collapsed) .director-panel>nav{display:grid;grid-template-columns:repeat(4,1fr);padding:5px;border-bottom:1px solid #27272a}.director-grid:not(.panel-collapsed) .director-panel>nav button{width:auto;height:30px;font-size:7px}.director-grid:not(.panel-collapsed) .director-panel-body{display:block}
 }
 @media (max-width:800px){.director-grid[data-group]{display:flex}.director-grid .director-resizer{display:block!important}.director-grid .director-storyboard,.director-grid .director-stage,.director-grid .director-panel{height:100%}}
+@media (max-width:640px){.app-alert-stack{top:10px;left:50%;width:calc(100vw - 20px)}.app-alert{grid-template-columns:17px minmax(0,1fr) 28px}}
 
 /* Side-panel content adapts continuously while its width is being dragged. */
 .storyboard-panel-slot{container:storyboard / inline-size}.inspector-panel-slot{container:inspector / inline-size}

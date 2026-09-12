@@ -31,7 +31,9 @@ import {
   Sparkles,
   Trash2,
   TriangleAlert,
+  X,
 } from 'lucide-react';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { CardDescription } from '@/components/ui/card';
@@ -274,9 +276,12 @@ export default function App(){
   const [paletteOpen,setPaletteOpen]=useState(false);
   const [workspaceContext,setWorkspaceContext]=useState(null);
   const [workspaceCommand,setWorkspaceCommand]=useState(null);
+  const [dismissedProjectError,setDismissedProjectError]=useState('');
 
   const activeJob=[...(current?.jobs||[])].reverse().find((job)=>['queued','running','cancelling'].includes(job.status))||null;
   const running=!!activeJob||!!current&&health?.running?.includes(current.id);
+  const projectErrorKey=current?.error?[current.id,current.error.jobId,current.error.at,current.error.message].filter(Boolean).join(':'):'';
+  const showProjectError=!!current?.error&&dismissedProjectError!==projectErrorKey;
   const config=health?.config;
   const c=copyFor(config?.uiLanguage||'vi');
   const refreshHealth=async()=>setHealth(await api('/api/health'));
@@ -360,9 +365,11 @@ export default function App(){
       <ApplicationNavigation current={current} projects={projects} drawer={navDrawer} onDrawer={setNavDrawer} onHome={()=>{setNavDrawer(null);setCurrent(null);}} onCreate={()=>{setNavDrawer(null);setDialogOpen(true);}} onSelect={load} onDelete={(project)=>{setDeleteProjectError('');setProjectToDelete(project);}} onSettings={()=>{setNavDrawer(null);setSettingsOpen(true);}} health={health} c={c}/>
 
       <main className={`main-stage ${current?'director-shell-stage':''}`}>
-        {error&&<div className="error-banner"><CircleDot/><span>{error}</span><button onClick={()=>setError('')}>{c.dismiss}</button></div>}
+        {(error||showProjectError)&&<div className="app-alert-stack" aria-live="assertive">
+          {error&&<Alert variant="destructive" className="app-alert"><TriangleAlert/><div className="app-alert-copy"><AlertTitle>{c.needsAttention}</AlertTitle><AlertDescription>{error}</AlertDescription></div><Button variant="ghost" size="icon-sm" aria-label={c.dismiss} onClick={()=>setError('')}><X/></Button></Alert>}
+          {showProjectError&&<Alert variant="destructive" className="app-alert"><TriangleAlert/><div className="app-alert-copy"><AlertTitle>{c.lastRunStopped}</AlertTitle><AlertDescription>{current.error.message}</AlertDescription></div><Button variant="ghost" size="icon-sm" aria-label={c.dismiss} onClick={()=>setDismissedProjectError(projectErrorKey)}><X/></Button></Alert>}
+        </div>}
         {!current?<EmptyState onCreate={()=>setDialogOpen(true)} onDemo={createDemo} c={c}/>:<>
-          {current.error&&<div className="project-error"><strong>{c.lastRunStopped}</strong><span>{current.error.message}</span></div>}
           <DirectorWorkspace key={current.id} project={current} running={busy||running} keyboardLocked={paletteOpen||dialogOpen||settingsOpen||!!projectToDelete||!!navDrawer} activeJob={activeJob} command={workspaceCommand} onContextChange={setWorkspaceContext} onCreate={()=>setDialogOpen(true)} onCancelJob={cancelJob} onUndo={()=>historyAction('undo')} onRedo={()=>historyAction('redo')} onSelectTake={selectSceneTake} onRunQuality={runQuality} onGetRepairPlan={getRepairPlan} onApplyRepairs={applyRepairs} onSave={saveScene} onRunStage={runStage} onReview={reviewStage} onReviewBulk={reviewBulk} onRunAll={run} onLoadRoughCut={loadRoughCut} onUpdateProject={updateProject} onSceneAction={editSceneStructure} onInsertScene={insertNewScene} onDirectorPlan={planDirection} onSearchBroll={searchBroll} onSelectBroll={selectBroll} onUploadArtwork={uploadArtwork} onLoadDrawRevealPath={loadDrawRevealPath} onSaveDrawRevealPath={saveDrawRevealPath} brollProviders={{names:config?.brollProviderNames||['pexels','pixabay'],configured:{pexels:!!config?.hasPexelsKey,pixabay:!!config?.hasPixabayKey}}} rendererNames={config?.rendererNames||[]} c={c}/>
         </>}
       </main>
