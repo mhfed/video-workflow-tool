@@ -47,7 +47,8 @@ import DirectorWorkspace from './DirectorWorkspace';
 
 const api=async(url,options={})=>{
   const response=await fetch(url,{headers:{'content-type':'application/json',...(options.headers||{})},...options});
-  const body=await response.json();
+  const text=await response.text();let body={};
+  if(text){try{body=JSON.parse(text);}catch{body={error:text};}}
   if(!response.ok)throw new Error(body.error||response.statusText);
   return body;
 };
@@ -119,9 +120,6 @@ function NewProjectDialog({open,onOpenChange,onCreate,busy,defaultRenderer='simp
 }
 
 function DeleteProjectDialog({project,busy,blocked,error,onOpenChange,onConfirm,c}){
-  const [confirmation,setConfirmation]=useState('');
-  useEffect(()=>{setConfirmation('');},[project?.id]);
-  const confirmed=!!project&&confirmation===project.title;
   return <Dialog open={!!project} onOpenChange={(open)=>{if(!open&&!busy)onOpenChange(false);}}>
     <DialogContent className="delete-project-dialog">
       <div className="delete-project-warning"><TriangleAlert/></div>
@@ -133,8 +131,7 @@ function DeleteProjectDialog({project,busy,blocked,error,onOpenChange,onConfirm,
       <div className="delete-project-target"><span>{c.projectTitle}</span><strong>{project?.title}</strong><small>{project?.scenes?.length||0} {c.scenes}</small></div>
       {blocked&&<div className="delete-project-error"><CircleDot/><span>{c.deleteProjectBusy}</span></div>}
       {error&&<div className="delete-project-error"><CircleDot/><span>{error}</span></div>}
-      <label className="delete-project-confirm">{c.typeProjectName}<Input autoFocus value={confirmation} onChange={(event)=>setConfirmation(event.target.value)} placeholder={project?.title||''} disabled={busy}/></label>
-      <DialogFooter><Button type="button" variant="ghost" disabled={busy} onClick={()=>onOpenChange(false)}>{c.cancel}</Button><Button type="button" variant="destructive" disabled={!confirmed||busy||blocked} onClick={onConfirm}>{busy?<LoaderCircle className="spin"/>:<Trash2/>}{busy?c.deletingProject:c.deletePermanently}</Button></DialogFooter>
+      <DialogFooter><Button type="button" variant="ghost" disabled={busy} onClick={()=>onOpenChange(false)}>{c.cancel}</Button><Button type="button" variant="destructive" disabled={busy||blocked} onClick={onConfirm}>{busy?<LoaderCircle className="spin"/>:<Trash2/>}{busy?c.deletingProject:c.deletePermanently}</Button></DialogFooter>
     </DialogContent>
   </Dialog>;
 }

@@ -223,8 +223,6 @@ video::cue { color: #fffdf8; background: rgba(22,21,18,.82); font-family: var(--
 .delete-project-target small { color:#81766a; font-size:9px; }
 .delete-project-error { display:flex; align-items:flex-start; gap:8px; padding:9px 11px; color:#8f2d1f; background:#f4ddd6; border:1px solid #e2b1a5; border-radius:5px; font-size:9px; line-height:1.4; }
 .delete-project-error svg { flex:0 0 auto; width:14px; height:14px; }
-.delete-project-confirm { display:grid; gap:7px; color:#575047; font-size:9px; font-weight:700; }
-.delete-project-confirm input { height:40px; color:#2e2923; background:#fffdf8; border-color:#bfb3a4; font-size:11px; }
 .delete-project-dialog [data-variant="destructive"] { background:#ad3522; border:1px solid #912a1b; }
 .delete-project-dialog [data-variant="destructive"]:hover:not(:disabled) { background:#922b1c; }
 @keyframes drawer-in { from{opacity:0;transform:translateX(-12px)} to{opacity:1;transform:none} }
