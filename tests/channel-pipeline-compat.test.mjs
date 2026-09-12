@@ -37,7 +37,12 @@ test('real offline pipeline reuses every scene cache after channel edit/removal 
   const edited = cached.scenes[0]; edited.text = 'A changed narration for this scene.'; invalidateScene(cached, edited, { textChanged: true }); saveProject(cached, cfg);
   await runPipeline(project.id, { sceneId: edited.id, stage: 'clip' });
   const after = loadProject(project.id, cfg);
-  assert.deepEqual(after.scenes[1], baseline.scenes[1]);
+  const { startMs: baselineStartMs, endMs: baselineEndMs, ...baselineSecondScene } = baseline.scenes[1];
+  const { startMs: afterStartMs, endMs: afterEndMs, ...afterSecondScene } = after.scenes[1];
+  assert.deepEqual(afterSecondScene, baselineSecondScene);
+  assert.equal(baselineEndMs, baselineStartMs + baseline.scenes[1].durationMs);
+  assert.equal(afterStartMs, after.scenes[0].endMs);
+  assert.equal(afterEndMs, afterStartMs + after.scenes[1].durationMs);
   assert.equal(after.scenes[0].takes.voice.length, baseline.scenes[0].takes.voice.length + 1);
   assert.equal(after.scenes[0].takes.visual.length, baseline.scenes[0].takes.visual.length);
   assert.equal(after.channelRevision, 1); assert.equal(after.artifacts.final, undefined);
